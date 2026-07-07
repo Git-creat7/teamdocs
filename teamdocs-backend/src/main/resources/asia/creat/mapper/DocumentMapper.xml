@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="asia.creat.mapper.DocumentMapper">
+    <update id="updateDeleted">
+        UPDATE document
+        SET deleted = 0,
+            folder_id = #{FolderId}
+        WHERE id = #{documentId}
+    </update>
+
+    <delete id="purgeDeleteById">
+        DELETE FROM document WHERE id = #{documentId}
+    </delete>
+
+
+    <select id="selectTrashedDocuments" resultType="asia.creat.entity.Document">
+        SELECT *
+        FROM document
+        WHERE deleted = 1
+          AND space_id = #{spaceId}
+    </select>
+
+    <select id="selectDeletedDocument" resultType="asia.creat.entity.Document">
+        SELECT *
+        FROM document
+        WHERE id = #{documentId}
+          AND deleted = 1
+    </select>
+</mapper>

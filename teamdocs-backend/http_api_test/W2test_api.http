@@ -1,0 +1,48 @@
+### 注册新用户
+POST http://localhost:8080/user/register
+Content-Type: application/json
+
+{
+  "username": "idea_test_user",
+  "password": "password123"
+}
+
+###
+
+### 登录并获取 Token
+POST http://localhost:8080/user/login
+Content-Type: application/json
+
+{
+  "username": "idea_test_user",
+  "password": "password123"
+}
+
+> {%
+    client.global.set("auth_token", response.body.data);
+%}
+
+###
+
+### 获取当前登录用户信息
+GET http://localhost:8080/user/info
+Authorization: Bearer {{auth_token}}
+
+###
+
+### 创建空间
+POST http://localhost:8080/space
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "name": "IDEA Test Space",
+  "description": "Created from HTTP Client"
+}
+
+###
+
+### 查看我的空间列表
+GET http://localhost:8080/space/list
+Authorization: Bearer {{auth_token}}
+

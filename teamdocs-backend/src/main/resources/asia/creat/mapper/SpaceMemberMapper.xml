@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="asia.creat.mapper.SpaceMemberMapper">
+
+    <select id="listMembers" resultType="asia.creat.vo.SpaceMemberVO">
+        SELECT
+            sm.id,
+            sm.space_id,
+            sm.user_id,
+            u.username,
+            u.avatar,
+            sm.role,
+            sm.joined_at
+        FROM space_member sm
+        JOIN user u ON sm.user_id = u.id
+        WHERE sm.space_id = #{spaceId}
+    </select>
+</mapper>
