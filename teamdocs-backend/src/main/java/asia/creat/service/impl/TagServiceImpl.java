@@ -112,7 +112,7 @@ public class TagServiceImpl implements TagService {
 
     @Override
     @RequireSpaceRole
-    public List<Document> listDocumentsByTag(Long spaceId, Long tagId, LoginUser loginUser) {
+    public List<Document> listDocumentsByTag(@SpaceId Long spaceId, Long tagId, LoginUser loginUser) {
         Tag tag  = tagMapper.selectById(tagId);
         if (tag == null) {
             throw new BusinessException("标签不存在");
