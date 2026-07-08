@@ -48,7 +48,7 @@ public class SpaceRoleAspect {
         //拿到注解中的角色
         SpaceRole[] roles = requireSpaceRole.value();
         if (roles == null || roles.length == 0) {
-            roles = new SpaceRole[]{SpaceRole.OWNER, SpaceRole.ADMIN};
+            roles = new SpaceRole[]{SpaceRole.OWNER, SpaceRole.ADMIN, SpaceRole.MEMBER};
         }
 
         //遍历参数

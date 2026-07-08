@@ -1,6 +1,7 @@
 package asia.creat.service;
 
 import asia.creat.dto.CreateTagDTO;
+import asia.creat.entity.Document;
 import asia.creat.entity.Tag;
 import asia.creat.security.LoginUser;
 
@@ -19,4 +20,5 @@ public interface TagService {
 
     void removeTagFromDocument(Long spaceId, Long documentId, Long tagId, LoginUser loginUser);
 
+    List<Document> listDocumentsByTag(Long spaceId, Long tagId, LoginUser loginUser);
 }

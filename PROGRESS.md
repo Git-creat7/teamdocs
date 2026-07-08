@@ -191,7 +191,7 @@ Spring Boot 默认不带 AOP starter。引入后会自动配置 AspectJ Auto Pro
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface RequireSpaceRole {
-    SpaceRole[] value() default {SpaceRole.OWNER, SpaceRole.ADMIN};
+    SpaceRole[] value() default {SpaceRole.OWNER, SpaceRole.ADMIN, SpaceRole.MEMBER};
 }
 
 // 标在参数上，告诉切面"这个 Long 是 spaceId"

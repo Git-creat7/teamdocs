@@ -126,5 +126,10 @@ public class TagServiceImpl implements TagService {
         documentTagMapper.delete(lqw);
     }
 
+    @Override
+    public List<Document> listDocumentsByTag(Long spaceId, Long tagId, LoginUser loginUser) {
+
+    }
+
 
 }
