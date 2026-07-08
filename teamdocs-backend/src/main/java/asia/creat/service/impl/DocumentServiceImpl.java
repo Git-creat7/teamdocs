@@ -88,7 +88,7 @@ public class DocumentServiceImpl implements DocumentService {
     @RequireSpaceRole
     public void deleteDocument(@SpaceId Long spaceId, Long documentId, LoginUser loginUser) {
 
-        Document doc = getDocument(documentId, spaceId);
+        Document doc = checkDocument(documentId, spaceId);
 
         SpaceMember member = SpaceContext.get();
         permissionHelper.checkOwnerOrCreator(member,doc.getUploadBy(),loginUser.getUserId());
@@ -102,7 +102,7 @@ public class DocumentServiceImpl implements DocumentService {
     @RequireSpaceRole
     public void renameDocument(@SpaceId Long spaceId, Long documentId, RenameDocumentDTO dto, LoginUser loginUser) {
 
-        Document doc = getDocument(documentId, spaceId);
+        Document doc = checkDocument(documentId, spaceId);
 
         SpaceMember member = SpaceContext.get();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
@@ -117,7 +117,7 @@ public class DocumentServiceImpl implements DocumentService {
     @RequireSpaceRole
     public void moveDocument(@SpaceId Long spaceId, Long documentId, MoveDocumentDTO dto, LoginUser loginUser) {
 
-        Document doc = getDocument(documentId, spaceId);
+        Document doc = checkDocument(documentId, spaceId);
 
         if(dto.getTargetFolderId() != null && dto.getTargetFolderId() != 0) {
             if(folderMapper.selectCount(new LambdaQueryWrapper<Folder>()
@@ -140,7 +140,7 @@ public class DocumentServiceImpl implements DocumentService {
     @RequireSpaceRole
     public String downloadDocument(@SpaceId Long spaceId, Long documentId, LoginUser loginUser) {
 
-        Document doc = getDocument(documentId, spaceId);
+        Document doc = checkDocument(documentId, spaceId);
 
         return  fileStorageService.getAccessUrl(
                     BucketType.PRIVATE,
@@ -222,7 +222,7 @@ public class DocumentServiceImpl implements DocumentService {
     /*
      * 检查文档
      * */
-    private Document getDocument(Long documentId, Long spaceId) {
+    private Document checkDocument(Long documentId, Long spaceId) {
 
         Document doc = documentMapper.selectById(documentId);
 

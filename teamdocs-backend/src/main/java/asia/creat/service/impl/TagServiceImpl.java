@@ -72,15 +72,7 @@ public class TagServiceImpl implements TagService {
     @RequireSpaceRole
     public void addTagToDocument(@SpaceId Long spaceId, Long documentId, Long tagId, LoginUser loginUser) {
 
-        Document doc = documentMapper.selectById(documentId);
-
-        if (doc == null) {
-            throw new BusinessException("文件不存在");
-        }
-
-        if (!doc.getSpaceId().equals(spaceId)) {
-            throw new BusinessException("文件不属于当前空间");
-        }
+        Document doc = checkDocument(spaceId, documentId);
 
         SpaceMember member = SpaceContext.get();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
@@ -107,15 +99,7 @@ public class TagServiceImpl implements TagService {
     @RequireSpaceRole
     public void removeTagFromDocument(@SpaceId Long spaceId, Long documentId, Long tagId, LoginUser loginUser) {
 
-        Document doc = documentMapper.selectById(documentId);
-
-        if (doc == null) {
-            throw new BusinessException("文件不存在");
-        }
-
-        if (!doc.getSpaceId().equals(spaceId)) {
-            throw new BusinessException("文件不属于当前空间");
-        }
+        Document doc = checkDocument(spaceId, documentId);
 
         SpaceMember member = SpaceContext.get();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
@@ -127,8 +111,32 @@ public class TagServiceImpl implements TagService {
     }
 
     @Override
+    @RequireSpaceRole
     public List<Document> listDocumentsByTag(Long spaceId, Long tagId, LoginUser loginUser) {
+        Tag tag  = tagMapper.selectById(tagId);
+        if (tag == null) {
+            throw new BusinessException("标签不存在");
+        }
 
+        if (!tag.getSpaceId().equals(spaceId)) {
+            throw new BusinessException("标签不属于当前空间");
+        }
+
+        return documentMapper.listDocumentsByTag(spaceId, tagId);
+    }
+
+    private Document checkDocument(Long spaceId, Long documentId) {
+        Document doc = documentMapper.selectById(documentId);
+
+        if (doc == null) {
+            throw new BusinessException("文件不存在");
+        }
+
+        if (!doc.getSpaceId().equals(spaceId)) {
+            throw new BusinessException("文件不属于当前空间");
+        }
+
+        return doc;
     }
 
 

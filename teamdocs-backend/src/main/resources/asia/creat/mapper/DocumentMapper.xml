@@ -28,4 +28,13 @@
         WHERE id = #{documentId}
           AND deleted = 1
     </select>
+
+    <select id="listDocumentsByTag" resultType="asia.creat.entity.Document">
+            SELECT d.*
+            FROM document d
+            JOIN document_tag dt ON d.id = dt.document_id
+            WHERE d.space_id = #{spaceId}
+                AND d.deleted = 0
+                AND dt.tag_id=#{tagId}
+    </select>
 </mapper>

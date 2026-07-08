@@ -3,7 +3,6 @@ package asia.creat.controller;
 import asia.creat.common.Result;
 import asia.creat.dto.CreateTagDTO;
 import asia.creat.entity.Document;
-import asia.creat.entity.DocumentTag;
 import asia.creat.entity.Tag;
 import asia.creat.security.LoginUser;
 import asia.creat.service.TagService;
@@ -97,8 +96,7 @@ public class TagController {
     public Result listDocumentsByTag(@PathVariable Long spaceId,
                                      @PathVariable Long tagId,
                                      @AuthenticationPrincipal LoginUser loginUser){
-        List<Document> documents = tagService.listDocumentsByTag(spaceId, tagId, loginUser);
-        return Result.success(documents);
+        return Result.success(tagService.listDocumentsByTag(spaceId, tagId, loginUser));
     }
 
 }
