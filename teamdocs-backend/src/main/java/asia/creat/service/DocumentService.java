@@ -26,4 +26,6 @@ public interface DocumentService {
     void restoreDocument(Long spaceId, Long documentId, Long targetFolderId, LoginUser loginUser);
 
     void purgeDocument(Long spaceId, Long documentId, LoginUser loginUser);
+
+    List<Document> searchDocuments(Long spaceId, String keyword, LoginUser loginUser);
 }

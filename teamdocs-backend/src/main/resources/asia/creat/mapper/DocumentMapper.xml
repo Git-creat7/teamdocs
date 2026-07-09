@@ -16,25 +16,84 @@
 
 
     <select id="selectTrashedDocuments" resultType="asia.creat.entity.Document">
-        SELECT *
+        SELECT id,
+               space_id,
+               folder_id,
+               name,
+               file_type,
+               file_size,
+               file_path,
+               description,
+               upload_by,
+               deleted,
+               created_at,
+               updated_at
         FROM document
         WHERE deleted = 1
           AND space_id = #{spaceId}
     </select>
 
     <select id="selectDeletedDocument" resultType="asia.creat.entity.Document">
-        SELECT *
+        SELECT id,
+               space_id,
+               folder_id,
+               name,
+               file_type,
+               file_size,
+               file_path,
+               description,
+               upload_by,
+               deleted,
+               created_at,
+               updated_at
         FROM document
         WHERE id = #{documentId}
           AND deleted = 1
     </select>
 
     <select id="listDocumentsByTag" resultType="asia.creat.entity.Document">
-            SELECT d.*
-            FROM document d
-            JOIN document_tag dt ON d.id = dt.document_id
-            WHERE d.space_id = #{spaceId}
-                AND d.deleted = 0
-                AND dt.tag_id=#{tagId}
+        SELECT d.id,
+               d.space_id,
+               d.folder_id,
+               d.name,
+               d.file_type,
+               d.file_size,
+               d.file_path,
+               d.description,
+               d.upload_by,
+               d.deleted,
+               d.created_at,
+               d.updated_at
+        FROM document d
+                 JOIN document_tag dt ON d.id = dt.document_id
+        WHERE d.space_id = #{spaceId}
+          AND d.deleted = 0
+          AND dt.tag_id = #{tagId}
     </select>
+    <select id="searchDocuments" resultType="asia.creat.entity.Document">
+        SELECT DISTINCT d.id,
+                        d.space_id,
+                        d.folder_id,
+                        d.name,
+                        d.file_type,
+                        d.file_size,
+                        d.file_path,
+                        d.description,
+                        d.upload_by,
+                        d.deleted,
+                        d.created_at,
+                        d.updated_at
+        FROM document d
+                 LEFT JOIN document_tag dt ON d.id = dt.document_id
+                 LEFT JOIN tag t ON dt.tag_id = t.id
+        WHERE d.space_id = #{spaceId}
+          AND d.deleted = 0
+          AND (
+              /*匹配 name description tags*/
+            MATCH(d.name) AGAINST(#{keyword} IN BOOLEAN MODE)/*名称*/
+                OR MATCH(d.description) AGAINST(#{keyword} IN BOOLEAN MODE)/*描述*/
+                OR t.name LIKE CONCAT('%', #{keyword}, '%') /*标签*/
+            )
+    </select>
+
 </mapper>

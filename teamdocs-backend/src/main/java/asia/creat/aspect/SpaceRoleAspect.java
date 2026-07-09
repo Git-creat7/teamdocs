@@ -28,6 +28,7 @@ import java.util.Arrays;
 public class SpaceRoleAspect {
     /*
     * 该切面用于处理与空间角色相关的权限控制
+    * 防止空空间、空用户、非空间成员、非指定角色的用户访问受限资源
     */
     private final SpaceMemberMapper spaceMemberMapper;
     private final SpaceMapper spaceMapper;

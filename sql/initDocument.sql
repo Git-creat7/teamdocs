@@ -1,5 +1,9 @@
 USE teamdocs;
 
+DROP TABLE IF EXISTS folder;
+DROP TABLE IF EXISTS document;
+DROP TABLE IF EXISTS tag;
+
 -- 文件夹表
 CREATE TABLE folder (
     id         BIGINT       NOT NULL AUTO_INCREMENT,

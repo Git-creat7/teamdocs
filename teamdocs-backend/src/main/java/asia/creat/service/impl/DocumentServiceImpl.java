@@ -219,6 +219,16 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
+    @Override
+    @RequireSpaceRole
+    public List<Document> searchDocuments(@SpaceId Long spaceId, String keyword, LoginUser loginUser) {
+        if(keyword == null || keyword.trim().isEmpty()) {
+            throw new BusinessException("搜索关键字不能为空");
+        }
+        return documentMapper.searchDocuments(spaceId, keyword.trim());
+    }
+
+
     /*
      * 检查文档
      * */

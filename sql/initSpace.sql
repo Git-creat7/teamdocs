@@ -1,5 +1,9 @@
 USE teamdocs;
-# DROP TABLE IF EXISTS space;
+
+DROP TABLE IF EXISTS space;
+DROP TABLE IF EXISTS space_member;
+
+
 CREATE TABLE space(
     id BIGINT NOT NULL AUTO_INCREMENT,
     name VARCHAR(64) NOT NULL COMMENT '空间名称',
