@@ -126,8 +126,17 @@ public class DocumentController {
         return Result.success();
     }
 
+    /*
+     * 通过name + description + tag模糊搜索到文档
+     * */
+    @GetMapping("/search")
+    public Result searchDocuments(@PathVariable Long spaceId,
+                                  @RequestParam String keyword,
+                                  @AuthenticationPrincipal LoginUser loginUser) {
+        List<Document> list = documentService.searchDocuments(spaceId, keyword, loginUser);
+        return Result.success(list);
+    }
 }
-
 /*
  * ps:有些地方该用dto,后期优化一下
  * */

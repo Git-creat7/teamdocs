@@ -6,9 +6,9 @@
 
 ## 当前位置
 
-**周次**：W3 → W4
-**模块**：全文搜索 + 评论 + AOP 日志
-**状态**：W3 已完成，准备开始 W4
+**周次**：W4（进行中）
+**模块**：评论模块
+**状态**：标签筛选补完 + 全文搜索完成，开始 W4 评论
 
 ---
 
@@ -16,13 +16,14 @@
 
 - [x] W1: 项目骨架 + 用户模块 + JWT
 - [x] W2: 空间 + 成员 + 权限（含 AOP 权限切面）
-- [x] W3: 文件夹 CRUD + 文档上传/列表/重命名/移动/下载/软删除 + 回收站（列表/恢复/彻底删除）+ 标签（CRUD/打标签/摘标签）
+- [x] W3: 文件夹 CRUD + 文档上传/列表/重命名/移动/下载/软删除 + 回收站（列表/恢复/彻底删除）+ 标签（CRUD/打标签/摘标签/**按标签筛选文档**）
+- [x] W4-1: 全文搜索（MySQL FULLTEXT + ngram，搜文档名 + 标签名）
 
 ---
 
 ## 进行中
 
-- [ ] W4: 全文搜索 + 评论 + AOP 日志
+- [ ] W4: ~~全文搜索~~ + 评论 + AOP 日志
 
 ---
 
@@ -129,6 +130,45 @@
    - 错误：Java 方法参数 `Long FolderId`（大写 F），XML 写 `#{folderId}`（小写 f），MyBatis 报 `Parameter 'folderId' not found. Available parameters are [documentId, FolderId, param1, param2]`
    - 正确：`#{FolderId}` 或用 `@Param("folderId")`
    - 记忆点：**不带 `@Param` 时，MyBatis 按编译后参数名匹配**。IDEA 默认 `-parameters` 编译，参数名即原样。大小写必须一致
+
+6. ⭐ **按标签筛选文档：Service 漏校验「标签归属空间」，导致跨空间越权**
+   - 错误：`listDocumentsByTag` 里只 `tagMapper.selectById(tagId)` 判存在，没校验 `tag.getSpaceId().equals(spaceId)`。用户 A 拿空间 2 的 tagId 调空间 1 的接口，校验通过，走到 SQL
+   - 正确：Service 加 `tag.getSpaceId().equals(spaceId)` 归属校验，XML 的 `WHERE d.space_id = #{spaceId}` 作为第二道防线
+   - 记忆点：**只校验「资源存在」不校验「资源归属当前空间」= 越权漏洞**。跨空间资源（标签、文档、文件夹）的查询都要先验归属。SQL 里加 space_id 是兜底，Service 的业务校验才是主防线——靠 SQL 兜底返回空列表会让前端误以为"没数据"，业务上应直接拒绝
+
+7. **Mapper 方法名跟 Service 方法名撞名（代码质量，非 bug）**
+   - 现象：`DocumentMapper.listDocumentsByTag` 和 `TagService.listDocumentsByTag` 同名，调用处 `documentMapper.listDocumentsByTag(...)` / `tagService.listDocumentsByTag(...)` 看着像同一个东西
+   - 约定：Mapper 方法名偏数据访问动作（`selectByTag` / `listByTag`），Service 方法名偏业务动作（`listDocumentsByTag`）。参考旁边已有：`selectTrashedDocuments`（Mapper） vs `listTrashedDocuments`（Service）
+   - 记忆点：**Mapper 泛型决定主语**——返回 `List<Document>` 的查询归 `DocumentMapper`，不管它 join 了什么表。join 的表只是过滤条件，不决定归属
+
+### W4
+
+1. ⭐ **Mapper 方法名跟 XML `id` 不匹配 → 启动直接炸 `BindingException`**
+   - 错误：`DocumentMapper.java` 方法叫 `searchDocuments`，`DocumentMapper.xml` 的 `<select id="search">`，两个名字对不上
+   - 正确：XML 的 `id` 必须跟 Java 接口方法名**完全一致**
+   - 记忆点：MyBatis 启动时按方法名绑定 XML 语句。名字对不上，启动期就 `BindingException: Invalid bound statement`，根本到不了运行期。**改了 Mapper 方法名（或新建方法），XML 的 `id` 要同步改**
+
+2. ⭐ **Service 方法贴了 `@RequireSpaceRole` 但参数漏 `@SpaceId` → 一调就 500**
+   - 错误：`searchDocuments(Long spaceId, ...)` 方法上有 `@RequireSpaceRole`，但 `spaceId` 参数没贴 `@SpaceId`
+   - 后果：`SpaceRoleAspect` 切面遍历参数找不到 `@SpaceId` 标记的 Long，抛 `IllegalStateException("未找到空间ID或登录用户")`
+   - 正确：方法上贴 `@RequireSpaceRole`，参数上必须成对贴 `@SpaceId`
+   - 记忆点：这是 W2 提过的第三个坑（"注解化的方法必须成对贴注解"）。**复制别的注解化方法时只复制了方法注解，参数注解漏了**。可以加个自检：每个 `@RequireSpaceRole` 方法，参数列表里至少要有一个 `@SpaceId`
+
+3. ⭐ **`MATCH AGAINST` 必须用 `IN BOOLEAN MODE`，否则数据量小时搜啥都搜不到**
+   - 错误：`MATCH(name) AGAINST(#{keyword})`（默认自然语言模式）
+   - 后果：默认模式有"50% 阈值"——如果关键词在超过 50% 的行里出现，会被当成停用词，整个查询返回空。练手项目数据量小，随便搜啥都可能触发
+   - 正确：`MATCH(name) AGAINST(#{keyword} IN BOOLEAN MODE)`
+   - 记忆点：**默认模式假设语料库够大**（适合百万级文档的搜索引擎），数据量小用 BOOLEAN MODE。面试可以讲：BOOLEAN MODE 还支持 `+`/`-`/`*` 等操作符，更灵活
+
+4. **`ngram_token_size=2` 导致单字搜索搜不到（ngram 固有限制，不是 bug）**
+   - 现象：搜"需"搜不到"需求文档"，搜"需求"能搜到
+   - 原因：ngram 解析器按 2 字符滑窗切词，"需求文档"切成"需求""求文""文档"，单字切不出 token，索引里没有单字
+   - 记忆点：**ngram 牺牲了单字搜索能力换取中文支持**。这是设计取舍，不是实现问题。要支持单字搜，得换 IK 分词器或调大 `ngram_token_size`（但调大会让索引膨胀）
+
+5. **搜索 SQL 的 `LEFT JOIN` + `DISTINCT` 组合**
+   - 要 OR 标签名（文档名 OR 标签名命中都算搜到），必须 `LEFT JOIN document_tag` + `LEFT JOIN tag`。如果用 `JOIN`（内连接），没打标签的文档直接被滤掉，搜不到
+   - 一个文档多标签命中会产生多行，必须 `SELECT DISTINCT` 去重，否则同一文档返回多次
+   - 记忆点：**`OR` 跨表条件必须配 `LEFT JOIN`，多对多 join 必须配 `DISTINCT`**。两个一起记
 
 ---
 
