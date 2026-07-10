@@ -71,7 +71,7 @@ public class FolderServiceImpl implements FolderService {
 
         Folder folder = getFolder(folderId, spaceId);
 
-        SpaceMember member = SpaceContext.get();
+        SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, folder.getCreatedBy(), loginUser.getUserId());
 
         log.info("重命名文件夹：{} 将 {} 重命名为 {}", loginUser.getUsername(), folder.getName(),dto.getNewName());
@@ -86,7 +86,7 @@ public class FolderServiceImpl implements FolderService {
 
         Folder folder = getFolder(folderId, spaceId);
 
-        SpaceMember member = SpaceContext.get();
+        SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, folder.getCreatedBy(), loginUser.getUserId());
 
         List<Long> allIds = collectAllSubFolderIds(folderId);
@@ -102,7 +102,7 @@ public class FolderServiceImpl implements FolderService {
 
         Folder folder = getFolder(folderId, spaceId);
 
-        SpaceMember member = SpaceContext.get();
+        SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, folder.getCreatedBy(), loginUser.getUserId());
 
         if (dto.getTargetParentId() != 0){

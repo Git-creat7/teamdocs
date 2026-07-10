@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="asia.creat.mapper.CommentMapper">
+
+    <select id="listByDocumentId" resultType="asia.creat.vo.CommentVO">
+        SELECT c.id,
+               C.deleted,
+               CASE
+                    WHEN c.deleted = 1 THEN NULL
+                    ELSE c.content
+               END AS content,
+               c.user_id,
+               c.reply_to_id,
+               c.created_at,
+               u.username AS userName,
+               ru.username AS replyToUserName
+        FROM comment c
+        JOIN user u ON c.user_id = u.id
+        LEFT JOIN comment rc ON c.reply_to_id = rc.id
+        LEFT JOIN user ru ON rc.user_id = ru.id
+        WHERE c.document_id = #{documentId}
+        ORDER BY c.created_at ASC,c.id ASC
+    </select>
+
+
+</mapper>

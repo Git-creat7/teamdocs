@@ -74,7 +74,7 @@ public class TagServiceImpl implements TagService {
 
         Document doc = checkDocument(spaceId, documentId);
 
-        SpaceMember member = SpaceContext.get();
+        SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
         DocumentTag dt = new DocumentTag();
@@ -101,7 +101,7 @@ public class TagServiceImpl implements TagService {
 
         Document doc = checkDocument(spaceId, documentId);
 
-        SpaceMember member = SpaceContext.get();
+        SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
         LambdaQueryWrapper<DocumentTag> lqw = new LambdaQueryWrapper<>();

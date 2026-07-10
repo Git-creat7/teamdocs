@@ -90,7 +90,7 @@ public class DocumentServiceImpl implements DocumentService {
 
         Document doc = checkDocument(documentId, spaceId);
 
-        SpaceMember member = SpaceContext.get();
+        SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member,doc.getUploadBy(),loginUser.getUserId());
 
         documentMapper.deleteById(documentId);
@@ -104,7 +104,7 @@ public class DocumentServiceImpl implements DocumentService {
 
         Document doc = checkDocument(documentId, spaceId);
 
-        SpaceMember member = SpaceContext.get();
+        SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
         doc.setName(dto.getNewName());
@@ -127,7 +127,7 @@ public class DocumentServiceImpl implements DocumentService {
             }
         }
 
-        SpaceMember member = SpaceContext.get();
+        SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
         doc.setFolderId(dto.getTargetFolderId());
@@ -173,7 +173,7 @@ public class DocumentServiceImpl implements DocumentService {
             throw new BusinessException("文件不属于当前空间");
         }
 
-        SpaceMember member = SpaceContext.get();
+        SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
         if(targetFolderId == null || targetFolderId == 0){
@@ -208,7 +208,7 @@ public class DocumentServiceImpl implements DocumentService {
             throw new BusinessException("文件不属于当前空间");
         }
 
-        SpaceMember member = SpaceContext.get();
+        SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
         boolean flag = documentMapper.purgeDeleteById(documentId);

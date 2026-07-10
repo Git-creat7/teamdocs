@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 public class ResourcePermissionHelper {
     /*
     * 用于检查当前用户是否是资源的创建者
+    * OWNER/ADMIN 可以操作空间内的任意资源，MEMBER 只能操作自己创建的资源
     * */
     public void checkOwnerOrCreator(SpaceMember member, Long creatorId, Long currentUserId) {
         if (member == null) {
