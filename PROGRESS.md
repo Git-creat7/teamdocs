@@ -7,8 +7,8 @@
 ## 当前位置
 
 **周次**：W4（进行中）
-**模块**：评论模块
-**状态**：标签筛选补完 + 全文搜索完成，开始 W4 评论
+**模块**：AOP 操作日志
+**状态**：全文搜索 + 评论模块完成，开始 W4 AOP 操作日志
 
 ---
 
@@ -18,18 +18,19 @@
 - [x] W2: 空间 + 成员 + 权限（含 AOP 权限切面）
 - [x] W3: 文件夹 CRUD + 文档上传/列表/重命名/移动/下载/软删除 + 回收站（列表/恢复/彻底删除）+ 标签（CRUD/打标签/摘标签/**按标签筛选文档**）
 - [x] W4-1: 全文搜索（MySQL FULLTEXT + ngram，搜文档名 + 标签名）
+- [x] W4-2: 评论（发表评论/回复评论/删除占位，含空间与文档归属校验）
 
 ---
 
 ## 进行中
 
-- [ ] W4: ~~全文搜索~~ + 评论 + AOP 日志
+- [ ] W4: ~~全文搜索~~ + ~~评论~~ + AOP 日志
 
 ---
 
 ## 待办
 
-- [ ] W4: 全文搜索 + 评论 + AOP 日志
+- [ ] W4-3: AOP 操作日志
 - [ ] W5: Redis 缓存 + 限流 + 单测
 - [ ] W6: Docker Compose + 部署文档
 
@@ -37,9 +38,9 @@
 
 ## 关键代码位置
 
-（开发中填写，例如：）
-- 用户模块：`teamdocs-backend/src/main/java/com/teamdocs/user/`
-- JWT 配置：`teamdocs-backend/src/main/java/com/teamdocs/config/JwtConfig.java`
+- 评论接口：`teamdocs-backend/src/main/java/asia/creat/controller/CommentController.java`
+- 评论业务：`teamdocs-backend/src/main/java/asia/creat/service/impl/CommentServiceImpl.java`
+- 评论查询：`teamdocs-backend/src/main/resources/asia/creat/mapper/CommentMapper.xml`
 
 ---
 
