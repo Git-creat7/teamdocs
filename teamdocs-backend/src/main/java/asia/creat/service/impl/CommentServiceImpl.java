@@ -19,7 +19,6 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 @Service
-@Slf4j
 public class CommentServiceImpl implements asia.creat.service.CommentService {
     private final CommentMapper commentMapper;
     private final DocumentMapper documentMapper;
@@ -50,13 +49,13 @@ public class CommentServiceImpl implements asia.creat.service.CommentService {
                 * Integer.valueOf(1).equals(replyComment.getDeleted())
                 * 审查：使用空安全的比较方式，避免未来脏数据导致自动拆箱空指针
                 * */
-                throw new BusinessException("该评论不存在或已被删除，无法回复”");
+                throw new BusinessException("该评论不存在或已被删除，无法回复");
             }
         }
         Comment comment = new Comment();
         comment.setDocumentId(documentId);
         comment.setUserId(loginUser.getUserId());
-        comment.setContent(dto.getContent());
+        comment.setContent(dto.getContent().strip());
         comment.setReplyToId(dto.getReplyToId());
         commentMapper.insert(comment);
     }
@@ -74,7 +73,7 @@ public class CommentServiceImpl implements asia.creat.service.CommentService {
         checkDocument(spaceId, documentId);
         Comment comment = commentMapper.selectById(commentId);
         if (comment == null || !comment.getDocumentId().equals(documentId)) {
-            throw new BusinessException("评论不存在或不属于当前文档");
+            throw new BusinessException("评论不存在");
         }
         SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, comment.getUserId(), loginUser.getUserId());
