@@ -1,8 +1,6 @@
 USE teamdocs;
 
 DROP TABLE IF EXISTS space;
-DROP TABLE IF EXISTS space_member;
-
 
 CREATE TABLE space(
     id BIGINT NOT NULL AUTO_INCREMENT,
@@ -16,7 +14,9 @@ CREATE TABLE space(
     PRIMARY KEY (id)
 )ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '空间表';
 
-# DROP TABLE IF EXISTS space_member;
+
+DROP TABLE IF EXISTS space_member;
+
 CREATE TABLE space_member(
     id BIGINT NOT NULL AUTO_INCREMENT,
     space_id BIGINT NOT NULL COMMENT '空间ID',
