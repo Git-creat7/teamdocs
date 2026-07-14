@@ -1,5 +1,7 @@
 package asia.creat.service.impl;
 
+import asia.creat.anno.OperationLog;
+import asia.creat.anno.OperationTarget;
 import asia.creat.anno.RequireSpaceRole;
 import asia.creat.anno.SpaceId;
 import asia.creat.common.exception.BusinessException;
@@ -32,6 +34,7 @@ public class CommentServiceImpl implements asia.creat.service.CommentService {
 
 
     @Override
+    @OperationLog(value = "添加评论", resourceType = "COMMENT")
     @RequireSpaceRole
     public void addComment(@SpaceId Long spaceId, Long documentId, AddCommentDTO dto, LoginUser loginUser) {
         checkDocument(spaceId, documentId);
@@ -68,8 +71,9 @@ public class CommentServiceImpl implements asia.creat.service.CommentService {
     }
 
     @Override
+    @OperationLog(value = "删除评论", resourceType = "COMMENT")
     @RequireSpaceRole
-    public void deleteComment(@SpaceId Long spaceId, Long documentId, Long commentId, LoginUser loginUser) {
+    public void deleteComment(@SpaceId Long spaceId, Long documentId,@OperationTarget Long commentId, LoginUser loginUser) {
         checkDocument(spaceId, documentId);
         Comment comment = commentMapper.selectById(commentId);
         if (comment == null || !comment.getDocumentId().equals(documentId)) {
