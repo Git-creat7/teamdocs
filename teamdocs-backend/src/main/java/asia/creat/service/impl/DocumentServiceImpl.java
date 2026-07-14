@@ -1,5 +1,7 @@
 package asia.creat.service.impl;
 
+import asia.creat.anno.OperationLog;
+import asia.creat.anno.OperationTarget;
 import asia.creat.anno.RequireSpaceRole;
 import asia.creat.anno.SpaceId;
 import asia.creat.common.BucketType;
@@ -42,6 +44,7 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
+    @OperationLog(value = "上传文档", resourceType = "DOCUMENT")
     @RequireSpaceRole
     public void upload(@SpaceId Long spaceId, Long folderId, MultipartFile file, LoginUser loginUser) {
 
@@ -85,22 +88,9 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
+    @OperationLog(value = "重命名文档", resourceType = "DOCUMENT")
     @RequireSpaceRole
-    public void deleteDocument(@SpaceId Long spaceId, Long documentId, LoginUser loginUser) {
-
-        Document doc = checkDocument(documentId, spaceId);
-
-        SpaceMember member = SpaceContext.getSpaceMember();
-        permissionHelper.checkOwnerOrCreator(member,doc.getUploadBy(),loginUser.getUserId());
-
-        documentMapper.deleteById(documentId);
-
-        log.debug("用户 {} 删除了空间 {} 的文件 {}", loginUser.getUserId(), spaceId, doc.getName());
-    }
-
-    @Override
-    @RequireSpaceRole
-    public void renameDocument(@SpaceId Long spaceId, Long documentId, RenameDocumentDTO dto, LoginUser loginUser) {
+    public void renameDocument(@SpaceId Long spaceId, @OperationTarget Long documentId, RenameDocumentDTO dto, LoginUser loginUser) {
 
         Document doc = checkDocument(documentId, spaceId);
 
@@ -114,8 +104,24 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
+    @OperationLog(value = "删除文档", resourceType = "DOCUMENT")
     @RequireSpaceRole
-    public void moveDocument(@SpaceId Long spaceId, Long documentId, MoveDocumentDTO dto, LoginUser loginUser) {
+    public void deleteDocument(@SpaceId Long spaceId, @OperationTarget Long documentId, LoginUser loginUser) {
+
+        Document doc = checkDocument(documentId, spaceId);
+
+        SpaceMember member = SpaceContext.getSpaceMember();
+        permissionHelper.checkOwnerOrCreator(member,doc.getUploadBy(),loginUser.getUserId());
+
+        documentMapper.deleteById(documentId);
+
+        log.debug("用户 {} 删除了空间 {} 的文件 {}", loginUser.getUserId(), spaceId, doc.getName());
+    }
+
+    @Override
+    @OperationLog(value = "移动文档", resourceType = "DOCUMENT")
+    @RequireSpaceRole
+    public void moveDocument(@SpaceId Long spaceId,@OperationTarget Long documentId, MoveDocumentDTO dto, LoginUser loginUser) {
 
         Document doc = checkDocument(documentId, spaceId);
 
@@ -160,8 +166,9 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
+    @OperationLog(value = "恢复文档", resourceType = "DOCUMENT")
     @RequireSpaceRole
-    public void restoreDocument(@SpaceId Long spaceId, Long documentId, Long targetFolderId, LoginUser loginUser) {
+    public void restoreDocument(@SpaceId Long spaceId,@OperationTarget Long documentId, Long targetFolderId, LoginUser loginUser) {
 
         Document doc = documentMapper.selectDeletedDocument(documentId);
 
@@ -195,8 +202,9 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
+    @OperationLog(value = "彻底删除文档", resourceType = "DOCUMENT")
     @RequireSpaceRole
-    public void purgeDocument(@SpaceId Long spaceId, Long documentId, LoginUser loginUser) {
+    public void purgeDocument(@SpaceId Long spaceId, @OperationTarget Long documentId, LoginUser loginUser) {
 
         Document doc = documentMapper.selectDeletedDocument(documentId);
 
