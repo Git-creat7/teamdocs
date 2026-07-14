@@ -1,5 +1,7 @@
 package asia.creat.service.impl;
 
+import asia.creat.anno.OperationLog;
+import asia.creat.anno.OperationTarget;
 import asia.creat.anno.RequireSpaceRole;
 import asia.creat.anno.SpaceId;
 import asia.creat.common.exception.BusinessException;
@@ -37,6 +39,7 @@ public class FolderServiceImpl implements FolderService {
     }
 
     @Override
+    @OperationLog(value = "创建文件夹", resourceType = "FOLDER")
     @RequireSpaceRole
     public void createFolder(@SpaceId Long spaceId, CreateFolderDTO dto, LoginUser loginUser) {
 
@@ -66,8 +69,9 @@ public class FolderServiceImpl implements FolderService {
     }
 
     @Override
+    @OperationLog(value = "重命名文件夹", resourceType = "FOLDER")
     @RequireSpaceRole
-    public void renameFolder(@SpaceId Long spaceId, Long folderId, RenameFolderDTO dto, LoginUser loginUser) {
+    public void renameFolder(@SpaceId Long spaceId, @OperationTarget Long folderId, RenameFolderDTO dto, LoginUser loginUser) {
 
         Folder folder = getFolder(folderId, spaceId);
 
@@ -81,8 +85,9 @@ public class FolderServiceImpl implements FolderService {
 
     @Override
     @Transactional
+    @OperationLog(value = "删除文件夹", resourceType = "FOLDER")
     @RequireSpaceRole
-    public void deleteFolder(@SpaceId Long spaceId, Long folderId, LoginUser loginUser) {
+    public void deleteFolder(@SpaceId Long spaceId, @OperationTarget Long folderId, LoginUser loginUser) {
 
         Folder folder = getFolder(folderId, spaceId);
 
@@ -97,8 +102,10 @@ public class FolderServiceImpl implements FolderService {
     }
 
     @Override
+    @OperationLog(value = "移动文件夹", resourceType = "FOLDER")
     @RequireSpaceRole
-    public void moveFolder(@SpaceId Long spaceId, Long folderId, MoveFolderDTO dto, LoginUser loginUser) {
+    //移动时不要把目标文件夹 ID 当作 resourceId，日志记录的是“被移动的文件夹”
+    public void moveFolder(@SpaceId Long spaceId,@OperationTarget Long folderId, MoveFolderDTO dto, LoginUser loginUser) {
 
         Folder folder = getFolder(folderId, spaceId);
 

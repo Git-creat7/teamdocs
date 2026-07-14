@@ -1,5 +1,7 @@
 package asia.creat.service.impl;
 
+import asia.creat.anno.OperationLog;
+import asia.creat.anno.OperationTarget;
 import asia.creat.anno.RequireSpaceRole;
 import asia.creat.anno.SpaceId;
 import asia.creat.common.exception.BusinessException;
@@ -33,6 +35,7 @@ public class TagServiceImpl implements TagService {
     }
 
     @Override
+    @OperationLog(value = "创建标签", resourceType = "TAG")
     @RequireSpaceRole({SpaceRole.OWNER, SpaceRole.ADMIN})
     public void createTag(@SpaceId Long spaceId, CreateTagDTO dto, LoginUser loginUser) {
 
@@ -54,12 +57,11 @@ public class TagServiceImpl implements TagService {
     }
 
     @Override
+    @OperationLog(value = "删除标签", resourceType = "TAG")
     @RequireSpaceRole({SpaceRole.OWNER, SpaceRole.ADMIN})
-    public void deleteTag(@SpaceId Long spaceId, Long tagId, LoginUser loginUser) {
+    public void deleteTag(@SpaceId Long spaceId, @OperationTarget Long tagId, LoginUser loginUser) {
 
-        if (tagMapper.selectById(tagId) == null) {
-            throw new BusinessException("标签不存在");
-        }
+        checkTag(spaceId, tagId);
 
         LambdaQueryWrapper<Tag> lqw = new LambdaQueryWrapper<>();
         lqw.eq(Tag::getSpaceId, spaceId);
@@ -69,10 +71,12 @@ public class TagServiceImpl implements TagService {
     }
 
     @Override
+    @OperationLog(value = "为文件添加标签", resourceType = "DOCUMENT")
     @RequireSpaceRole
-    public void addTagToDocument(@SpaceId Long spaceId, Long documentId, Long tagId, LoginUser loginUser) {
+    public void addTagToDocument(@SpaceId Long spaceId,@OperationTarget Long documentId, Long tagId, LoginUser loginUser) {
 
         Document doc = checkDocument(spaceId, documentId);
+        checkTag(spaceId, tagId);
 
         SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
@@ -84,22 +88,23 @@ public class TagServiceImpl implements TagService {
     }
 
     @Override
+    @OperationLog(value = "重命名标签", resourceType = "TAG")
     @RequireSpaceRole({SpaceRole.OWNER, SpaceRole.ADMIN})
-    public void renameTag(@SpaceId Long spaceId, Long tagId, String newName, LoginUser loginUser) {
-        Tag tag  = tagMapper.selectById(tagId);
-        if (tag == null) {
-            throw new BusinessException("标签不存在");
-        }
+    public void renameTag(@SpaceId Long spaceId, @OperationTarget Long tagId, String newName, LoginUser loginUser) {
+
+        Tag tag  = checkTag(spaceId, tagId);
 
         tag.setName(newName);
         tagMapper.updateById(tag);
     }
 
     @Override
+    @OperationLog(value = "从文件移除标签", resourceType = "DOCUMENT")
     @RequireSpaceRole
-    public void removeTagFromDocument(@SpaceId Long spaceId, Long documentId, Long tagId, LoginUser loginUser) {
+    public void removeTagFromDocument(@SpaceId Long spaceId, @OperationTarget Long documentId, Long tagId, LoginUser loginUser) {
 
         Document doc = checkDocument(spaceId, documentId);
+        checkTag(spaceId, tagId);
 
         SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
@@ -113,14 +118,7 @@ public class TagServiceImpl implements TagService {
     @Override
     @RequireSpaceRole
     public List<Document> listDocumentsByTag(@SpaceId Long spaceId, Long tagId, LoginUser loginUser) {
-        Tag tag  = tagMapper.selectById(tagId);
-        if (tag == null) {
-            throw new BusinessException("标签不存在");
-        }
-
-        if (!tag.getSpaceId().equals(spaceId)) {
-            throw new BusinessException("标签不属于当前空间");
-        }
+        checkTag(spaceId, tagId);
 
         return documentMapper.listDocumentsByTag(spaceId, tagId);
     }
@@ -137,6 +135,20 @@ public class TagServiceImpl implements TagService {
         }
 
         return doc;
+    }
+
+    private Tag checkTag(Long spaceId, Long tagId) {
+        Tag tag = tagMapper.selectById(tagId);
+
+        if (tag == null) {
+            throw new BusinessException("标签不存在");
+        }
+
+        if (!tag.getSpaceId().equals(spaceId)) {
+            throw new BusinessException("标签不属于当前空间");
+        }
+
+        return tag;
     }
 
 
