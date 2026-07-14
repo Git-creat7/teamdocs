@@ -15,7 +15,6 @@ import asia.creat.mapper.DocumentMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
 import asia.creat.vo.CommentVO;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -79,6 +78,7 @@ public class CommentServiceImpl implements asia.creat.service.CommentService {
         if (comment == null || !comment.getDocumentId().equals(documentId)) {
             throw new BusinessException("评论不存在");
         }
+
         SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, comment.getUserId(), loginUser.getUserId());
         comment.setDeleted(1);

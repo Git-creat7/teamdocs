@@ -1,5 +1,7 @@
 package asia.creat.service.impl;
 
+import asia.creat.anno.OperationLog;
+import asia.creat.anno.OperationTarget;
 import asia.creat.anno.RequireSpaceRole;
 import asia.creat.anno.SpaceId;
 import asia.creat.common.exception.BusinessException;
@@ -9,12 +11,12 @@ import asia.creat.dto.UpdateMemberRoleDTO;
 import asia.creat.dto.UpdateSpaceDTO;
 import asia.creat.entity.Space;
 import asia.creat.entity.SpaceMember;
-import asia.creat.entity.SpaceRole;
 import asia.creat.entity.User;
 import asia.creat.mapper.SpaceMapper;
 import asia.creat.mapper.SpaceMemberMapper;
 import asia.creat.mapper.UserMapper;
 import asia.creat.security.LoginUser;
+import asia.creat.security.SpaceContext;
 import asia.creat.service.SpaceService;
 import asia.creat.vo.SpaceMemberVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -24,6 +26,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
 import java.util.List;
+
+import static asia.creat.entity.SpaceRole.ADMIN;
+import static asia.creat.entity.SpaceRole.OWNER;
 
 @Slf4j
 @Service
@@ -40,6 +45,7 @@ public class SpaceServiceImpl implements SpaceService {
 
     @Override
     @Transactional
+    @OperationLog(value = "创建空间", resourceType = "SPACE")
     public void createSpace(CreateSpaceDTO dto, LoginUser loginUser) {
         Space space = new Space();
         space.setName(dto.getName());
@@ -50,7 +56,7 @@ public class SpaceServiceImpl implements SpaceService {
         SpaceMember spaceMember = new SpaceMember();
         spaceMember.setSpaceId(space.getId());
         spaceMember.setUserId(loginUser.getUserId());
-        spaceMember.setRole(SpaceRole.OWNER);
+        spaceMember.setRole(OWNER);
         spaceMemberMapper.insert(spaceMember);
     }
 
@@ -70,30 +76,36 @@ public class SpaceServiceImpl implements SpaceService {
 
     @Override
     public Space getSpaceById(Long spaceId, LoginUser loginUser) {
-        Space space = checkSpace(spaceId);
+        Space space = checkSpaceOrThrow(spaceId);
         checkIsMember(spaceId, loginUser.getUserId());
         return space;
     }
 
     @Override
-    @RequireSpaceRole(SpaceRole.OWNER)
-    public void deleteSpace(@SpaceId Long spaceId, LoginUser loginUser) {
+    @RequireSpaceRole(OWNER)
+    @OperationLog(value = "删除空间", resourceType = "SPACE")
+    public void deleteSpace(@SpaceId @OperationTarget Long spaceId, LoginUser loginUser) {
         spaceMapper.deleteById(spaceId);
     }
 
     @Override
-    @RequireSpaceRole({SpaceRole.OWNER,SpaceRole.ADMIN})
-    public void updateSpace(@SpaceId Long spaceId, UpdateSpaceDTO dto, LoginUser loginUser) {
-        Space space = checkSpace(spaceId);
+    @RequireSpaceRole({OWNER,ADMIN})
+    @OperationLog(value = "更新空间", resourceType = "SPACE")
+    public void updateSpace(@SpaceId @OperationTarget Long spaceId, UpdateSpaceDTO dto, LoginUser loginUser) {
+        LambdaQueryWrapper<Space> lqw = new LambdaQueryWrapper<Space>()
+                .eq(Space::getId, spaceId);
+
+        Space space = spaceMapper.selectOne(lqw);
         space.setName(dto.getName());
         space.setDescription(dto.getDescription());
         spaceMapper.updateById(space);
     }
 
     @Override
-    @RequireSpaceRole({SpaceRole.OWNER,SpaceRole.ADMIN})
-    public void addMember(@SpaceId Long spaceId, AddMemberDTO dto, LoginUser loginUser) {
-        if (dto.getRole() == SpaceRole.OWNER) {
+    @RequireSpaceRole({OWNER, ADMIN})
+    @OperationLog(value = "添加空间成员", resourceType = "SPACE")
+    public void addMember(@SpaceId @OperationTarget Long spaceId, AddMemberDTO dto, LoginUser loginUser) {
+        if (dto.getRole() == OWNER) {
             throw new BusinessException("不能直接添加 OWNER");
         }
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, dto.getUsername()));
@@ -112,43 +124,41 @@ public class SpaceServiceImpl implements SpaceService {
 
     @Override
     public List<SpaceMemberVO> listMembers(Long spaceId, LoginUser loginUser) {
-        checkSpace(spaceId);
+        checkSpaceOrThrow(spaceId);
         checkIsMember(spaceId, loginUser.getUserId());
         return spaceMemberMapper.listMembers(spaceId);
     }
 
     @Override
-    public void removeMember(Long spaceId, Long targetUserId, LoginUser loginUser) {
-        checkSpace(spaceId);
-        SpaceMember targetMember = spaceMemberMapper.selectOne(
+    @OperationLog(value = "移除空间成员", resourceType = "SPACE")
+    @RequireSpaceRole({OWNER, ADMIN})
+    public void removeMember(@SpaceId @OperationTarget Long spaceId, Long targetUserId, LoginUser loginUser) {
+        SpaceMember spaceMember = spaceMemberMapper.selectOne(
                 new LambdaQueryWrapper<SpaceMember>()
                         .eq(SpaceMember::getSpaceId, spaceId)
                         .eq(SpaceMember::getUserId, targetUserId)
         );
-        if(targetMember == null){
+        if(spaceMember == null) {
             throw new BusinessException("目标用户不是该空间的成员");
         }
-        if(targetMember.getRole() == SpaceRole.OWNER){
+        if(spaceMember.getRole() == OWNER) {
             throw new BusinessException("不能移除 OWNER");
         }
-        SpaceMember loginMember = spaceMemberMapper.selectOne(
-                new LambdaQueryWrapper<SpaceMember>()
-                        .eq(SpaceMember::getSpaceId, spaceId)
-                        .eq(SpaceMember::getUserId, loginUser.getUserId())
-        );
-        if(loginMember == null || loginMember.getRole() == SpaceRole.MEMBER) {
-            throw new BusinessException("您没有权限执行此操作");
-        }
-        if(loginMember.getRole() == SpaceRole.ADMIN && targetMember.getRole() == SpaceRole.ADMIN){
+
+        SpaceMember currentMember = SpaceContext.getSpaceMember();
+        if(currentMember.getRole() == ADMIN && spaceMember.getRole() == ADMIN) {
             throw new BusinessException("管理员不能移除其他管理员");
         }
-        spaceMemberMapper.deleteById(targetMember.getId());
+
+        spaceMemberMapper.deleteById(spaceMember.getId());
+        log.info("移除了空间 {} 中的成员 {}", spaceId, targetUserId);
     }
 
     @Override
-    @RequireSpaceRole({SpaceRole.OWNER})
-    public void updateMemberRole(@SpaceId Long spaceId, Long targetUserId, UpdateMemberRoleDTO dto, LoginUser loginUser) {
-        if(dto.getRole() == SpaceRole.OWNER){
+    @RequireSpaceRole({OWNER})
+    @OperationLog(value = "修改空间成员角色", resourceType = "SPACE")
+    public void updateMemberRole(@SpaceId @OperationTarget Long spaceId, Long targetUserId, UpdateMemberRoleDTO dto, LoginUser loginUser) {
+        if(dto.getRole() == OWNER){
             throw new BusinessException("不能直接设置 OWNER");
         }
         if(targetUserId.equals(loginUser.getUserId())){
@@ -167,13 +177,9 @@ public class SpaceServiceImpl implements SpaceService {
     }
 
     /*
-    * 检查权限 -> AOP
-    * */
-
-    /*
     * 检查空间是否为空
     * */
-    private Space checkSpace(Long spaceId) {
+    private Space checkSpaceOrThrow(Long spaceId) {
         LambdaQueryWrapper<Space> lqw = new LambdaQueryWrapper<>();
         lqw.eq(Space::getId, spaceId);
         Space space = spaceMapper.selectOne(lqw);
