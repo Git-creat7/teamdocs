@@ -6,9 +6,9 @@
 
 ## 当前位置
 
-**周次**：W4（进行中）
-**模块**：AOP 操作日志
-**状态**：全文搜索 + 评论模块完成，开始 W4 AOP 操作日志
+**周次**：W5（准备开始）
+**模块**：Redis 缓存 + 限流 + 单测
+**状态**：W4 全部完成，准备进入 W5
 
 ---
 
@@ -19,19 +19,18 @@
 - [x] W3: 文件夹 CRUD + 文档上传/列表/重命名/移动/下载/软删除 + 回收站（列表/恢复/彻底删除）+ 标签（CRUD/打标签/摘标签/**按标签筛选文档**）
 - [x] W4-1: 全文搜索（MySQL FULLTEXT + ngram，搜文档名 + 标签名）
 - [x] W4-2: 评论（发表评论/回复评论/删除占位，含空间与文档归属校验）
+- [x] W4-3: AOP 操作日志（成功/失败日志、URI、资源定位、耗时、失败隔离）
 
 ---
 
 ## 进行中
 
-- [ ] W4: ~~全文搜索~~ + ~~评论~~ + AOP 日志
+- [ ] W5: Redis 缓存 + 限流 + 单测
 
 ---
 
 ## 待办
 
-- [ ] W4-3: AOP 操作日志
-- [ ] W5: Redis 缓存 + 限流 + 单测
 - [ ] W6: Docker Compose + 部署文档
 
 ---
@@ -41,6 +40,12 @@
 - 评论接口：`teamdocs-backend/src/main/java/asia/creat/controller/CommentController.java`
 - 评论业务：`teamdocs-backend/src/main/java/asia/creat/service/impl/CommentServiceImpl.java`
 - 评论查询：`teamdocs-backend/src/main/resources/asia/creat/mapper/CommentMapper.xml`
+- 操作日志注解：`teamdocs-backend/src/main/java/asia/creat/anno/OperationLog.java`
+- 操作目标注解：`teamdocs-backend/src/main/java/asia/creat/anno/OperationTarget.java`
+- 操作日志切面：`teamdocs-backend/src/main/java/asia/creat/aspect/OperationLogAspect.java`
+- 操作日志服务：`teamdocs-backend/src/main/java/asia/creat/service/impl/OperationLogServiceImpl.java`
+- 操作日志实体：`teamdocs-backend/src/main/java/asia/creat/entity/OperationLogRecord.java`
+- 操作日志建表 SQL：`sql/initOperationLog.sql`
 
 ---
 
@@ -170,6 +175,31 @@
    - 要 OR 标签名（文档名 OR 标签名命中都算搜到），必须 `LEFT JOIN document_tag` + `LEFT JOIN tag`。如果用 `JOIN`（内连接），没打标签的文档直接被滤掉，搜不到
    - 一个文档多标签命中会产生多行，必须 `SELECT DISTINCT` 去重，否则同一文档返回多次
    - 记忆点：**`OR` 跨表条件必须配 `LEFT JOIN`，多对多 join 必须配 `DISTINCT`**。两个一起记
+
+6. ⭐ **评论删除后仍要显示占位，不能使用 `@TableLogic` 自动过滤**
+   - 冲突：评论被删除后仍要保留在列表中，给已有回复提供上下文；`@TableLogic` 会让所有常规查询自动忽略删除行
+   - 正确：把 `deleted` 当普通字段管理，删除时显式更新，列表查询不过滤；接口对已删除评论返回空内容，由前端展示占位文案
+   - 记忆点：**软删除不等于所有场景都要隐藏记录**。先确定删除后的业务可见性，再决定是否使用框架的逻辑删除能力
+
+7. ⭐ **回复评论必须同时校验存在、文档归属和删除状态**
+   - 错误：只校验 `replyToId` 对应的评论存在，攻击者可以把其他文档的评论 ID 作为回复目标
+   - 正确：被回复评论必须存在、属于当前文档且未删除
+   - 记忆点：**自指关联同样存在越权风险**。任何由客户端提交的关联 ID 都要校验它与当前资源处于同一业务边界
+
+8. ⭐ **操作日志失败不能反向阻断主业务**
+   - 风险：切面保存日志时数据库异常，如果异常继续向外抛，原本成功的上传、评论或成员操作会被日志模块拖垮
+   - 正确：日志保存由切面兜底捕获；日志 Service 使用 `REQUIRES_NEW` 独立事务，业务失败时也能提交失败日志
+   - 记忆点：**审计日志是旁路能力，必须失败隔离**。记录失败不能改变被记录业务原本的成功或失败结果
+
+9. **`@SpaceId` 与 `@OperationTarget` 语义不同，必要时要同时标记**
+   - `@SpaceId` 告诉权限/日志切面当前空间是谁，`@OperationTarget` 告诉日志切面被操作的主资源是谁
+   - 空间更新、成员管理等操作中，同一个 `spaceId` 参数可以同时承担两种语义；漏掉 `@SpaceId` 会导致日志中的 `space_id` 为空
+   - 记忆点：**上下文 ID 和资源 ID 恰好相同时也不能省略语义标记**，切面不会根据参数名字猜测用途
+
+10. ⭐ **标签写操作也要校验标签归属空间**
+   - 错误：给文档添加标签、重命名标签时只按 `tagId` 查询，没有比较 `tag.spaceId` 与当前空间
+   - 正确：抽出 `checkTag(spaceId, tagId)`，在删除、重命名、添加、移除和按标签查询中复用
+   - 记忆点：**读接口修过的越权问题，写接口也要系统性排查**。不能只修一个入口，所有接收同类资源 ID 的方法都要统一校验
 
 ---
 
@@ -345,10 +375,10 @@ public void updateSpace(@SpaceId Long spaceId, UpdateSpaceDTO dto, LoginUser log
 | `updateSpace` | ✅ | 纯角色校验 |
 | `addMember` | ✅ | 纯角色校验 |
 | `updateMemberRole` | ✅ | 纯角色校验 |
-| `removeMember` | ❌ | 权限逻辑定制（ADMIN 不能踢 ADMIN），注解表达不了 |
-| `getSpaceById` / `listMembers` | ❌ | 校验"是否成员"，跟角色无关 |
+| `removeMember` | ✅（混合） | 注解限制调用者为 OWNER/ADMIN，Service 再判断目标角色，阻止移除 OWNER 和 ADMIN 踢 ADMIN |
+| `getSpaceById` / `listMembers` | ❌ | 当前保留显式成员校验；直接改用切面不会减少查询，复用切面查出的 `Space` 还需要扩展上下文 |
 
-**原则**：注解只替代"检查角色 → 放行/拒绝"这种纯粹模式。复杂权限手写更清晰，强行套注解只会引入新的概念（注解 + 表达式 + 切面参数），反而难懂。
+**原则**：注解负责"调用者角色是否允许"这种粗粒度准入；涉及目标资源状态、目标成员角色等关系型规则时，继续在 Service 中做细粒度判断。复杂权限不必在注解和手写之间二选一，可以组合使用。
 
 注解只替换了 `checkRole` 调用，原 `checkRole` 私有方法删除；`checkSpace` / `checkIsMember` 在非注解方法里还在用，保留。
 
