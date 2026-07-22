@@ -18,12 +18,12 @@ import asia.creat.mapper.UserMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
 import asia.creat.service.SpaceService;
+import asia.creat.utils.CacheClient;
 import asia.creat.vo.SpaceMemberVO;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,13 +42,13 @@ public class SpaceServiceImpl implements SpaceService {
     private final UserMapper userMapper;
     private final SpaceMapper spaceMapper;
     private final SpaceMemberMapper spaceMemberMapper;
-    private final StringRedisTemplate stringRedisTemplate;
+    private final CacheClient cacheClient;
 
-    public SpaceServiceImpl(UserMapper userMapper, SpaceMapper spaceMapper, SpaceMemberMapper spaceMemberMapper, StringRedisTemplate stringRedisTemplate) {
+    public SpaceServiceImpl(UserMapper userMapper, SpaceMapper spaceMapper, SpaceMemberMapper spaceMemberMapper,CacheClient cacheClient) {
         this.userMapper = userMapper;
         this.spaceMapper = spaceMapper;
         this.spaceMemberMapper = spaceMemberMapper;
-        this.stringRedisTemplate = stringRedisTemplate;
+        this.cacheClient = cacheClient;
     }
 
     @Override
@@ -86,7 +86,7 @@ public class SpaceServiceImpl implements SpaceService {
     public Space getSpaceById(Long spaceId, LoginUser loginUser) {
         String key = CACHE_SPACE_PREFIX + spaceId;
         Space space;
-        String json = stringRedisTemplate.opsForValue().get(key);
+        String json = cacheClient.get(key);
 
         if(NULL_VALUE.equals(json)) {
             throw new BusinessException("空间不存在");
@@ -98,13 +98,13 @@ public class SpaceServiceImpl implements SpaceService {
             space = spaceMapper.selectOne(lqw);
 
             if(space == null){
-                stringRedisTemplate.opsForValue().set(key, NULL_VALUE, NULL_TTL);
+                cacheClient.setString(key, NULL_VALUE, NULL_TTL);
                 throw new BusinessException("空间不存在");
             }
 
             Duration randomTtl = Duration.ofSeconds(ThreadLocalRandom.current().nextLong(0, MAX_RANDOM_TTL_SECONDS+1));
             Duration ttlPlus = COMMON_TTL.plus(randomTtl);
-            stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(space), ttlPlus);
+            cacheClient.set(key, space, ttlPlus);
         }
         checkIsMember(spaceId, loginUser.getUserId());
         return space;
@@ -123,7 +123,7 @@ public class SpaceServiceImpl implements SpaceService {
     public void deleteSpace(@SpaceId @OperationTarget Long spaceId, LoginUser loginUser) {
         String key = CACHE_SPACE_PREFIX + spaceId;
         spaceMapper.deleteById(spaceId);
-        stringRedisTemplate.delete(key);
+        cacheClient.delete(key);
     }
 
     @Override
@@ -139,7 +139,7 @@ public class SpaceServiceImpl implements SpaceService {
         space.setDescription(dto.getDescription());
 
         spaceMapper.updateById(space);
-        stringRedisTemplate.delete(key);
+        cacheClient.delete(key);
     }
 
     @Override
@@ -233,7 +233,7 @@ public class SpaceServiceImpl implements SpaceService {
     /*
     * 校验是否为空间成员
     * */
-    public void checkIsMember(Long spaceId, Long userId){
+    private void checkIsMember(Long spaceId, Long userId){
         LambdaQueryWrapper<SpaceMember> lqwUserId = new LambdaQueryWrapper<>();
         lqwUserId.eq(SpaceMember::getSpaceId, spaceId)
                 .eq(SpaceMember::getUserId, userId);
