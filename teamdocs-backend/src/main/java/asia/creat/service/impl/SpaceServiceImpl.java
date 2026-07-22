@@ -19,16 +19,22 @@ import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
 import asia.creat.service.SpaceService;
 import asia.creat.vo.SpaceMemberVO;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static asia.creat.entity.SpaceRole.ADMIN;
 import static asia.creat.entity.SpaceRole.OWNER;
+import static asia.creat.utils.RedisConstants.*;
 
 @Slf4j
 @Service
@@ -36,11 +42,13 @@ public class SpaceServiceImpl implements SpaceService {
     private final UserMapper userMapper;
     private final SpaceMapper spaceMapper;
     private final SpaceMemberMapper spaceMemberMapper;
+    private final StringRedisTemplate stringRedisTemplate;
 
-    public SpaceServiceImpl(UserMapper userMapper, SpaceMapper spaceMapper, SpaceMemberMapper spaceMemberMapper) {
+    public SpaceServiceImpl(UserMapper userMapper, SpaceMapper spaceMapper, SpaceMemberMapper spaceMemberMapper, StringRedisTemplate stringRedisTemplate) {
         this.userMapper = userMapper;
         this.spaceMapper = spaceMapper;
         this.spaceMemberMapper = spaceMemberMapper;
+        this.stringRedisTemplate = stringRedisTemplate;
     }
 
     @Override
@@ -76,29 +84,62 @@ public class SpaceServiceImpl implements SpaceService {
 
     @Override
     public Space getSpaceById(Long spaceId, LoginUser loginUser) {
-        Space space = checkSpaceOrThrow(spaceId);
+        String key = CACHE_SPACE_PREFIX + spaceId;
+        Space space;
+        String json = stringRedisTemplate.opsForValue().get(key);
+
+        if(NULL_VALUE.equals(json)) {
+            throw new BusinessException("空间不存在");
+        } else if (StrUtil.isNotBlank(json)) {
+            space = JSONUtil.toBean(json, Space.class);
+        } else{
+            LambdaQueryWrapper<Space> lqw = new LambdaQueryWrapper<>();
+            lqw.eq(Space::getId, spaceId);
+            space = spaceMapper.selectOne(lqw);
+
+            if(space == null){
+                stringRedisTemplate.opsForValue().set(key, NULL_VALUE, NULL_TTL);
+                throw new BusinessException("空间不存在");
+            }
+
+            Duration randomTtl = Duration.ofSeconds(ThreadLocalRandom.current().nextLong(0, MAX_RANDOM_TTL_SECONDS+1));
+            Duration ttlPlus = COMMON_TTL.plus(randomTtl);
+            stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(space), ttlPlus);
+        }
         checkIsMember(spaceId, loginUser.getUserId());
         return space;
     }
+
+    /*@Override
+    public Space getSpaceById(Long spaceId, LoginUser loginUser) {
+        Space space = checkSpaceOrThrow(spaceId);
+        checkIsMember(spaceId, loginUser.getUserId());
+        return space;
+    }*/
 
     @Override
     @RequireSpaceRole(OWNER)
     @OperationLog(value = "删除空间", resourceType = "SPACE")
     public void deleteSpace(@SpaceId @OperationTarget Long spaceId, LoginUser loginUser) {
+        String key = CACHE_SPACE_PREFIX + spaceId;
         spaceMapper.deleteById(spaceId);
+        stringRedisTemplate.delete(key);
     }
 
     @Override
     @RequireSpaceRole({OWNER,ADMIN})
     @OperationLog(value = "更新空间", resourceType = "SPACE")
     public void updateSpace(@SpaceId @OperationTarget Long spaceId, UpdateSpaceDTO dto, LoginUser loginUser) {
+        String key = CACHE_SPACE_PREFIX + spaceId;
+
         LambdaQueryWrapper<Space> lqw = new LambdaQueryWrapper<Space>()
                 .eq(Space::getId, spaceId);
-
         Space space = spaceMapper.selectOne(lqw);
         space.setName(dto.getName());
         space.setDescription(dto.getDescription());
+
         spaceMapper.updateById(space);
+        stringRedisTemplate.delete(key);
     }
 
     @Override
