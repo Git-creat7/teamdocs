@@ -1,8 +1,0 @@
-{
-  "analysis": {
-    "analyzer": {
-      "ik_max_word": { "type": "ik_max_word" },
-      "ik_smart": { "type": "ik_smart" }
-    }
-  }
-}

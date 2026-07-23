@@ -1,4 +1,4 @@
-package asia.creat.teamdocsbackend;
+package asia.creat.teamdocsbackend.utils;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
