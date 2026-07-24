@@ -4,6 +4,7 @@ import asia.creat.entity.Document;
 import asia.creat.vo.RecentDocumentVO;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
@@ -40,5 +41,5 @@ public interface DocumentMapper extends BaseMapper<Document> {
     /*
     * 批量查询最近文档
     * */
-    List<RecentDocumentVO> listAccessibleRecentDocuments(Long userId,List<Long> documentIds);
+    List<RecentDocumentVO> listAccessibleRecentDocuments(@Param("userId") Long userId,@Param("documentIds") List<Long> documentIds);
 }

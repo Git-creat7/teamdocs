@@ -5,8 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Set;
 
@@ -89,6 +91,21 @@ public class CacheClient {
         } catch (Exception e) {
             log.warn("获取 ZSet 逆序范围失败,key: {},start: {},end: {}",key,start,end,e);
             return Collections.emptySet();
+        }
+    }
+    /*
+    * 从 ZSet 中移除指定元素
+    * */
+    public void removeZSetMembers(String key, String... members) {
+        if (!StringUtils.hasText(key) || members == null || members.length == 0) {
+            return;
+        }
+
+        try {
+            Long count = stringRedisTemplate.opsForZSet().remove(key, (Object[]) members);
+            log.debug("从 ZSet 中移除元素成功, key: {}, 预期移除数: {}, 实际移除数: {}", key, members.length, count);
+        } catch (Exception e) {
+            log.warn("从 ZSet 中移除元素失败, key: {}, members: {}", key, Arrays.toString(members), e);
         }
     }
 
