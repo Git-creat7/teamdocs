@@ -126,11 +126,7 @@
             <version>4.12.0</version>
         </dependency>
 
-        <!--ElasticSearch-->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
-        </dependency>
+        
 
         <!--Apache Tika-->
         <dependency>

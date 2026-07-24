@@ -6,9 +6,9 @@
 
 ## 当前位置
 
-**周次**：W5（准备开始）
-**模块**：Redis 缓存 + 限流 + 单测
-**状态**：W4 全部完成，准备进入 W5
+**周次**：W6（准备开始）
+**模块**：Docker Compose + 部署文档
+**状态**：W5 已完成：空间缓存、登录限流、最近浏览、单元测试与真实 API 验证均已通过
 
 ---
 
@@ -20,18 +20,23 @@
 - [x] W4-1: 全文搜索（MySQL FULLTEXT + ngram，搜文档名 + 标签名）
 - [x] W4-2: 评论（发表评论/回复评论/删除占位，含空间与文档归属校验）
 - [x] W4-3: AOP 操作日志（成功/失败日志、URI、资源定位、耗时、失败隔离）
+- [x] W5: Redis（空间详情 Cache Aside + 登录 Lua 限流 + ZSet 最近浏览）+ 单元测试 + JMeter/API 验证
 
 ---
 
 ## 进行中
 
-- [ ] W5: Redis 缓存 + 限流 + 单测
+- [ ] W6: Docker Compose + 部署文档
 
 ---
 
 ## 待办
 
-- [ ] W6: Docker Compose + 部署文档
+- [ ] 清理已明确放弃的 Elasticsearch/Kibana 依赖与配置残留
+- [ ] 编写后端 Dockerfile 与包含 MySQL、Redis、MinIO、后端的 Docker Compose
+- [ ] 补充 `.env.example`，不得提交真实密码和密钥
+- [ ] 完善 README：项目架构、启动方式、核心设计与 API 前置条件
+- [ ] 全量 API 回归并整理最终简历项目描述
 
 ---
 
@@ -46,6 +51,15 @@
 - 操作日志服务：`teamdocs-backend/src/main/java/asia/creat/service/impl/OperationLogServiceImpl.java`
 - 操作日志实体：`teamdocs-backend/src/main/java/asia/creat/entity/OperationLogRecord.java`
 - 操作日志建表 SQL：`sql/initOperationLog.sql`
+- Redis 常量：`teamdocs-backend/src/main/java/asia/creat/utils/RedisConstants.java`
+- Redis 缓存封装：`teamdocs-backend/src/main/java/asia/creat/utils/CacheClient.java`
+- 空间详情缓存：`teamdocs-backend/src/main/java/asia/creat/service/impl/SpaceServiceImpl.java`
+- 登录限流：`teamdocs-backend/src/main/java/asia/creat/service/impl/RateLimitServiceImpl.java`
+- 限流 Lua：`teamdocs-backend/src/main/resources/lua/window_rate_limit.lua`
+- 最近浏览业务：`teamdocs-backend/src/main/java/asia/creat/service/impl/RecentDocumentServiceImpl.java`
+- 最近浏览返回对象：`teamdocs-backend/src/main/java/asia/creat/vo/RecentDocumentVO.java`
+- 最近浏览权限查询：`teamdocs-backend/src/main/resources/asia/creat/mapper/DocumentMapper.xml`
+- W5 单元测试：`teamdocs-backend/src/test/java/asia/creat/teamdocsbackend/`
 
 ---
 
@@ -200,6 +214,87 @@
    - 错误：给文档添加标签、重命名标签时只按 `tagId` 查询，没有比较 `tag.spaceId` 与当前空间
    - 正确：抽出 `checkTag(spaceId, tagId)`，在删除、重命名、添加、移除和按标签查询中复用
    - 记忆点：**读接口修过的越权问题，写接口也要系统性排查**。不能只修一个入口，所有接收同类资源 ID 的方法都要统一校验
+
+### W5
+
+1. ⭐ **缓存不是越多越好，只缓存高频读取且失效边界清楚的数据**
+   - 空间详情适合 Cache Aside；文档列表、评论和搜索结果更新入口多，当前阶段强行缓存会显著增加一致性复杂度
+   - `/user/info` 直接返回 JWT 解析出的 `LoginUser`，本身不查数据库，再加 Redis 只会增加一次网络访问
+   - 记忆点：**Redis 的价值来自解决具体问题，不来自覆盖了多少个模块**
+
+2. ⭐ **空值缓存必须使用明确哨兵，不能用空字符串**
+   - 不存在的空间缓存为 `"NULL"`，TTL 60 秒；查询命中哨兵时直接返回“空间不存在”
+   - 空字符串会与“未命中/空白值”判断混在一起，容易再次访问数据库
+   - 记忆点：**空值缓存要能和普通值、缓存未命中明确区分，并使用短 TTL**
+
+3. **正常缓存 TTL 加随机抖动，降低同一时刻集中失效风险**
+   - 空间详情基础 TTL 30 分钟，再增加 0～300 秒随机值
+   - 更新、删除空间时先更新数据库，再删除对应缓存 Key
+   - 记忆点：缓存一致性采用 Cache Aside：**读时回填，写时更新数据库后删缓存**
+
+4. ⭐ **限流的计数与首次过期设置必须保持原子性**
+   - 使用 Redis + Lua 完成 `INCR` 与首次 `EXPIRE`，避免并发下出现只有计数没有 TTL 的永久 Key
+   - 登录按 IP 固定窗口限制为 60 秒最多 10 次；Redis 故障时降级放行，避免缓存故障拖垮登录主业务
+   - 记忆点：**需要多条 Redis 命令共同保证一个语义时，用 Lua 合成一次原子执行**
+
+5. ⭐ **最近浏览记录必须落在成功获取下载 URL 之后**
+   - 权限、文档查询或 MinIO 生成预签名 URL 失败时不能记录浏览
+   - `recordRecentDocument` 放在独立 Spring Bean 中并使用 `@Async`；启动类通过 `@EnableAsync` 开启代理
+   - 记忆点：`@Async` 自调用不会生效，必须经过 Spring 代理；旁路记录失败不能影响下载主流程
+
+6. **ZSet 同时解决去重、排序和定长保留**
+   - Key：`teamdocs:user:recent:{userId}`，member 为 `documentId`，score 为浏览时间戳
+   - 重复浏览同一文档只更新 score；`ZREMRANGEBYRANK 0 -(MAX + 1)` 将集合裁剪为最近 20 条；Key 30 天无访问后过期
+   - 记忆点：ZSet 的 member 天然唯一，score 负责排序，不需要额外去重
+
+7. ⭐ **Redis 只保存最近文档 ID，卡片元数据仍从 MySQL 查询**
+   - `ZREVRANGE WITHSCORES` 先取有序 ID 与浏览时间，再一次 JOIN `document + space + space_member` 查询当前仍可访问的文档
+   - 自定义 XML SQL 必须显式过滤文档/空间软删除；多参数 Mapper 使用 `@Param`；空 ID 列表不能生成 `IN ()`
+   - SQL 的 `IN` 不保证结果顺序，Service 需要按 Redis ID 顺序重新组装，并用 score 填充 `lastViewedAt`
+
+8. **失效最近记录采用查询时惰性清理，不扫描所有用户 Key**
+   - 文档删除或成员失去空间权限后，JOIN 会过滤对应文档；Service 计算差集后批量 `ZREM`
+   - 删除文档时无法高效获知哪些用户浏览过它，禁止扫描 `teamdocs:user:recent:*`
+   - 记忆点：**有界的冗余索引可以在读取时修复，避免高成本的全局反向查找**
+
+---
+
+## W5 Redis 实施与验证结果
+
+### 空间详情缓存
+
+- Cache Aside 查询通过：命中直接返回，未命中查询 MySQL 后回填
+- 不存在空间使用 `"NULL"` 哨兵缓存，TTL 60 秒，防止缓存穿透
+- 正常缓存 TTL 为 1800～2100 秒，多个 Key 实测具有随机抖动
+- 更新、删除空间后删除缓存；Redis 异常时回退 MySQL，不阻断业务
+
+### 登录限流
+
+- Redis + Lua 固定窗口：同一 IP 每 60 秒最多 10 次登录
+- 连续 11 次请求实测：前 10 次允许，第 11 次拒绝
+- JMeter 20 并发：10 次允许、10 次拒绝、HTTP 错误 0
+- JMeter 结果：平均 125.6ms，P95 263ms，最大 263ms
+
+### 最近浏览
+
+- `GET /user/recent-documents` 返回跨空间最近文档卡片，数据库 JOIN 负责当前权限和软删除过滤
+- 真实下载成功后异步写入 ZSet，接口返回文档名、空间名、更新时间和 `lastViewedAt`
+- 端到端实测：ZSet 成员数 1，TTL 2,591,965 秒，符合约 30 天
+- 人工加入无效文档 ID 后，接口正确过滤并通过 `ZREM` 将成员数从 3 清理为 2
+- MinIO 服务未启动时，流程在生成预签名 URL 处失败，不产生错误的最近浏览记录；服务启动后完整链路通过
+
+### 测试
+
+- `CacheClientTest`：5 个用例通过
+- `RateLimitServiceImplTest`：5 个用例通过
+- `RecentDocumentServiceImplTest`：4 个用例通过，覆盖写入裁剪、空集合、顺序恢复/时间填充、失效成员清理
+- 最近浏览最新 Maven 结果：4 个测试，0 失败，0 错误，`BUILD SUCCESS`
+
+### 范围决策
+
+- 当前阶段不做逻辑过期、Redisson、缓存预热和多级缓存，避免为当前数据规模增加无必要复杂度
+- 明确放弃 Elasticsearch；全文搜索保留 MySQL FULLTEXT，W6 清理仍残留的 ES/Kibana 依赖与配置
+- 当前不引入微服务、Yjs、RAG/Agent，优先完成部署、文档、回归和简历表达
 
 ---
 
