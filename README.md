@@ -100,6 +100,7 @@ docker compose --env-file .env.docker -f docker-compose.dev.yml down -v
 ## 环境变量
 
 - `BACKEND_PORT`：后端宿主机端口，Docker 模板使用 `18080`
+- `BIND_ADDRESS`：宿主机绑定地址，开发环境默认 `127.0.0.1`
 - `DB_NAME` / `DB_PASSWORD`：MySQL 数据库名和 root 密码
 - `REDIS_PASSWORD`：Redis 密码
 - `JWT_SECRET`：JWT HMAC 密钥，至少 32 字节
@@ -111,7 +112,7 @@ docker compose --env-file .env.docker -f docker-compose.dev.yml down -v
 
 `DB_HOST`、`DB_USERNAME`、`REDIS_HOST` 和 `MINIO_ENDPOINT` 主要用于不通过 Compose 直接启动后端。Compose 会把它们设置成容器网络内的服务地址，并使用 MySQL root 用户。
 
-Compose 内部使用 `http://minio:9000` 连接 MinIO，但下载链接必须使用客户端能访问的 `MINIO_PUBLIC_ENDPOINT`。部署到服务器时应把它改成公网 IP 或域名，例如 `http://your-server:9000`，并开放对应端口。
+Compose 内部使用 `http://minio:9000` 连接 MinIO，但下载链接必须使用客户端能访问的 `MINIO_PUBLIC_ENDPOINT`。部署到服务器时应把 `BIND_ADDRESS` 改为 `0.0.0.0`，把公开地址改成公网 IP 或域名，例如 `http://your-server:9000`，并开放对应端口。
 
 ## API 约定
 
@@ -220,5 +221,6 @@ if ($recent.code -ne 1) { throw $recent.msg }
 - **修改 SQL 后没有生效**：初始化脚本只在 MySQL 数据卷为空时执行。确认不需要旧数据后使用 `down -v` 重建。
 - **下载 URL 中出现 `minio:9000`**：检查后端是否设置了 `MINIO_PUBLIC_ENDPOINT`，并重新构建镜像。
 - **下载 URL 无法从浏览器访问**：公开地址必须是浏览器可达的 IP 或域名，且 MinIO API 端口已放行。
+- **升级 MinIO 镜像后健康检查失败**：当前固定版本已验证包含 `/usr/bin/curl`；更换镜像版本时需重新确认该命令存在。
 - **接口 HTTP 200 但操作失败**：检查响应体的 `code` 和 `msg`，不要只看 HTTP 状态码。
 - **Docker 无法连接 daemon**：先启动 Docker Desktop，再执行 Compose 命令。

@@ -6,9 +6,9 @@
 
 ## 当前位置
 
-**周次**：W6（准备开始）
+**周次**：W6（已完成）
 **模块**：Docker Compose + 部署文档
-**状态**：W5 已完成：空间缓存、登录限流、最近浏览、单元测试与真实 API 验证均已通过
+**状态**：后端、MySQL、Redis、MinIO 已实现一键编排，镜像构建、容器启动与核心 API 冒烟均已通过
 
 ---
 
@@ -21,21 +21,22 @@
 - [x] W4-2: 评论（发表评论/回复评论/删除占位，含空间与文档归属校验）
 - [x] W4-3: AOP 操作日志（成功/失败日志、URI、资源定位、耗时、失败隔离）
 - [x] W5: Redis（空间详情 Cache Aside + 登录 Lua 限流 + ZSet 最近浏览）+ 单元测试 + JMeter/API 验证
+- [x] W6: Docker Compose（MySQL + Redis + MinIO + Backend）+ 环境模板 + README + 容器/API 验证
 
 ---
 
 ## 进行中
 
-- [ ] W6: Docker Compose + 部署文档
+- [ ] 项目收尾：全量 API 回归 + 最终简历项目描述
 
 ---
 
 ## 待办
 
-- [ ] 清理已明确放弃的 Elasticsearch/Kibana 依赖与配置残留
-- [ ] 编写后端 Dockerfile 与包含 MySQL、Redis、MinIO、后端的 Docker Compose
-- [ ] 补充 `.env.example`，不得提交真实密码和密钥
-- [ ] 完善 README：项目架构、启动方式、核心设计与 API 前置条件
+- [x] 清理已明确放弃的 Elasticsearch/Kibana/Tika 依赖残留
+- [x] 编写后端 Dockerfile 与包含 MySQL、Redis、MinIO、后端的 Docker Compose
+- [x] 补充原生启动与 Docker 专用环境模板，不提交真实密码和密钥
+- [x] 完善 README：项目架构、启动方式、核心设计、API 约定与冒烟脚本
 - [ ] 全量 API 回归并整理最终简历项目描述
 
 ---
@@ -60,6 +61,12 @@
 - 最近浏览返回对象：`teamdocs-backend/src/main/java/asia/creat/vo/RecentDocumentVO.java`
 - 最近浏览权限查询：`teamdocs-backend/src/main/resources/asia/creat/mapper/DocumentMapper.xml`
 - W5 单元测试：`teamdocs-backend/src/test/java/asia/creat/teamdocsbackend/`
+- 后端镜像：`teamdocs-backend/Dockerfile`
+- Docker 构建上下文排除：`teamdocs-backend/.dockerignore`
+- 全栈编排：`docker-compose.dev.yml`
+- 原生启动环境模板：`.env.example`
+- Docker 环境模板：`.env.docker.example`
+- 部署与 API 冒烟文档：`README.md`
 
 ---
 
@@ -295,6 +302,40 @@
 - 当前阶段不做逻辑过期、Redisson、缓存预热和多级缓存，避免为当前数据规模增加无必要复杂度
 - 明确放弃 Elasticsearch；全文搜索保留 MySQL FULLTEXT，W6 清理仍残留的 ES/Kibana 依赖与配置
 - 当前不引入微服务、Yjs、RAG/Agent，优先完成部署、文档、回归和简历表达
+
+---
+
+## W6 Docker Compose 与部署验证结果
+
+### 交付内容
+
+- Java 17 多阶段 Dockerfile：Maven 构建、JRE 运行，最终容器使用非 root 用户 `teamdocs`
+- Compose 编排 MySQL 8、Redis 7、MinIO、桶初始化任务和后端；基础服务健康后才启动后端
+- MySQL 初始化脚本按 `01`～`06` 固定顺序挂载，补齐 `initUser.sql` 分号和 `document_tag` 重建顺序
+- MySQL 启用 `ngram_token_size=2`，首次初始化实测创建 9 张表和 2 个 FULLTEXT 索引
+- MinIO 分离内部连接地址和客户端公开地址；固定 region 后，容器内可离线生成面向宿主机的预签名 URL
+- 排除未使用的 `UserDetailsServiceAutoConfiguration`，避免创建默认内存用户和在日志中打印随机密码
+- `.env` 用于原生启动，`.env.docker` 用于 Compose；README 命令显式指定 Docker env，避免误用远程 Redis/MinIO 配置
+- MySQL 与 Redis 不发布宿主机端口，只允许 Compose 内部网络访问；后端和 MinIO 使用可配置宿主机端口
+
+### 验证结果
+
+- Maven `package`：84 个主源码文件、5 个测试源码文件编译通过，`BUILD SUCCESS`
+- Redis 相关隔离单测：14 个通过，0 失败、0 错误
+- Docker 多阶段镜像构建成功；最终 ENTRYPOINT 实测为 `Path=java`、参数 `[-jar, app.jar]`
+- 容器状态：MySQL/Redis/MinIO healthy，`minio-init` ExitCode 0，Backend running 且 RestartCount 0
+- 固定的 MinIO 镜像实测包含 `/usr/bin/curl 8.7.1`，当前 HTTP healthcheck 可用；升级镜像时必须重新验证
+- Spring Security 默认内存用户日志已消失；重新注册和 JWT 登录仍通过
+- 核心 API 冒烟全部通过：注册登录、空间 Cache Aside、文档上传/列表、评论删除占位、私有下载、最近浏览
+- 下载文件哈希与上传源文件一致；Redis 最近浏览 ZSet 成员数 1，TTL 约 30 天
+- 操作日志表在冒烟流程后产生 4 条记录，证明 AOP 日志随容器化链路正常写入
+
+### 本次验收环境
+
+- 隔离 Compose project：`teamdocs-w6`
+- API：`http://localhost:18080`
+- MinIO API / Console：`http://localhost:19000` / `http://localhost:19001`
+- 验收容器当前保持运行；清理时使用 `docker compose --env-file .env.docker.example -p teamdocs-w6 -f docker-compose.dev.yml down -v`
 
 ---
 
