@@ -65,3 +65,4 @@ pnpm-debug.log*
 CLAUDE.md
 .claude/
 /.env
+/.env.docker

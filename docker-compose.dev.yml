@@ -9,8 +9,6 @@ services:
       TZ: Asia/Shanghai
       MYSQL_DATABASE: ${DB_NAME:-teamdocs}
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-    ports:
-      - "${DB_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./sql/initUser.sql:/docker-entrypoint-initdb.d/01-user.sql:ro
@@ -32,8 +30,6 @@ services:
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:

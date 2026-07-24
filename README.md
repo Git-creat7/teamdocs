@@ -44,25 +44,25 @@ flowchart LR
 
 - Docker Desktop 已启动
 - Docker Compose v2 可用
-- 默认端口 `8080`、`3306`、`6379`、`9000`、`9001` 未被占用
+- 默认宿主机端口 `18080`、`19000`、`19001` 未被占用
 
 ### 1. 准备环境变量
 
 PowerShell：
 
 ```powershell
-Copy-Item .env.example .env
+Copy-Item .env.docker.example .env.docker
 ```
 
-至少替换 `.env` 中的数据库、Redis、JWT 和 MinIO 密钥。JWT 密钥不得少于 32 字节。
+至少替换 `.env.docker` 中的数据库、Redis、JWT 和 MinIO 密钥。JWT 密钥不得少于 32 字节。
 
-如果密码含有 `$`，必须在 `.env` 中用单引号包住，例如 `DB_PASSWORD='a$password'`，否则 Compose 会把 `$password` 当成变量引用。
+如果密码含有 `$`，必须在 `.env.docker` 中用单引号包住，例如 `DB_PASSWORD='a$password'`，否则 Compose 会把 `$password` 当成变量引用。Docker 命令显式读取这个文件，不会误用原生启动后端所用的 `.env` 或其中的远程 Redis/MinIO 地址。
 
 ### 2. 启动完整环境
 
 ```powershell
-docker compose -f docker-compose.dev.yml up -d --build
-docker compose -f docker-compose.dev.yml ps -a
+docker compose --env-file .env.docker -f docker-compose.dev.yml up -d --build
+docker compose --env-file .env.docker -f docker-compose.dev.yml ps -a
 ```
 
 首次启动流程：
@@ -80,31 +80,31 @@ flowchart TD
 查看后端日志：
 
 ```powershell
-docker compose -f docker-compose.dev.yml logs -f backend
+docker compose --env-file .env.docker -f docker-compose.dev.yml logs -f backend
 ```
 
-本地入口：API `http://localhost:8080`，MinIO API `http://localhost:9000`，MinIO Console `http://localhost:9001`。
+本地入口：API `http://localhost:18080`，MinIO API `http://localhost:19000`，MinIO Console `http://localhost:19001`。MySQL 和 Redis 只在 Compose 内部网络开放，不占用宿主机端口。
 
 ### 3. 停止或重置
 
 ```powershell
 # 停止容器，保留数据
-docker compose -f docker-compose.dev.yml down
+docker compose --env-file .env.docker -f docker-compose.dev.yml down
 
 # 删除容器和全部数据卷，下一次启动会重新执行 SQL
-docker compose -f docker-compose.dev.yml down -v
+docker compose --env-file .env.docker -f docker-compose.dev.yml down -v
 ```
 
 `down -v` 会永久删除本地 MySQL、Redis 和 MinIO 数据，只能用于明确需要重置的开发环境。
 
 ## 环境变量
 
-- `BACKEND_PORT`：后端宿主机端口，默认 `8080`
-- `DB_NAME` / `DB_PORT` / `DB_PASSWORD`：MySQL 数据库名、宿主机端口和 root 密码
-- `REDIS_PORT` / `REDIS_PASSWORD`：Redis 宿主机端口和密码
+- `BACKEND_PORT`：后端宿主机端口，Docker 模板使用 `18080`
+- `DB_NAME` / `DB_PASSWORD`：MySQL 数据库名和 root 密码
+- `REDIS_PASSWORD`：Redis 密码
 - `JWT_SECRET`：JWT HMAC 密钥，至少 32 字节
 - `MINIO_API_PORT` / `MINIO_CONSOLE_PORT`：MinIO API 与控制台宿主机端口
-- `MINIO_PUBLIC_ENDPOINT`：返回给客户端的文件访问地址，默认 `http://localhost:9000`
+- `MINIO_PUBLIC_ENDPOINT`：返回给客户端的文件访问地址，Docker 模板使用 `http://localhost:19000`
 - `MINIO_REGION`：MinIO 区域，默认 `us-east-1`，后端与服务端必须一致
 - `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`：MinIO 管理账号和密码
 - `MINIO_BUCKET_PUBLIC` / `MINIO_BUCKET_PRIVATE`：公有桶和私有桶名称
@@ -152,7 +152,7 @@ Authorization: Bearer <token>
 下面的 PowerShell 流程会创建临时账号、空间和小文本文件，动态获取 ID，不依赖开发数据库中的旧数据。脚本不会打印 JWT 或预签名 URL。
 
 ```powershell
-$baseUrl = 'http://localhost:8080'
+$baseUrl = 'http://localhost:18080'
 $stamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $username = "demo$stamp"
 $password = 'password123'
@@ -216,7 +216,7 @@ if ($recent.code -ne 1) { throw $recent.msg }
 
 ## 常见问题
 
-- **端口被占用**：修改 `.env` 中对应的宿主机端口；容器内部端口无需修改。
+- **端口被占用**：修改 `.env.docker` 中对应的宿主机端口；容器内部端口无需修改。
 - **修改 SQL 后没有生效**：初始化脚本只在 MySQL 数据卷为空时执行。确认不需要旧数据后使用 `down -v` 重建。
 - **下载 URL 中出现 `minio:9000`**：检查后端是否设置了 `MINIO_PUBLIC_ENDPOINT`，并重新构建镜像。
 - **下载 URL 无法从浏览器访问**：公开地址必须是浏览器可达的 IP 或域名，且 MinIO API 端口已放行。
