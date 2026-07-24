@@ -9,6 +9,7 @@ import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -21,10 +22,14 @@ import java.util.Map;
 @Slf4j
 public class MinioFileStorageServiceImpl implements FileStorageService {
     private final MinioClient minioClient;
+    private final MinioClient minioPublicClient;
     private final MinioProperties minioProperties;
 
-    public MinioFileStorageServiceImpl(MinioClient minioClient,MinioProperties minioProperties) {
+    public MinioFileStorageServiceImpl(MinioClient minioClient,
+                                       @Qualifier("minioPublicClient") MinioClient minioPublicClient,
+                                       MinioProperties minioProperties) {
         this.minioClient = minioClient;
+        this.minioPublicClient = minioPublicClient;
         this.minioProperties = minioProperties;
     }
 
@@ -66,7 +71,7 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
         if(bucket == BucketType.PUBLIC) {
             // 公共桶拼接URL
             url = String.format("%s/%s/%s",
-                    minioProperties.getEndpoint(),
+                    minioProperties.getPublicEndpoint(),
                     resolveBucketName(bucket),
                     objectKey);
             log.debug("生成公共访问URL: {}", url);
@@ -84,7 +89,7 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
                     builder.extraQueryParams(queryParams);
                 }
 
-                url  = minioClient.getPresignedObjectUrl(builder.build());
+                url  = minioPublicClient.getPresignedObjectUrl(builder.build());
                 log.debug("生成私有访问URL: {}", url);
 
             } catch (Exception e) {

@@ -1,5 +1,4 @@
-USE teamdocs;
-
+DROP TABLE IF EXISTS document_tag;
 DROP TABLE IF EXISTS folder;
 DROP TABLE IF EXISTS document;
 DROP TABLE IF EXISTS tag;

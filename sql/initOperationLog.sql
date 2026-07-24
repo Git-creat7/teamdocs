@@ -1,5 +1,3 @@
-USE teamdocs;
-
 DROP TABLE IF EXISTS operation_log;
 
 CREATE TABLE operation_log(

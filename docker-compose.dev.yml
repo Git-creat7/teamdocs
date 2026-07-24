@@ -1,0 +1,123 @@
+services:
+  mysql:
+    image: mysql:8.0
+    command:
+      - --ngram-token-size=2
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_DATABASE: ${DB_NAME:-teamdocs}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/initUser.sql:/docker-entrypoint-initdb.d/01-user.sql:ro
+      - ./sql/initSpace.sql:/docker-entrypoint-initdb.d/02-space.sql:ro
+      - ./sql/initDocument.sql:/docker-entrypoint-initdb.d/03-document.sql:ro
+      - ./sql/initComment.sql:/docker-entrypoint-initdb.d/04-comment.sql:ro
+      - ./sql/initOperationLog.sql:/docker-entrypoint-initdb.d/05-operation-log.sql:ro
+      - ./sql/fulltext_index.sql:/docker-entrypoint-initdb.d/06-fulltext.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2024-05-10T01-41-38Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_REGION_NAME: ${MINIO_REGION:-us-east-1}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-05-09T17-04-24Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-teamdocs-public}
+      MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-teamdocs-private}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+          set -eu
+          mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+          mc mb --ignore-existing "local/$${MINIO_BUCKET_PUBLIC}"
+          mc mb --ignore-existing "local/$${MINIO_BUCKET_PRIVATE}"
+          mc anonymous set download "local/$${MINIO_BUCKET_PUBLIC}"
+    restart: "no"
+
+  backend:
+    build:
+      context: ./teamdocs-backend
+      dockerfile: Dockerfile
+    image: teamdocs-backend:local
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      TZ: Asia/Shanghai
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-teamdocs}
+      DB_USERNAME: root
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-teamdocs-public}
+      MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-teamdocs-private}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  redis_data:
+  minio_data:

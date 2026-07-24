@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component;
 // accessKey 字段对应 minio.access-key（中划线 →驼峰自动转换）
 public class MinioProperties {
     private String endpoint;
+    private String publicEndpoint;
+    private String region;
     private String accessKey;
     private String secretKey;
     private String bucketPublic;

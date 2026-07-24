@@ -1,5 +1,3 @@
-USE teamdocs;
-
 DROP TABLE IF EXISTS comment;
 
 CREATE TABLE comment(
