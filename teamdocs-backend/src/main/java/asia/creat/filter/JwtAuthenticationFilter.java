@@ -11,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -24,16 +23,20 @@ import java.util.Collections;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Autowired
     private JWTUtils jwtUtils;
+
+    @Override
+    protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
+        String requestURI = request.getServletPath();
+        return "/user/login".equals(requestURI)
+                || "/user/register".equals(requestURI)
+                || "/actuator/health".equals(requestURI);
+    }
+
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
                                     @NonNull HttpServletResponse response,
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
-        // 跳过登录/注册接口，这些接口允许匿名访问
         String requestURI = request.getRequestURI();
-        if(requestURI.contains("/user/login") || requestURI.contains("/user/register")){
-            filterChain.doFilter(request,response);
-            return;
-        }
 
         // 从Authorization请求头提取JWT token（格式：Bearer <token>）
         String authHeader = request.getHeader("Authorization");

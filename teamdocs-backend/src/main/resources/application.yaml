@@ -40,3 +40,22 @@ minio:
   secret-key: ${MINIO_SECRET_KEY}
   bucket-public: ${MINIO_BUCKET_PUBLIC}
   bucket-private: ${MINIO_BUCKET_PRIVATE}
+
+# Health check
+management:
+  endpoints:
+    access:
+      default: none
+    web:
+      exposure:
+        include: health
+      discovery:
+        enabled: false
+    jmx:
+      exposure:
+        exclude: "*"
+  endpoint:
+    health:
+      access: read-only
+      show-details: never
+      show-components: never

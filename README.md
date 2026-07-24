@@ -42,7 +42,7 @@ flowchart LR
 
 ### 前置条件
 
-- Docker Desktop 已启动
+- Windows/macOS 已启动 Docker Desktop，或 Linux 已启动 Docker Engine
 - Docker Compose v2 可用
 - 默认宿主机端口 `18080`、`19000`、`19001` 未被占用
 
@@ -54,13 +54,25 @@ PowerShell：
 Copy-Item .env.docker.example .env.docker
 ```
 
+CMD：
+
+```cmd
+copy /Y .env.docker.example .env.docker
+```
+
+Linux/macOS：
+
+```bash
+cp .env.docker.example .env.docker
+```
+
 至少替换 `.env.docker` 中的数据库、Redis、JWT 和 MinIO 密钥。JWT 密钥不得少于 32 字节。
 
-如果密码含有 `$`，必须在 `.env.docker` 中用单引号包住，例如 `DB_PASSWORD='a$password'`，否则 Compose 会把 `$password` 当成变量引用。Docker 命令显式读取这个文件，不会误用原生启动后端所用的 `.env` 或其中的远程 Redis/MinIO 地址。
+不要删除 `TEAMDOCS_DOCKER_ENV`，它用于阻止 Compose 误读原生启动使用的根目录 `.env`。如果密码含有 `$`，必须在 `.env.docker` 中用单引号包住，例如 `DB_PASSWORD='a$password'`，否则 Compose 会把 `$password` 当成变量引用。Docker 命令显式读取这个文件，不会误用原生启动后端所用的 `.env` 或其中的远程 Redis/MinIO 地址。
 
 ### 2. 启动完整环境
 
-```powershell
+```shell
 docker compose --env-file .env.docker -f docker-compose.dev.yml up -d --build
 docker compose --env-file .env.docker -f docker-compose.dev.yml ps -a
 ```
@@ -70,28 +82,32 @@ docker compose --env-file .env.docker -f docker-compose.dev.yml ps -a
 ```mermaid
 flowchart TD
     Up[docker compose up] --> Infra[启动 MySQL、Redis、MinIO]
-    Infra --> Health{基础服务健康检查}
+    Infra --> Health{MySQL、Redis 健康检查}
+    Infra --> MinioInit[minio-init 使用 mc 轮询 MinIO]
     Health --> SQL[按顺序创建 9 张表和全文索引]
-    Health --> Buckets[创建 public/private 桶]
+    MinioInit --> Buckets[创建 public/private 桶]
     SQL --> App[启动 Spring Boot 后端]
     Buckets --> App
+    App --> AppHealth{Actuator 健康检查}
 ```
 
 查看后端日志：
 
-```powershell
+```shell
 docker compose --env-file .env.docker -f docker-compose.dev.yml logs -f backend
 ```
 
-本地入口：API `http://localhost:18080`，MinIO API `http://localhost:19000`，MinIO Console `http://localhost:19001`。MySQL 和 Redis 只在 Compose 内部网络开放，不占用宿主机端口。
+本地入口：API `http://localhost:18080`，Backend Health `http://localhost:18080/actuator/health`，MinIO API `http://localhost:19000`，MinIO Console `http://localhost:19001`。MySQL 和 Redis 只在 Compose 内部网络开放，不占用宿主机端口。
 
 ### 3. 停止或重置
 
-```powershell
-# 停止容器，保留数据
+```shell
 docker compose --env-file .env.docker -f docker-compose.dev.yml down
+```
 
-# 删除容器和全部数据卷，下一次启动会重新执行 SQL
+删除容器和全部数据卷，下一次启动会重新执行 SQL：
+
+```shell
 docker compose --env-file .env.docker -f docker-compose.dev.yml down -v
 ```
 
@@ -100,12 +116,13 @@ docker compose --env-file .env.docker -f docker-compose.dev.yml down -v
 ## 环境变量
 
 - `BACKEND_PORT`：后端宿主机端口，Docker 模板使用 `18080`
+- `TEAMDOCS_DOCKER_ENV`：Docker 专用环境文件标记，缺失时 Compose 拒绝启动
 - `BIND_ADDRESS`：宿主机绑定地址，开发环境默认 `127.0.0.1`
 - `DB_NAME` / `DB_PASSWORD`：MySQL 数据库名和 root 密码
 - `REDIS_PASSWORD`：Redis 密码
 - `JWT_SECRET`：JWT HMAC 密钥，至少 32 字节
 - `MINIO_API_PORT` / `MINIO_CONSOLE_PORT`：MinIO API 与控制台宿主机端口
-- `MINIO_PUBLIC_ENDPOINT`：返回给客户端的文件访问地址，Docker 模板使用 `http://localhost:19000`
+- `MINIO_PUBLIC_ENDPOINT`：必填，返回给客户端的文件访问地址，Docker 模板使用 `http://localhost:19000`
 - `MINIO_REGION`：MinIO 区域，默认 `us-east-1`，后端与服务端必须一致
 - `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`：MinIO 管理账号和密码
 - `MINIO_BUCKET_PUBLIC` / `MINIO_BUCKET_PRIVATE`：公有桶和私有桶名称
@@ -208,9 +225,25 @@ if ($recent.code -ne 1) { throw $recent.msg }
 
 在 `teamdocs-backend` 下执行：
 
+PowerShell：
+
 ```powershell
 .\mvnw.cmd test
 .\mvnw.cmd spring-boot:run
+```
+
+CMD：
+
+```cmd
+mvnw.cmd test
+mvnw.cmd spring-boot:run
+```
+
+Linux/macOS：
+
+```bash
+sh ./mvnw test
+sh ./mvnw spring-boot:run
 ```
 
 运行后端前需保证 MySQL、Redis 和 MinIO 可访问，并把 `.env.example` 中的变量配置到仓库根目录 `.env` 或操作系统环境变量。
@@ -218,9 +251,10 @@ if ($recent.code -ne 1) { throw $recent.msg }
 ## 常见问题
 
 - **端口被占用**：修改 `.env.docker` 中对应的宿主机端口；容器内部端口无需修改。
+- **提示 `TEAMDOCS_DOCKER_ENV` 缺失**：命令遗漏了 `--env-file .env.docker`，Compose 已阻止误用根目录 `.env`。
 - **修改 SQL 后没有生效**：初始化脚本只在 MySQL 数据卷为空时执行。确认不需要旧数据后使用 `down -v` 重建。
 - **下载 URL 中出现 `minio:9000`**：检查后端是否设置了 `MINIO_PUBLIC_ENDPOINT`，并重新构建镜像。
 - **下载 URL 无法从浏览器访问**：公开地址必须是浏览器可达的 IP 或域名，且 MinIO API 端口已放行。
-- **升级 MinIO 镜像后健康检查失败**：当前固定版本已验证包含 `/usr/bin/curl`；更换镜像版本时需重新确认该命令存在。
+- **Backend 状态为 unhealthy**：访问 `/actuator/health`，并查看 Backend、MySQL 和 Redis 日志。
 - **接口 HTTP 200 但操作失败**：检查响应体的 `code` 和 `msg`，不要只看 HTTP 状态码。
-- **Docker 无法连接 daemon**：先启动 Docker Desktop，再执行 Compose 命令。
+- **Docker 无法连接 daemon**：Windows/macOS 启动 Docker Desktop；Linux 启动 Docker 服务。

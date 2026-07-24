@@ -12,7 +12,9 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-RUN addgroup -S teamdocs && adduser -S teamdocs -G teamdocs
+RUN apk add --no-cache curl \
+    && addgroup -S teamdocs \
+    && adduser -S teamdocs -G teamdocs
 
 COPY --from=build /workspace/target/teamdocs-backend-*.jar app.jar
 
