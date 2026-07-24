@@ -18,6 +18,7 @@ import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
 import asia.creat.service.DocumentService;
 import asia.creat.service.FileStorageService;
+import asia.creat.service.RecentDocumentService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,12 +36,14 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentMapper documentMapper;
     private final ResourcePermissionHelper permissionHelper;
     private final FolderMapper folderMapper;
+    private final RecentDocumentService recentDocumentService;
 
-    public DocumentServiceImpl(DocumentMapper documentMapper, FileStorageService fileStorageService, ResourcePermissionHelper permissionHelper, FolderMapper folderMapper) {
+    public DocumentServiceImpl(DocumentMapper documentMapper, FileStorageService fileStorageService, ResourcePermissionHelper permissionHelper, FolderMapper folderMapper, RecentDocumentService recentDocumentService) {
         this.documentMapper = documentMapper;
         this.fileStorageService = fileStorageService;
         this.permissionHelper = permissionHelper;
         this.folderMapper = folderMapper;
+        this.recentDocumentService = recentDocumentService;
     }
 
     @Override
@@ -148,11 +151,13 @@ public class DocumentServiceImpl implements DocumentService {
 
         Document doc = checkDocument(documentId, spaceId);
 
-        return  fileStorageService.getAccessUrl(
+        String url = fileStorageService.getAccessUrl(
                     BucketType.PRIVATE,
                     doc.getFilePath(),
                     Map.of("response-content-disposition", "attachment; filename=\"" + doc.getName() + "\"")
                 );
+        recentDocumentService.recordRecentDocument(loginUser.getUserId(), documentId);
+        return url;
 
     }
 

@@ -5,12 +5,13 @@ import asia.creat.dto.UserLoginDTO;
 import asia.creat.dto.UserRegisterDTO;
 import asia.creat.security.LoginUser;
 import asia.creat.service.RateLimitService;
+import asia.creat.service.RecentDocumentService;
 import asia.creat.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+
 
 import static asia.creat.utils.RedisConstants.*;
 
@@ -19,10 +20,12 @@ import static asia.creat.utils.RedisConstants.*;
 public class UserController {
     private final UserService userService;
     private final RateLimitService rateLimitService;
+    private final RecentDocumentService recentDocumentService;
 
-    public UserController(UserService userService, RateLimitService rateLimitService) {
+    public UserController(UserService userService, RateLimitService rateLimitService, RecentDocumentService recentDocumentService) {
         this.userService = userService;
         this.rateLimitService = rateLimitService;
+        this.recentDocumentService = recentDocumentService;
     }
 
     @PostMapping("/register")
@@ -44,5 +47,10 @@ public class UserController {
     @GetMapping("/info")
     public Result info(@AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(loginUser);
+    }
+
+    @GetMapping("/recent-documents")
+    public Result recent(@AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(recentDocumentService.getRecentDocuments(loginUser.getUserId()));
     }
 }
