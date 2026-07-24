@@ -464,14 +464,14 @@ public void updateSpace(@SpaceId Long spaceId, UpdateSpaceDTO dto, LoginUser log
 
 不是所有方法都适合切面：
 
-| 方法 | 是否注解化 | 原因 |
-|------|----------|------|
-| `deleteSpace` | ✅ | 纯角色校验 |
-| `updateSpace` | ✅ | 纯角色校验 |
-| `addMember` | ✅ | 纯角色校验 |
-| `updateMemberRole` | ✅ | 纯角色校验 |
-| `removeMember` | ✅（混合） | 注解限制调用者为 OWNER/ADMIN，Service 再判断目标角色，阻止移除 OWNER 和 ADMIN 踢 ADMIN |
-| `getSpaceById` / `listMembers` | ❌ | 当前保留显式成员校验；直接改用切面不会减少查询，复用切面查出的 `Space` 还需要扩展上下文 |
+| 方法                             | 是否注解化 | 原因                                                              |
+|--------------------------------|-------|-----------------------------------------------------------------|
+| `deleteSpace`                  | ✅     | 纯角色校验                                                           |
+| `updateSpace`                  | ✅     | 纯角色校验                                                           |
+| `addMember`                    | ✅     | 纯角色校验                                                           |
+| `updateMemberRole`             | ✅     | 纯角色校验                                                           |
+| `removeMember`                 | ✅（混合） | 注解限制调用者为 OWNER/ADMIN，Service 再判断目标角色，阻止移除 OWNER 和 ADMIN 踢 ADMIN |
+| `getSpaceById` / `listMembers` | ❌     | 当前保留显式成员校验；直接改用切面不会减少查询，复用切面查出的 `Space` 还需要扩展上下文                |
 
 **原则**：注解负责"调用者角色是否允许"这种粗粒度准入；涉及目标资源状态、目标成员角色等关系型规则时，继续在 Service 中做细粒度判断。复杂权限不必在注解和手写之间二选一，可以组合使用。
 
