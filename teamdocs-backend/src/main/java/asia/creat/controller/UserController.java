@@ -35,7 +35,11 @@ public class UserController {
     }
 
     @PostMapping("/register")
-    public Result register(@RequestBody @Validated UserRegisterDTO dto){
+    public Result register(@RequestBody @Validated UserRegisterDTO dto, HttpServletRequest request){
+        String ip = request.getRemoteAddr();
+        if (rateLimitService.isRateLimited(REGISTER_LIMIT_PREFIX + ip, REGISTER_LIMIT_WINDOW, MAX_REGISTER_ATTEMPTS)) {
+            return Result.error("请求过于频繁");
+        }
         userService.register(dto.getUsername(),dto.getPassword());
         return Result.success();
     }
@@ -46,8 +50,7 @@ public class UserController {
         if (rateLimitService.isRateLimited(LOGIN_LIMIT_PREFIX +ip,LOGIN_LIMIT_WINDOW,MAX_LOGIN_ATTEMPTS)) {
             return Result.error("请求过于频繁");
         }
-        String token = userService.login(dto.getUsername(),dto.getPassword());
-        return Result.success(token);
+        return Result.success(userService.login(dto.getUsername(),dto.getPassword()));
     }
 
     @GetMapping("/info")

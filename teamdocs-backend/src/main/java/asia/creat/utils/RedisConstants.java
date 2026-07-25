@@ -8,6 +8,7 @@ import java.time.Duration;
 public class RedisConstants {
     public static final String CACHE_SPACE_PREFIX = "teamdocs:space:";
     public static final String LOGIN_LIMIT_PREFIX = "teamdocs:rate:login:";
+    public static final String REGISTER_LIMIT_PREFIX = "teamdocs:rate:register:";
     public static final String RECENT_DOCUMENT_PREFIX = "teamdocs:user:recent:";
     public static final String TOKEN_REVOKED_PREFIX = "teamdocs:auth:revoked:";
     public static final String TOKEN_USER_INVALID_BEFORE_PREFIX = "teamdocs:auth:user-invalid-before:";
@@ -23,9 +24,13 @@ public class RedisConstants {
 
     //登录限制窗口
     public static final Duration LOGIN_LIMIT_WINDOW = Duration.ofSeconds(60L);
+    //注册限制窗口
+    public static final Duration REGISTER_LIMIT_WINDOW = Duration.ofSeconds(60L);
 
     //最大登录尝试次数
     public static final Long MAX_LOGIN_ATTEMPTS = 10L;
+    //最大注册尝试次数
+    public static final Long MAX_REGISTER_ATTEMPTS = 5L;
 
     //最大随机秒数
     public static final Long MAX_RANDOM_TTL_SECONDS = 300L;

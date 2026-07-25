@@ -8,6 +8,7 @@ import asia.creat.security.LoginUser;
 import asia.creat.service.TokenRevocationService;
 import asia.creat.service.impl.UserServiceImpl;
 import asia.creat.utils.JWTUtils;
+import asia.creat.vo.LoginResultVO;
 import asia.creat.vo.UserProfileVO;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
@@ -64,6 +65,37 @@ class UserServiceImplTest {
     @BeforeEach
     void setUp() {
         userService = new UserServiceImpl(jwtUtils, userMapper, passwordEncoder, tokenRevocationService);
+    }
+
+    @Test
+    void loginShouldReturnTokenAndUserProfile() {
+        User user = activeUser("encoded-pass");
+        user.setNickname("Alice");
+        user.setEmail("alice@example.com");
+        when(userMapper.selectOne(any())).thenReturn(user);
+        when(passwordEncoder.matches("raw-pass", "encoded-pass")).thenReturn(true);
+        when(jwtUtils.generateJWT(any())).thenReturn("jwt-token");
+
+        LoginResultVO result = userService.login("alice", "raw-pass");
+
+        assertEquals("jwt-token", result.getToken());
+        assertEquals(USER_ID, result.getUser().getUserId());
+        assertEquals("alice", result.getUser().getUsername());
+        assertEquals("Alice", result.getUser().getNickname());
+        assertEquals("alice@example.com", result.getUser().getEmail());
+    }
+
+    @Test
+    void loginShouldRejectWrongPassword() {
+        User user = activeUser("encoded-pass");
+        when(userMapper.selectOne(any())).thenReturn(user);
+        when(passwordEncoder.matches("wrong-pass", "encoded-pass")).thenReturn(false);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> userService.login("alice", "wrong-pass"));
+
+        assertTrue(ex.getMessage().contains("用户名或密码错误"));
+        verify(jwtUtils, never()).generateJWT(any());
     }
 
     @Test

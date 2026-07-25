@@ -8,6 +8,7 @@ import asia.creat.security.LoginUser;
 import asia.creat.service.TokenRevocationService;
 import asia.creat.service.UserService;
 import asia.creat.utils.JWTUtils;
+import asia.creat.vo.LoginResultVO;
 import asia.creat.vo.UserProfileVO;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -51,7 +52,7 @@ public class UserServiceImpl implements UserService {
 
 
     @Override
-    public String login(String username, String password) {
+    public LoginResultVO login(String username, String password) {
         LambdaQueryWrapper<User> lqw = new LambdaQueryWrapper<>();
         lqw.eq(User::getUsername, username);
         User user = userMapper.selectOne(lqw);
@@ -66,7 +67,8 @@ public class UserServiceImpl implements UserService {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId());
         claims.put("username", user.getUsername());
-        return jwtUtils.generateJWT(claims);
+        String token = jwtUtils.generateJWT(claims);
+        return new LoginResultVO(token, toProfileVO(user));
     }
 
     @Override
