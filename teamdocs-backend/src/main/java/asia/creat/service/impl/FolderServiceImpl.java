@@ -24,9 +24,6 @@ import java.util.*;
 
 @Service
 @Slf4j
-/*
-* 仍然有Bug，后期优化修改
-* */
 public class FolderServiceImpl implements FolderService {
     private final FolderMapper folderMapper;
     private final DocumentMapper documentMapper;
@@ -94,8 +91,11 @@ public class FolderServiceImpl implements FolderService {
         SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, folder.getCreatedBy(), loginUser.getUserId());
 
-        List<Long> allIds = collectAllSubFolderIds(folderId);
-        documentMapper.delete(new LambdaQueryWrapper<Document>().in(Document::getFolderId, allIds));
+        List<Long> allIds = collectAllSubFolderIds(spaceId, folderId);
+        // 文档进入回收站，保留 MinIO 对象供恢复。
+        documentMapper.delete(new LambdaQueryWrapper<Document>()
+                .eq(Document::getSpaceId, spaceId)
+                .in(Document::getFolderId, allIds));
         folderMapper.deleteByIds(allIds);
 
         log.info("{} 删除了文件夹 {} 及其子文件夹", loginUser.getUsername(), folder.getName());
@@ -120,7 +120,7 @@ public class FolderServiceImpl implements FolderService {
             throw new BusinessException("不能将文件夹移动到自己下面");
         }
 
-        List<Long> allIds= collectAllSubFolderIds(folderId);
+        List<Long> allIds= collectAllSubFolderIds(spaceId, folderId);
 
         if(allIds.contains(dto.getTargetParentId())){
             throw new BusinessException("不能将文件夹移动到自己的子目录下");
@@ -149,7 +149,7 @@ public class FolderServiceImpl implements FolderService {
     /*
     * 广度优先删除文件
     * */
-    private List<Long> collectAllSubFolderIds(Long folderId) {
+    private List<Long> collectAllSubFolderIds(Long spaceId, Long folderId) {
 
         List<Long> allIds = new ArrayList<>();
         Queue<Long> queue = new LinkedList<>();
@@ -159,7 +159,9 @@ public class FolderServiceImpl implements FolderService {
             Long currentId = queue.poll();
             allIds.add(currentId);
             List<Folder> children = folderMapper.selectList(
-                    new LambdaQueryWrapper<Folder>().eq(Folder::getParentId, currentId));
+                    new LambdaQueryWrapper<Folder>()
+                            .eq(Folder::getSpaceId, spaceId)
+                            .eq(Folder::getParentId, currentId));
             for (Folder subFolder : children) {
                 queue.offer(subFolder.getId());
             }

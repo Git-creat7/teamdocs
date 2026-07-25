@@ -170,6 +170,28 @@ class DocumentServiceImplTest {
     }
 
     @Test
+    void restoreWithoutTargetShouldFallBackToRootWhenOriginalFolderWasDeleted() {
+        when(documentMapper.selectDeletedDocument(10L))
+                .thenReturn(document(10L, SPACE_ID, USER_ID, 20L));
+        when(folderMapper.selectById(20L)).thenReturn(null);
+
+        service.restoreDocument(SPACE_ID, 10L, null, LOGIN_USER);
+
+        verify(documentMapper).updateDeleted(10L, 0L);
+    }
+
+    @Test
+    void restoreShouldUseRootWhenTargetFolderIsZero() {
+        when(documentMapper.selectDeletedDocument(10L))
+                .thenReturn(document(10L, SPACE_ID, USER_ID, 20L));
+
+        service.restoreDocument(SPACE_ID, 10L, 0L, LOGIN_USER);
+
+        verify(folderMapper, never()).selectById(any());
+        verify(documentMapper).updateDeleted(10L, 0L);
+    }
+
+    @Test
     void downloadShouldRecordRecentOnlyAfterUrlWasGenerated() {
         Document document = document(10L, SPACE_ID, USER_ID, 0L);
         document.setName("notes.txt");

@@ -108,7 +108,7 @@ public class DocumentController {
                                   @PathVariable Long documentId,
                                   @RequestBody(required = false) RestoreDocumentDTO dto,
                                   @AuthenticationPrincipal LoginUser loginUser) {
-        //如果dto为null，说明用户没有提供目标文件夹ID，默认恢复到根目录（targetFolderId为null）
+        // 未指定目标时优先恢复原目录，原目录不存在则由 Service 回退到根目录。
         Long targetFolderId = dto != null ? dto.getTargetFolderId() : null;
         documentService.restoreDocument(spaceId, documentId, targetFolderId, loginUser);
         return Result.success();

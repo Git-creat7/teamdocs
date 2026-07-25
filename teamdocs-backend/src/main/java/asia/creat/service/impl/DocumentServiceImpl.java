@@ -204,18 +204,19 @@ public class DocumentServiceImpl implements DocumentService {
         SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
-        if(targetFolderId == null || targetFolderId == 0){
-            if(doc.getFolderId() != 0) {
-                Folder folder = folderMapper.selectById(doc.getFolderId());
-                if(folder == null)
-                    throw new BusinessException("原文件夹已经被删除，请选择目标文件夹");
-            }
+        if (targetFolderId == null) {
             targetFolderId = doc.getFolderId();
-
-        }else{
+            if (targetFolderId != 0) {
+                Folder originalFolder = folderMapper.selectById(targetFolderId);
+                if (originalFolder == null || !originalFolder.getSpaceId().equals(spaceId)) {
+                    targetFolderId = 0L;
+                }
+            }
+        } else if (targetFolderId != 0) {
             Folder folder = folderMapper.selectById(targetFolderId);
-            if(folder == null || !folder.getSpaceId().equals(spaceId))
+            if (folder == null || !folder.getSpaceId().equals(spaceId)) {
                 throw new BusinessException("目标文件夹不存在");
+            }
         }
 
 
