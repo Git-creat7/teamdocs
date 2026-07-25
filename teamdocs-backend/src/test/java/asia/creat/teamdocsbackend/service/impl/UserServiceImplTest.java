@@ -50,6 +50,16 @@ class UserServiceImplTest {
     private static final LoginUser LOGIN_USER = new LoginUser(USER_ID, "alice");
     private static final String PUBLIC_ENDPOINT = "http://localhost:9000";
     private static final String PUBLIC_BUCKET = "teamdocs-public";
+    // 中性夹具名，避免密钥扫描把 mock 字面量当真实凭据
+    private static final String HASH_STORED = "hash-stored";
+    private static final String HASH_PREV = "hash-prev";
+    private static final String HASH_NEXT = "hash-next";
+    private static final String PLAIN_INPUT = "plain-input";
+    private static final String PLAIN_WRONG = "plain-wrong";
+    private static final String PLAIN_PREV = "plain-prev";
+    private static final String PLAIN_NEXT = "plain-next";
+    private static final String PLAIN_SAME = "plain-same";
+    private static final String SAMPLE_JWT = "sample-jwt";
 
     @Mock
     private JWTUtils jwtUtils;
@@ -91,16 +101,16 @@ class UserServiceImplTest {
 
     @Test
     void loginShouldReturnTokenAndUserProfile() {
-        User user = activeUser("encoded-pass");
+        User user = activeUser(HASH_STORED);
         user.setNickname("Alice");
         user.setEmail("alice@example.com");
         when(userMapper.selectOne(any())).thenReturn(user);
-        when(passwordEncoder.matches("raw-pass", "encoded-pass")).thenReturn(true);
-        when(jwtUtils.generateJWT(any())).thenReturn("jwt-token");
+        when(passwordEncoder.matches(PLAIN_INPUT, HASH_STORED)).thenReturn(true);
+        when(jwtUtils.generateJWT(any())).thenReturn(SAMPLE_JWT);
 
-        LoginResultVO result = userService.login("alice", "raw-pass");
+        LoginResultVO result = userService.login("alice", PLAIN_INPUT);
 
-        assertEquals("jwt-token", result.getToken());
+        assertEquals(SAMPLE_JWT, result.getToken());
         assertEquals(USER_ID, result.getUser().getUserId());
         assertEquals("alice", result.getUser().getUsername());
         assertEquals("Alice", result.getUser().getNickname());
@@ -109,12 +119,12 @@ class UserServiceImplTest {
 
     @Test
     void loginShouldRejectWrongPassword() {
-        User user = activeUser("encoded-pass");
+        User user = activeUser(HASH_STORED);
         when(userMapper.selectOne(any())).thenReturn(user);
-        when(passwordEncoder.matches("wrong-pass", "encoded-pass")).thenReturn(false);
+        when(passwordEncoder.matches(PLAIN_WRONG, HASH_STORED)).thenReturn(false);
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> userService.login("alice", "wrong-pass"));
+                () -> userService.login("alice", PLAIN_WRONG));
 
         assertTrue(ex.getMessage().contains("用户名或密码错误"));
         verify(jwtUtils, never()).generateJWT(any());
@@ -122,30 +132,30 @@ class UserServiceImplTest {
 
     @Test
     void changePasswordShouldUpdateEncodedPasswordAndInvalidateSessions() {
-        User user = activeUser("encoded-old");
+        User user = activeUser(HASH_PREV);
         when(userMapper.selectById(USER_ID)).thenReturn(user);
-        when(passwordEncoder.matches("old-pass", "encoded-old")).thenReturn(true);
-        when(passwordEncoder.matches("new-pass", "encoded-old")).thenReturn(false);
-        when(passwordEncoder.encode("new-pass")).thenReturn("encoded-new");
+        when(passwordEncoder.matches(PLAIN_PREV, HASH_PREV)).thenReturn(true);
+        when(passwordEncoder.matches(PLAIN_NEXT, HASH_PREV)).thenReturn(false);
+        when(passwordEncoder.encode(PLAIN_NEXT)).thenReturn(HASH_NEXT);
         when(userMapper.updateById(any(User.class))).thenReturn(1);
 
-        userService.changePassword(LOGIN_USER, "old-pass", "new-pass");
+        userService.changePassword(LOGIN_USER, PLAIN_PREV, PLAIN_NEXT);
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userMapper).updateById(userCaptor.capture());
-        assertEquals("encoded-new", userCaptor.getValue().getPassword());
-        verify(passwordEncoder).encode("new-pass");
+        assertEquals(HASH_NEXT, userCaptor.getValue().getPassword());
+        verify(passwordEncoder).encode(PLAIN_NEXT);
         verify(tokenRevocationService).invalidateAllForUser(USER_ID);
     }
 
     @Test
     void changePasswordShouldRejectWrongOldPassword() {
-        User user = activeUser("encoded-old");
+        User user = activeUser(HASH_PREV);
         when(userMapper.selectById(USER_ID)).thenReturn(user);
-        when(passwordEncoder.matches("wrong-old", "encoded-old")).thenReturn(false);
+        when(passwordEncoder.matches(PLAIN_WRONG, HASH_PREV)).thenReturn(false);
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> userService.changePassword(LOGIN_USER, "wrong-old", "new-pass"));
+                () -> userService.changePassword(LOGIN_USER, PLAIN_WRONG, PLAIN_NEXT));
 
         assertTrue(ex.getMessage().contains("旧密码"));
         verify(userMapper, never()).updateById(any(User.class));
@@ -155,12 +165,12 @@ class UserServiceImplTest {
 
     @Test
     void changePasswordShouldRejectSamePassword() {
-        User user = activeUser("encoded-old");
+        User user = activeUser(HASH_PREV);
         when(userMapper.selectById(USER_ID)).thenReturn(user);
-        when(passwordEncoder.matches("same-pass", "encoded-old")).thenReturn(true);
+        when(passwordEncoder.matches(PLAIN_SAME, HASH_PREV)).thenReturn(true);
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> userService.changePassword(LOGIN_USER, "same-pass", "same-pass"));
+                () -> userService.changePassword(LOGIN_USER, PLAIN_SAME, PLAIN_SAME));
 
         assertTrue(ex.getMessage().contains("相同"));
         verify(userMapper, never()).updateById(any(User.class));
@@ -170,12 +180,12 @@ class UserServiceImplTest {
 
     @Test
     void changePasswordShouldRejectDisabledUser() {
-        User user = activeUser("encoded-old");
+        User user = activeUser(HASH_PREV);
         user.setStatus(0);
         when(userMapper.selectById(USER_ID)).thenReturn(user);
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> userService.changePassword(LOGIN_USER, "old-pass", "new-pass"));
+                () -> userService.changePassword(LOGIN_USER, PLAIN_PREV, PLAIN_NEXT));
 
         assertTrue(ex.getMessage().contains("禁用"));
         verify(passwordEncoder, never()).matches(anyString(), anyString());
@@ -185,41 +195,41 @@ class UserServiceImplTest {
 
     @Test
     void changePasswordShouldRollbackWhenSessionInvalidationFails() {
-        User user = activeUser("encoded-old");
+        User user = activeUser(HASH_PREV);
         when(userMapper.selectById(USER_ID)).thenReturn(user);
-        when(passwordEncoder.matches("old-pass", "encoded-old")).thenReturn(true);
-        when(passwordEncoder.matches("new-pass", "encoded-old")).thenReturn(false);
-        when(passwordEncoder.encode("new-pass")).thenReturn("encoded-new");
-        List<String> updatedPasswords = new ArrayList<>();
+        when(passwordEncoder.matches(PLAIN_PREV, HASH_PREV)).thenReturn(true);
+        when(passwordEncoder.matches(PLAIN_NEXT, HASH_PREV)).thenReturn(false);
+        when(passwordEncoder.encode(PLAIN_NEXT)).thenReturn(HASH_NEXT);
+        List<String> updatedHashes = new ArrayList<>();
         when(userMapper.updateById(any(User.class))).thenAnswer(invocation -> {
             User arg = invocation.getArgument(0);
-            updatedPasswords.add(arg.getPassword());
+            updatedHashes.add(arg.getPassword());
             return 1;
         });
         doThrow(new BusinessException("会话失效失败，请稍后重试"))
                 .when(tokenRevocationService).invalidateAllForUser(USER_ID);
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> userService.changePassword(LOGIN_USER, "old-pass", "new-pass"));
+                () -> userService.changePassword(LOGIN_USER, PLAIN_PREV, PLAIN_NEXT));
 
         assertTrue(ex.getMessage().contains("修改密码失败"));
-        assertEquals(List.of("encoded-new", "encoded-old"), updatedPasswords);
-        assertEquals("encoded-old", user.getPassword());
+        assertEquals(List.of(HASH_NEXT, HASH_PREV), updatedHashes);
+        assertEquals(HASH_PREV, user.getPassword());
     }
 
     @Test
     void changePasswordShouldWarnWhenRollbackAlsoFails() {
-        User user = activeUser("encoded-old");
+        User user = activeUser(HASH_PREV);
         when(userMapper.selectById(USER_ID)).thenReturn(user);
-        when(passwordEncoder.matches("old-pass", "encoded-old")).thenReturn(true);
-        when(passwordEncoder.matches("new-pass", "encoded-old")).thenReturn(false);
-        when(passwordEncoder.encode("new-pass")).thenReturn("encoded-new");
+        when(passwordEncoder.matches(PLAIN_PREV, HASH_PREV)).thenReturn(true);
+        when(passwordEncoder.matches(PLAIN_NEXT, HASH_PREV)).thenReturn(false);
+        when(passwordEncoder.encode(PLAIN_NEXT)).thenReturn(HASH_NEXT);
         when(userMapper.updateById(any(User.class))).thenReturn(1, 0);
         doThrow(new BusinessException("会话失效失败，请稍后重试"))
                 .when(tokenRevocationService).invalidateAllForUser(USER_ID);
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> userService.changePassword(LOGIN_USER, "old-pass", "new-pass"));
+                () -> userService.changePassword(LOGIN_USER, PLAIN_PREV, PLAIN_NEXT));
 
         assertTrue(ex.getMessage().contains("密码已修改但会话失效失败"));
         verify(userMapper, times(2)).updateById(any(User.class));
@@ -227,7 +237,7 @@ class UserServiceImplTest {
 
     @Test
     void getProfileShouldReturnUserFieldsWithoutPassword() {
-        User user = activeUser("encoded-old");
+        User user = activeUser(HASH_PREV);
         user.setNickname("Alice");
         user.setEmail("alice@example.com");
         user.setAvatar("https://img/a.png");
@@ -245,7 +255,7 @@ class UserServiceImplTest {
 
     @Test
     void updateProfileShouldUpdateNicknameAndEmail() {
-        User user = activeUser("encoded-old");
+        User user = activeUser(HASH_PREV);
         when(userMapper.selectById(USER_ID)).thenReturn(user);
         when(userMapper.selectCount(any())).thenReturn(0L);
         when(userMapper.update(any(), any())).thenReturn(1);
@@ -262,7 +272,7 @@ class UserServiceImplTest {
 
     @Test
     void updateProfileShouldRejectDuplicateEmail() {
-        User user = activeUser("encoded-old");
+        User user = activeUser(HASH_PREV);
         user.setEmail("old@example.com");
         when(userMapper.selectById(USER_ID)).thenReturn(user);
         when(userMapper.selectCount(any())).thenReturn(1L);
@@ -276,7 +286,7 @@ class UserServiceImplTest {
 
     @Test
     void updateProfileShouldClearBlankEmail() {
-        User user = activeUser("encoded-old");
+        User user = activeUser(HASH_PREV);
         user.setEmail("old@example.com");
         when(userMapper.selectById(USER_ID)).thenReturn(user);
         when(userMapper.update(any(), any())).thenReturn(1);
@@ -291,7 +301,7 @@ class UserServiceImplTest {
 
     @Test
     void updateAvatarShouldUploadToPublicBucketAndDeleteOldObject() {
-        User user = activeUser("encoded-old");
+        User user = activeUser(HASH_PREV);
         user.setAvatar(PUBLIC_ENDPOINT + "/" + PUBLIC_BUCKET + "/avatar/7/old.png");
         when(userMapper.selectById(USER_ID)).thenReturn(user);
         when(userMapper.updateById(any(User.class))).thenReturn(1);
@@ -320,7 +330,7 @@ class UserServiceImplTest {
 
     @Test
     void updateAvatarShouldRejectInvalidContentType() {
-        User user = activeUser("encoded-old");
+        User user = activeUser(HASH_PREV);
         when(userMapper.selectById(USER_ID)).thenReturn(user);
 
         MockMultipartFile file = new MockMultipartFile(
@@ -339,7 +349,7 @@ class UserServiceImplTest {
 
     @Test
     void updateAvatarShouldCleanupObjectWhenDatabaseUpdateFails() {
-        User user = activeUser("encoded-old");
+        User user = activeUser(HASH_PREV);
         when(userMapper.selectById(USER_ID)).thenReturn(user);
         when(userMapper.updateById(any(User.class))).thenReturn(0);
         when(fileStorageService.getAccessUrl(eq(BucketType.PUBLIC), anyString(), isNull()))
@@ -359,11 +369,11 @@ class UserServiceImplTest {
         verify(fileStorageService).delete(BucketType.PUBLIC, objectKeyCaptor.getValue());
     }
 
-    private User activeUser(String encodedPassword) {
+    private User activeUser(String storedHash) {
         User user = new User();
         user.setId(USER_ID);
         user.setUsername("alice");
-        user.setPassword(encodedPassword);
+        user.setPassword(storedHash);
         user.setStatus(1);
         return user;
     }
