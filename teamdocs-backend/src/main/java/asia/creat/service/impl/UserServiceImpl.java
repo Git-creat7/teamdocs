@@ -1,13 +1,17 @@
 package asia.creat.service.impl;
 
 import asia.creat.common.exception.BusinessException;
+import asia.creat.dto.UpdateProfileDTO;
 import asia.creat.entity.User;
 import asia.creat.mapper.UserMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.service.TokenRevocationService;
 import asia.creat.service.UserService;
 import asia.creat.utils.JWTUtils;
+import asia.creat.vo.UserProfileVO;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -102,5 +106,80 @@ public class UserServiceImpl implements UserService {
             }
             throw new BusinessException("修改密码失败，请稍后重试", e);
         }
+    }
+
+    @Override
+    public UserProfileVO getProfile(LoginUser loginUser) {
+        return toProfileVO(requireActiveUser(loginUser.getUserId()));
+    }
+
+    @Override
+    public UserProfileVO updateProfile(LoginUser loginUser, UpdateProfileDTO dto) {
+        User user = requireActiveUser(loginUser.getUserId());
+
+        boolean hasUpdate = false;
+        LambdaUpdateWrapper<User> update = new LambdaUpdateWrapper<>();
+        update.eq(User::getId, user.getId());
+
+        if (dto.getNickname() != null) {
+            String nickname = StrUtil.trim(dto.getNickname());
+            if (StrUtil.isBlank(nickname)) {
+                nickname = null;
+            }
+            update.set(User::getNickname, nickname);
+            user.setNickname(nickname);
+            hasUpdate = true;
+        }
+
+        if (dto.getEmail() != null) {
+            String email = StrUtil.trim(dto.getEmail());
+            if (StrUtil.isBlank(email)) {
+                email = null;
+            }
+            if (StrUtil.isNotBlank(email) && !email.equalsIgnoreCase(StrUtil.nullToEmpty(user.getEmail()))) {
+                LambdaQueryWrapper<User> emailQuery = new LambdaQueryWrapper<>();
+                emailQuery.eq(User::getEmail, email)
+                        .ne(User::getId, user.getId());
+                if (userMapper.selectCount(emailQuery) > 0) {
+                    throw new BusinessException("邮箱已被占用");
+                }
+            }
+            update.set(User::getEmail, email);
+            user.setEmail(email);
+            hasUpdate = true;
+        }
+
+        if (!hasUpdate) {
+            return toProfileVO(user);
+        }
+
+        int updated = userMapper.update(null, update);
+        if (updated != 1) {
+            throw new BusinessException("更新资料失败");
+        }
+        return toProfileVO(user);
+    }
+
+    private User requireActiveUser(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        if (user.getStatus() != null && user.getStatus() != 1) {
+            throw new BusinessException("用户已被禁用");
+        }
+        return user;
+    }
+
+    private UserProfileVO toProfileVO(User user) {
+        UserProfileVO vo = new UserProfileVO();
+        vo.setUserId(user.getId());
+        vo.setUsername(user.getUsername());
+        vo.setNickname(user.getNickname());
+        vo.setEmail(user.getEmail());
+        vo.setAvatar(user.getAvatar());
+        vo.setStatus(user.getStatus());
+        vo.setCreatedAt(user.getCreatedAt());
+        return vo;
     }
 }

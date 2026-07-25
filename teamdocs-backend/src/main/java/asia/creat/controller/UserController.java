@@ -2,6 +2,7 @@ package asia.creat.controller;
 
 import asia.creat.common.Result;
 import asia.creat.dto.ChangePasswordDTO;
+import asia.creat.dto.UpdateProfileDTO;
 import asia.creat.dto.UserLoginDTO;
 import asia.creat.dto.UserRegisterDTO;
 import asia.creat.security.LoginUser;
@@ -48,10 +49,16 @@ public class UserController {
         String token = userService.login(dto.getUsername(),dto.getPassword());
         return Result.success(token);
     }
-    //调试Token
+
     @GetMapping("/info")
     public Result info(@AuthenticationPrincipal LoginUser loginUser) {
-        return Result.success(loginUser);
+        return Result.success(userService.getProfile(loginUser));
+    }
+
+    @PutMapping("/profile")
+    public Result updateProfile(@RequestBody @Validated UpdateProfileDTO dto,
+                                @AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(userService.updateProfile(loginUser, dto));
     }
 
     @PutMapping("/password")

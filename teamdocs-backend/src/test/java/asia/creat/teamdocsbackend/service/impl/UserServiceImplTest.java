@@ -1,12 +1,18 @@
 package asia.creat.teamdocsbackend.service.impl;
 
 import asia.creat.common.exception.BusinessException;
+import asia.creat.dto.UpdateProfileDTO;
 import asia.creat.entity.User;
 import asia.creat.mapper.UserMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.service.TokenRevocationService;
 import asia.creat.service.impl.UserServiceImpl;
 import asia.creat.utils.JWTUtils;
+import asia.creat.vo.UserProfileVO;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -47,6 +54,12 @@ class UserServiceImplTest {
     private TokenRevocationService tokenRevocationService;
 
     private UserServiceImpl userService;
+
+    @BeforeAll
+    static void initializeTableMetadata() {
+        MybatisConfiguration configuration = new MybatisConfiguration();
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, ""), User.class);
+    }
 
     @BeforeEach
     void setUp() {
@@ -156,6 +169,70 @@ class UserServiceImplTest {
 
         assertTrue(ex.getMessage().contains("密码已修改但会话失效失败"));
         verify(userMapper, times(2)).updateById(any(User.class));
+    }
+
+    @Test
+    void getProfileShouldReturnUserFieldsWithoutPassword() {
+        User user = activeUser("encoded-old");
+        user.setNickname("Alice");
+        user.setEmail("alice@example.com");
+        user.setAvatar("https://img/a.png");
+        when(userMapper.selectById(USER_ID)).thenReturn(user);
+
+        UserProfileVO profile = userService.getProfile(LOGIN_USER);
+
+        assertEquals(USER_ID, profile.getUserId());
+        assertEquals("alice", profile.getUsername());
+        assertEquals("Alice", profile.getNickname());
+        assertEquals("alice@example.com", profile.getEmail());
+        assertEquals("https://img/a.png", profile.getAvatar());
+        assertEquals(1, profile.getStatus());
+    }
+
+    @Test
+    void updateProfileShouldUpdateNicknameAndEmail() {
+        User user = activeUser("encoded-old");
+        when(userMapper.selectById(USER_ID)).thenReturn(user);
+        when(userMapper.selectCount(any())).thenReturn(0L);
+        when(userMapper.update(any(), any())).thenReturn(1);
+
+        UpdateProfileDTO dto = new UpdateProfileDTO("  Bob  ", "bob@example.com");
+        UserProfileVO profile = userService.updateProfile(LOGIN_USER, dto);
+
+        verify(userMapper).update(any(), any());
+        assertEquals("Bob", profile.getNickname());
+        assertEquals("bob@example.com", profile.getEmail());
+        assertEquals("Bob", user.getNickname());
+        assertEquals("bob@example.com", user.getEmail());
+    }
+
+    @Test
+    void updateProfileShouldRejectDuplicateEmail() {
+        User user = activeUser("encoded-old");
+        user.setEmail("old@example.com");
+        when(userMapper.selectById(USER_ID)).thenReturn(user);
+        when(userMapper.selectCount(any())).thenReturn(1L);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> userService.updateProfile(LOGIN_USER, new UpdateProfileDTO(null, "taken@example.com")));
+
+        assertTrue(ex.getMessage().contains("邮箱已被占用"));
+        verify(userMapper, never()).update(any(), any());
+    }
+
+    @Test
+    void updateProfileShouldClearBlankEmail() {
+        User user = activeUser("encoded-old");
+        user.setEmail("old@example.com");
+        when(userMapper.selectById(USER_ID)).thenReturn(user);
+        when(userMapper.update(any(), any())).thenReturn(1);
+
+        UserProfileVO profile = userService.updateProfile(LOGIN_USER, new UpdateProfileDTO(null, "   "));
+
+        verify(userMapper).update(any(), any());
+        assertNull(user.getEmail());
+        assertNull(profile.getEmail());
+        verify(userMapper, never()).selectCount(any());
     }
 
     private User activeUser(String encodedPassword) {
