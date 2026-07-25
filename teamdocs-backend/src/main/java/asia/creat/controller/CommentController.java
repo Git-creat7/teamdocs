@@ -2,6 +2,7 @@ package asia.creat.controller;
 
 import asia.creat.common.Result;
 import asia.creat.dto.AddCommentDTO;
+import asia.creat.dto.PageQuery;
 import asia.creat.security.LoginUser;
 import asia.creat.service.CommentService;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -35,8 +36,9 @@ public class CommentController {
     @GetMapping("")
     public Result listComments(@PathVariable Long spaceId,
                                @PathVariable Long documentId,
+                               @Validated @ModelAttribute PageQuery pageQuery,
                                @AuthenticationPrincipal LoginUser loginUser) {
-        return Result.success(commentService.listComments(spaceId, documentId,loginUser));
+        return Result.success(commentService.listComments(spaceId, documentId, pageQuery, loginUser));
     }
 
     /*

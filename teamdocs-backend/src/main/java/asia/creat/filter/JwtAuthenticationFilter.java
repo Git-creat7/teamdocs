@@ -2,6 +2,7 @@ package asia.creat.filter;
 
 import asia.creat.security.LoginUser;
 import asia.creat.security.RestAuthenticationEntryPoint;
+import asia.creat.service.TokenRevocationService;
 import asia.creat.utils.JWTUtils;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
@@ -25,11 +26,14 @@ import java.util.Collections;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JWTUtils jwtUtils;
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
+    private final TokenRevocationService tokenRevocationService;
 
     public JwtAuthenticationFilter(JWTUtils jwtUtils,
-                                   RestAuthenticationEntryPoint authenticationEntryPoint) {
+                                   RestAuthenticationEntryPoint authenticationEntryPoint,
+                                   TokenRevocationService tokenRevocationService) {
         this.jwtUtils = jwtUtils;
         this.authenticationEntryPoint = authenticationEntryPoint;
+        this.tokenRevocationService = tokenRevocationService;
     }
 
     @Override
@@ -67,6 +71,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try{
             // 验证token签名并解析载荷，提取用户ID和用户名
             Claims claims = jwtUtils.parseToken(token);
+            String tokenId = claims.getId();
+            if (tokenId == null || tokenId.isBlank()) {
+                throw new IllegalArgumentException("JWT ID is missing");
+            }
+            if (tokenRevocationService.isRevoked(tokenId)) {
+                throw new BadCredentialsException("JWT has been revoked");
+            }
             Long userId = claims.get("userId", Long.class);
             String username = claims.get("username", String.class);
             if (userId == null || username == null) {

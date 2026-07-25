@@ -6,8 +6,10 @@ import asia.creat.dto.UserRegisterDTO;
 import asia.creat.security.LoginUser;
 import asia.creat.service.RateLimitService;
 import asia.creat.service.RecentDocumentService;
+import asia.creat.service.TokenRevocationService;
 import asia.creat.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -21,11 +23,15 @@ public class UserController {
     private final UserService userService;
     private final RateLimitService rateLimitService;
     private final RecentDocumentService recentDocumentService;
+    private final TokenRevocationService tokenRevocationService;
 
-    public UserController(UserService userService, RateLimitService rateLimitService, RecentDocumentService recentDocumentService) {
+    public UserController(UserService userService, RateLimitService rateLimitService,
+                          RecentDocumentService recentDocumentService,
+                          TokenRevocationService tokenRevocationService) {
         this.userService = userService;
         this.rateLimitService = rateLimitService;
         this.recentDocumentService = recentDocumentService;
+        this.tokenRevocationService = tokenRevocationService;
     }
 
     @PostMapping("/register")
@@ -52,5 +58,11 @@ public class UserController {
     @GetMapping("/recent-documents")
     public Result recent(@AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(recentDocumentService.getRecentDocuments(loginUser.getUserId()));
+    }
+
+    @PostMapping("/logout")
+    public Result logout(@RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
+        tokenRevocationService.revoke(authorization.substring(7));
+        return Result.success();
     }
 }

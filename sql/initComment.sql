@@ -9,5 +9,5 @@ CREATE TABLE comment(
     deleted TINYINT DEFAULT 0 NOT NULL COMMENT '软删除，0未删除，1已删除',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    KEY idx_document_id (document_id)
+    KEY idx_document_created (document_id, created_at, id)
 )ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT = '评论表';

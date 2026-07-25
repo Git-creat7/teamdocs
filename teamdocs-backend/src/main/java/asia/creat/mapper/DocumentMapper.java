@@ -3,6 +3,7 @@ package asia.creat.mapper;
 import asia.creat.entity.Document;
 import asia.creat.vo.RecentDocumentVO;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -13,7 +14,7 @@ public interface DocumentMapper extends BaseMapper<Document> {
     /*
      * 查回收站列表
      * */
-    List<Document> selectTrashedDocuments(Long spaceId);
+    IPage<Document> selectTrashedDocuments(IPage<Document> page, @Param("spaceId") Long spaceId);
 
     /*
      * 查软删除的文件
@@ -31,12 +32,16 @@ public interface DocumentMapper extends BaseMapper<Document> {
     /*
      * 通过Tag获取文档列表
      * */
-    List<Document> listDocumentsByTag(Long spaceId, Long tagId);
+    IPage<Document> listDocumentsByTag(IPage<Document> page,
+                                       @Param("spaceId") Long spaceId,
+                                       @Param("tagId") Long tagId);
 
     /*
     * 搜索name + description + tag
     * */
-    List<Document> searchDocuments(Long spaceId, String keyword);
+    IPage<Document> searchDocuments(IPage<Document> page,
+                                    @Param("spaceId") Long spaceId,
+                                    @Param("keyword") String keyword);
 
     /*
     * 批量查询最近文档

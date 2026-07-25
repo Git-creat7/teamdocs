@@ -31,6 +31,7 @@
         FROM document
         WHERE deleted = 1
           AND space_id = #{spaceId}
+        ORDER BY updated_at DESC, id DESC
     </select>
 
     <select id="selectDeletedDocument" resultType="asia.creat.entity.Document">
@@ -69,6 +70,7 @@
         WHERE d.space_id = #{spaceId}
           AND d.deleted = 0
           AND dt.tag_id = #{tagId}
+        ORDER BY d.updated_at DESC, d.id DESC
     </select>
     <select id="searchDocuments" resultType="asia.creat.entity.Document">
         SELECT DISTINCT d.id,
@@ -94,6 +96,7 @@
                 OR MATCH(d.description) AGAINST(#{keyword} IN BOOLEAN MODE)/*描述*/
                 OR t.name LIKE CONCAT('%', #{keyword}, '%') /*标签*/
             )
+        ORDER BY d.updated_at DESC, d.id DESC
     </select>
 
     <select id="listAccessibleRecentDocuments" resultType="asia.creat.vo.RecentDocumentVO">

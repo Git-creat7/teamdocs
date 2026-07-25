@@ -11,6 +11,7 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Map;
+import java.util.UUID;
 
 @Component
 public class JWTUtils {
@@ -27,10 +28,13 @@ public class JWTUtils {
 
 
     public String generateJWT(Map<String, Object> claims) {
+        Date issuedAt = new Date();
         return Jwts.builder()
-                .claims(claims)           // 0.11 正确：无 set
-                .expiration(new Date(System.currentTimeMillis() + expirationTime))
-                .signWith(getSecretKey()) // 0.11 正确
+                .claims(claims)
+                .id(UUID.randomUUID().toString())
+                .issuedAt(issuedAt)
+                .expiration(new Date(issuedAt.getTime() + expirationTime))
+                .signWith(getSecretKey())
                 .compact();
     }
 

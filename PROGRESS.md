@@ -6,9 +6,9 @@
 
 ## 当前位置
 
-**周次**：W6（已完成）
-**模块**：Docker Compose + 部署文档
-**状态**：后端、MySQL、Redis、MinIO 已实现一键编排，镜像构建、容器启动与核心 API 冒烟均已通过
+**周次**：项目收尾
+**模块**：认证加固 + 核心列表分页 + 业务测试
+**状态**：Spring Security 已接管认证边界，JWT 支持 Redis 撤销，核心大列表已实现数据库分页
 
 ---
 
@@ -22,6 +22,9 @@
 - [x] W4-3: AOP 操作日志（成功/失败日志、URI、资源定位、耗时、失败隔离）
 - [x] W5: Redis（空间详情 Cache Aside + 登录 Lua 限流 + ZSet 最近浏览）+ 单元测试 + JMeter/API 验证
 - [x] W6: Docker Compose（MySQL + Redis + MinIO + Backend）+ 环境模板 + README + 容器/API 验证
+- [x] 收尾加固：Spring Security 认证边界 + 统一 401 JSON + JWT 当前 Token 注销
+- [x] 收尾分页：文档列表/回收站/搜索/标签文档/评论统一数据库分页
+- [x] 收尾测试：移除外部 Redis 伪测试，补 JWT Filter、空间权限、文档生命周期和分页单测
 
 ---
 
@@ -37,6 +40,9 @@
 - [x] 编写后端 Dockerfile 与包含 MySQL、Redis、MinIO、后端的 Docker Compose
 - [x] 补充原生启动与 Docker 专用环境模板，不提交真实密码和密钥
 - [x] 完善 README：项目架构、启动方式、核心设计、API 约定与冒烟脚本
+- [x] 修复 `anyRequest().permitAll()`，仅登录、注册和健康检查允许匿名访问
+- [x] 增加 `jti`、`iat` 和 Redis Token 撤销名单，支持注销当前 Token
+- [x] 为高数据量列表增加 `current/size` 分页、稳定排序和联合索引
 - [ ] 全量 API 回归并整理最终简历项目描述
 
 ---
@@ -60,6 +66,9 @@
 - 最近浏览业务：`teamdocs-backend/src/main/java/asia/creat/service/impl/RecentDocumentServiceImpl.java`
 - 最近浏览返回对象：`teamdocs-backend/src/main/java/asia/creat/vo/RecentDocumentVO.java`
 - 最近浏览权限查询：`teamdocs-backend/src/main/resources/asia/creat/mapper/DocumentMapper.xml`
+- JWT 过滤器：`teamdocs-backend/src/main/java/asia/creat/filter/JwtAuthenticationFilter.java`
+- Token 撤销服务：`teamdocs-backend/src/main/java/asia/creat/service/impl/TokenRevocationServiceImpl.java`
+- 统一分页请求/响应：`teamdocs-backend/src/main/java/asia/creat/dto/PageQuery.java`、`teamdocs-backend/src/main/java/asia/creat/common/PageResult.java`
 - W5 单元测试：`teamdocs-backend/src/test/java/asia/creat/teamdocsbackend/`
 - 后端镜像：`teamdocs-backend/Dockerfile`
 - Docker 构建上下文排除：`teamdocs-backend/.dockerignore`
@@ -582,6 +591,15 @@ SpaceRole[] rolesToCheck = new SpaceRole[]{SpaceRole.OWNER, SpaceRole.ADMIN}; //
 - 切面里查空间 + 查角色是两次 DB 查询，可以合并为一次 join 或用一次 `selectOne` 同时校验
 - 目前 `@RequireSpaceRole` 和业务异常文案是硬编码的，多语言场景需要改成 i18n key
 - 可以加个 `@Pointcut` 把 `@annotation(...)` 表达式抽出来命名，多个 advice 复用
+
+---
+
+## 收尾审查决策
+
+- Redis 已覆盖 Cache Aside、Lua 登录限流、ZSet 最近浏览和 JWT 撤销名单，不再为了数量给所有查询强行加缓存。
+- 本阶段只实现注销当前 Token；Refresh Token 需要双 Token 返回契约、轮换和重放检测，留到有前端长会话需求时再做。
+- 文档、搜索、回收站、标签文档和评论属于潜在大列表，已统一分页；空间、成员、单层文件夹和标签列表当前数据量有限，暂不扩大改动面。
+- 单元测试已覆盖认证、权限、文档生命周期、Redis 故障隔离和分页模型；MySQL FULLTEXT、MinIO 与完整 Controller 链路仍由最终 API 回归验证。
 
 ---
 

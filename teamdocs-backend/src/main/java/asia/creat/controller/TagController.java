@@ -2,7 +2,7 @@ package asia.creat.controller;
 
 import asia.creat.common.Result;
 import asia.creat.dto.CreateTagDTO;
-import asia.creat.entity.Document;
+import asia.creat.dto.PageQuery;
 import asia.creat.entity.Tag;
 import asia.creat.security.LoginUser;
 import asia.creat.service.TagService;
@@ -95,8 +95,9 @@ public class TagController {
     @GetMapping("/tags/{tagId}/documents")
     public Result listDocumentsByTag(@PathVariable Long spaceId,
                                      @PathVariable Long tagId,
+                                     @Validated @ModelAttribute PageQuery pageQuery,
                                      @AuthenticationPrincipal LoginUser loginUser){
-        return Result.success(tagService.listDocumentsByTag(spaceId, tagId, loginUser));
+        return Result.success(tagService.listDocumentsByTag(spaceId, tagId, pageQuery, loginUser));
     }
 
 }

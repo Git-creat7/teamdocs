@@ -4,8 +4,10 @@ import asia.creat.anno.OperationLog;
 import asia.creat.anno.OperationTarget;
 import asia.creat.anno.RequireSpaceRole;
 import asia.creat.anno.SpaceId;
+import asia.creat.common.PageResult;
 import asia.creat.common.exception.BusinessException;
 import asia.creat.dto.CreateTagDTO;
+import asia.creat.dto.PageQuery;
 import asia.creat.entity.*;
 import asia.creat.helper.ResourcePermissionHelper;
 import asia.creat.mapper.DocumentMapper;
@@ -117,10 +119,10 @@ public class TagServiceImpl implements TagService {
 
     @Override
     @RequireSpaceRole
-    public List<Document> listDocumentsByTag(@SpaceId Long spaceId, Long tagId, LoginUser loginUser) {
+    public PageResult<Document> listDocumentsByTag(@SpaceId Long spaceId, Long tagId, PageQuery pageQuery, LoginUser loginUser) {
         checkTag(spaceId, tagId);
 
-        return documentMapper.listDocumentsByTag(spaceId, tagId);
+        return PageResult.from(documentMapper.listDocumentsByTag(pageQuery.toPage(), spaceId, tagId));
     }
 
     private Document checkDocument(Long spaceId, Long documentId) {

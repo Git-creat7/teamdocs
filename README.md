@@ -6,7 +6,7 @@ TeamDocs 是一个面向小型团队的文档管理后端，提供空间与成�
 
 ## 核心能力
 
-- JWT 无状态认证，密码使用 BCrypt 加密
+- JWT 无 Session 认证，密码使用 BCrypt 加密，Redis 撤销名单支持当前 Token 注销
 - OWNER / ADMIN / MEMBER 三级空间权限，使用 Spring AOP 统一校验
 - 文档上传、下载、移动、重命名、软删除、回收站与彻底删除
 - MinIO 私有桶存储和一小时有效的预签名下载 URL
@@ -36,7 +36,7 @@ flowchart LR
     MySQL -->|首次启动按 01-06 执行| SQL[SQL 初始化脚本]
 ```
 
-请求先经过 JWT Filter，再进入 Controller、Service 和 Mapper。空间内业务由 `@RequireSpaceRole` 切面校验成员角色；MySQL 保存业务元数据，Redis 保存缓存、限流窗口和最近浏览，MinIO 保存文件本体。
+请求先经过 JWT Filter，再进入 Controller、Service 和 Mapper。空间内业务由 `@RequireSpaceRole` 切面校验成员角色；MySQL 保存业务元数据，Redis 保存缓存、限流窗口、Token 撤销名单和最近浏览，MinIO 保存文件本体。
 
 ## 一键启动
 
@@ -133,7 +133,7 @@ Compose 内部使用 `http://minio:9000` 连接 MinIO，但下载链接必须使
 
 ## API 约定
 
-注册和登录允许匿名访问，其余接口需要请求头：
+注册、登录和健康检查允许匿名访问，其余接口需要请求头：
 
 ```text
 Authorization: Bearer <token>
@@ -151,11 +151,11 @@ Authorization: Bearer <token>
 
 - `code = 1`：业务成功
 - `code = 0`：业务失败，原因见 `msg`
-- JWT 缺失、格式错误或失效：HTTP 401
+- JWT 缺失、格式错误、已注销或失效：HTTP 401，并返回 `code = 0` 的统一 JSON
 
 主要路由：
 
-- 用户：`POST /user/register`、`POST /user/login`、`GET /user/info`
+- 用户：`POST /user/register`、`POST /user/login`、`POST /user/logout`、`GET /user/info`
 - 最近浏览：`GET /user/recent-documents`
 - 空间与成员：`/space`、`/space/{id}/members`
 - 文件夹：`/spaces/{spaceId}/folders`
@@ -164,6 +164,18 @@ Authorization: Bearer <token>
 - 评论：`/spaces/{spaceId}/documents/{documentId}/comments`
 
 文档上传使用 `multipart/form-data`，文件字段名是 `file`；根目录使用 `folderId=0`。发表评论时 `replyToId` 可为空。
+
+文档列表、回收站、搜索、按标签筛选和评论列表支持数据库分页。查询参数 `current` 默认 `1`，`size` 默认 `20`、最大 `100`，响应中的 `data` 结构为：
+
+```json
+{
+  "records": [],
+  "total": 0,
+  "current": 1,
+  "size": 20,
+  "pages": 0
+}
+```
 
 ## API 冒烟测试
 
@@ -201,7 +213,7 @@ $upload = $uploadJson | ConvertFrom-Json
 if ($upload.code -ne 1) { throw $upload.msg }
 
 $documents = Invoke-RestMethod -Method Get -Uri "$baseUrl/spaces/$spaceId/documents?folderId=0" -Headers $headers
-$documentId = ($documents.data | Where-Object name -eq (Split-Path $sourceFile -Leaf) | Select-Object -First 1).id
+$documentId = ($documents.data.records | Where-Object name -eq (Split-Path $sourceFile -Leaf) | Select-Object -First 1).id
 if (-not $documentId) { throw '未找到刚上传的文档' }
 
 $download = Invoke-RestMethod -Method Get -Uri "$baseUrl/spaces/$spaceId/documents/$documentId/download" -Headers $headers
@@ -211,6 +223,9 @@ Invoke-WebRequest -Uri $download.data -OutFile $downloadedFile
 Start-Sleep -Seconds 1
 $recent = Invoke-RestMethod -Method Get -Uri "$baseUrl/user/recent-documents" -Headers $headers
 if ($recent.code -ne 1) { throw $recent.msg }
+
+$logout = Invoke-RestMethod -Method Post -Uri "$baseUrl/user/logout" -Headers $headers
+if ($logout.code -ne 1) { throw $logout.msg }
 
 [pscustomobject]@{
     User = $username

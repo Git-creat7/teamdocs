@@ -31,7 +31,8 @@ CREATE TABLE document (
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    KEY idx_space_folder (space_id, folder_id)
+    KEY idx_space_folder_updated (space_id, folder_id, deleted, updated_at, id),
+    KEY idx_space_deleted_updated (space_id, deleted, updated_at, id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '文档表';
 
 -- 标签表
@@ -51,5 +52,5 @@ CREATE TABLE document_tag (
     tag_id      BIGINT NOT NULL COMMENT '标签ID',
     PRIMARY KEY (id),
     UNIQUE KEY uk_doc_tag (document_id, tag_id),
-    KEY idx_tag (tag_id)
+    KEY idx_tag_document (tag_id, document_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '文档标签关联表';

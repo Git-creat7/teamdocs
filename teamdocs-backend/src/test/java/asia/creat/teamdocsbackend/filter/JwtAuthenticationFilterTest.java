@@ -3,6 +3,7 @@ package asia.creat.teamdocsbackend.filter;
 import asia.creat.filter.JwtAuthenticationFilter;
 import asia.creat.security.LoginUser;
 import asia.creat.security.RestAuthenticationEntryPoint;
+import asia.creat.service.TokenRevocationService;
 import asia.creat.utils.JWTUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,6 +38,9 @@ class JwtAuthenticationFilterTest {
     private Claims claims;
 
     @Mock
+    private TokenRevocationService tokenRevocationService;
+
+    @Mock
     private FilterChain filterChain;
 
     private ObjectMapper objectMapper;
@@ -47,7 +51,8 @@ class JwtAuthenticationFilterTest {
         objectMapper = new ObjectMapper();
         filter = new JwtAuthenticationFilter(
                 jwtUtils,
-                new RestAuthenticationEntryPoint(objectMapper)
+                new RestAuthenticationEntryPoint(objectMapper),
+                tokenRevocationService
         );
     }
 
@@ -74,6 +79,8 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer valid-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
         when(jwtUtils.parseToken("valid-token")).thenReturn(claims);
+        when(claims.getId()).thenReturn("token-id");
+        when(tokenRevocationService.isRevoked("token-id")).thenReturn(false);
         when(claims.get("userId", Long.class)).thenReturn(7L);
         when(claims.get("username", String.class)).thenReturn("alice");
 
@@ -84,6 +91,52 @@ class JwtAuthenticationFilterTest {
         LoginUser principal = assertInstanceOf(LoginUser.class, authentication.getPrincipal());
         assertEquals(7L, principal.getUserId());
         assertEquals("alice", principal.getUsername());
+    }
+
+    @Test
+    void shouldRejectTokenWithoutJwtId() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/space/list");
+        request.addHeader("Authorization", "Bearer legacy-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        when(jwtUtils.parseToken("legacy-token")).thenReturn(claims);
+        when(claims.getId()).thenReturn(null);
+
+        filter.doFilter(request, response, filterChain);
+
+        verify(filterChain, never()).doFilter(request, response);
+        verify(tokenRevocationService, never()).isRevoked(org.mockito.ArgumentMatchers.anyString());
+        assertUnauthorizedResult(response);
+    }
+
+    @Test
+    void shouldRejectRevokedToken() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/space/list");
+        request.addHeader("Authorization", "Bearer revoked-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        when(jwtUtils.parseToken("revoked-token")).thenReturn(claims);
+        when(claims.getId()).thenReturn("revoked-id");
+        when(tokenRevocationService.isRevoked("revoked-id")).thenReturn(true);
+
+        filter.doFilter(request, response, filterChain);
+
+        verify(filterChain, never()).doFilter(request, response);
+        assertUnauthorizedResult(response);
+    }
+
+    @Test
+    void shouldRejectTokenWhenRevocationCheckFails() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/space/list");
+        request.addHeader("Authorization", "Bearer valid-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        when(jwtUtils.parseToken("valid-token")).thenReturn(claims);
+        when(claims.getId()).thenReturn("token-id");
+        when(tokenRevocationService.isRevoked("token-id"))
+                .thenThrow(new RuntimeException("Redis unavailable"));
+
+        filter.doFilter(request, response, filterChain);
+
+        verify(filterChain, never()).doFilter(request, response);
+        assertUnauthorizedResult(response);
     }
 
     @Test

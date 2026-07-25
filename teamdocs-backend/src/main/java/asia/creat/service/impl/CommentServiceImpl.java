@@ -4,8 +4,10 @@ import asia.creat.anno.OperationLog;
 import asia.creat.anno.OperationTarget;
 import asia.creat.anno.RequireSpaceRole;
 import asia.creat.anno.SpaceId;
+import asia.creat.common.PageResult;
 import asia.creat.common.exception.BusinessException;
 import asia.creat.dto.AddCommentDTO;
+import asia.creat.dto.PageQuery;
 import asia.creat.entity.Comment;
 import asia.creat.entity.Document;
 import asia.creat.entity.SpaceMember;
@@ -16,8 +18,6 @@ import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
 import asia.creat.vo.CommentVO;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 @Service
 public class CommentServiceImpl implements asia.creat.service.CommentService {
@@ -64,9 +64,9 @@ public class CommentServiceImpl implements asia.creat.service.CommentService {
 
     @Override
     @RequireSpaceRole
-    public List<CommentVO> listComments(@SpaceId Long spaceId, Long documentId, LoginUser loginUser) {
+    public PageResult<CommentVO> listComments(@SpaceId Long spaceId, Long documentId, PageQuery pageQuery, LoginUser loginUser) {
         checkDocument(spaceId, documentId);
-        return commentMapper.listByDocumentId(documentId);
+        return PageResult.from(commentMapper.listByDocumentId(pageQuery.toPage(), documentId));
     }
 
     @Override

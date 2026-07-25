@@ -5,8 +5,10 @@ import asia.creat.anno.OperationTarget;
 import asia.creat.anno.RequireSpaceRole;
 import asia.creat.anno.SpaceId;
 import asia.creat.common.BucketType;
+import asia.creat.common.PageResult;
 import asia.creat.common.exception.BusinessException;
 import asia.creat.dto.MoveDocumentDTO;
+import asia.creat.dto.PageQuery;
 import asia.creat.dto.RenameDocumentDTO;
 import asia.creat.entity.Document;
 import asia.creat.entity.Folder;
@@ -25,7 +27,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.YearMonth;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -82,12 +83,14 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @RequireSpaceRole
-    public List<Document> listByFolder(@SpaceId Long spaceId, Long folderId,LoginUser loginUser) {
+    public PageResult<Document> listByFolder(@SpaceId Long spaceId, Long folderId, PageQuery pageQuery, LoginUser loginUser) {
 
         LambdaQueryWrapper<Document> lqw = new LambdaQueryWrapper<>();
         lqw.eq(Document::getSpaceId, spaceId)
-                .eq(Document::getFolderId, folderId);
-        return documentMapper.selectList(lqw);
+                .eq(Document::getFolderId, folderId)
+                .orderByDesc(Document::getUpdatedAt)
+                .orderByDesc(Document::getId);
+        return PageResult.from(documentMapper.selectPage(pageQuery.toPage(), lqw));
     }
 
     @Override
@@ -164,9 +167,9 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @RequireSpaceRole
-    public List<Document> listTrashedDocuments(@SpaceId Long spaceId, LoginUser loginUser) {
+    public PageResult<Document> listTrashedDocuments(@SpaceId Long spaceId, PageQuery pageQuery, LoginUser loginUser) {
 
-        return documentMapper.selectTrashedDocuments(spaceId);
+        return PageResult.from(documentMapper.selectTrashedDocuments(pageQuery.toPage(), spaceId));
 
     }
 
@@ -234,11 +237,14 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @RequireSpaceRole
-    public List<Document> searchDocuments(@SpaceId Long spaceId, String keyword, LoginUser loginUser) {
+    public PageResult<Document> searchDocuments(@SpaceId Long spaceId, String keyword, PageQuery pageQuery, LoginUser loginUser) {
         if(keyword == null || keyword.trim().isEmpty()) {
             throw new BusinessException("搜索关键字不能为空");
         }
-        return documentMapper.searchDocuments(spaceId, keyword.trim());
+        var page = pageQuery.<Document>toPage();
+        // DISTINCT + JOIN 需要用原查询计算准确总数。
+        page.setOptimizeCountSql(false);
+        return PageResult.from(documentMapper.searchDocuments(page, spaceId, keyword.trim()));
     }
 
 

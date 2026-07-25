@@ -2,17 +2,15 @@ package asia.creat.controller;
 
 import asia.creat.common.Result;
 import asia.creat.dto.MoveDocumentDTO;
+import asia.creat.dto.PageQuery;
 import asia.creat.dto.RenameDocumentDTO;
 import asia.creat.dto.RestoreDocumentDTO;
-import asia.creat.entity.Document;
 import asia.creat.security.LoginUser;
 import asia.creat.service.DocumentService;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/spaces/{spaceId}/documents")
@@ -41,8 +39,9 @@ public class DocumentController {
     @GetMapping("")
     public Result listByFolder(@PathVariable Long spaceId,
                                @RequestParam(defaultValue = "0") Long folderId,
+                               @Validated @ModelAttribute PageQuery pageQuery,
                                @AuthenticationPrincipal LoginUser loginUser) {
-        return Result.success(documentService.listByFolder(spaceId, folderId, loginUser));
+        return Result.success(documentService.listByFolder(spaceId, folderId, pageQuery, loginUser));
     }
 
     /*
@@ -96,9 +95,9 @@ public class DocumentController {
      * */
     @GetMapping("trash")
     public Result listTrashedDocuments(@PathVariable Long spaceId,
+                                       @Validated @ModelAttribute PageQuery pageQuery,
                                        @AuthenticationPrincipal LoginUser loginUser) {
-        List<Document> list = documentService.listTrashedDocuments(spaceId, loginUser);
-        return Result.success(list);
+        return Result.success(documentService.listTrashedDocuments(spaceId, pageQuery, loginUser));
     }
 
     /*
@@ -132,9 +131,9 @@ public class DocumentController {
     @GetMapping("/search")
     public Result searchDocuments(@PathVariable Long spaceId,
                                   @RequestParam String keyword,
+                                  @Validated @ModelAttribute PageQuery pageQuery,
                                   @AuthenticationPrincipal LoginUser loginUser) {
-        List<Document> list = documentService.searchDocuments(spaceId, keyword, loginUser);
-        return Result.success(list);
+        return Result.success(documentService.searchDocuments(spaceId, keyword, pageQuery, loginUser));
     }
 }
 /*
