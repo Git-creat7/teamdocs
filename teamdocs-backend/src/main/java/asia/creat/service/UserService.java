@@ -1,9 +1,11 @@
 package asia.creat.service;
 
-import jakarta.validation.constraints.NotBlank;
+import asia.creat.security.LoginUser;
 
 public interface UserService {
-    public void register(String username, String password);
+    void register(String username, String password);
 
-    public String login(String username, String password);
+    String login(String username, String password);
+
+    void changePassword(LoginUser loginUser, String oldPassword, String newPassword);
 }

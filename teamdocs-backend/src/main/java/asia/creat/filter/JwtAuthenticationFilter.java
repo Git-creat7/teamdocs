@@ -83,6 +83,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (userId == null || username == null) {
                 throw new IllegalArgumentException("JWT claims are incomplete");
             }
+            if (tokenRevocationService.isUserSessionInvalid(userId, claims.getIssuedAt())) {
+                throw new BadCredentialsException("JWT has been invalidated");
+            }
 
             // 创建LoginUser对象，用于后续权限判断
             LoginUser loginUser = new LoginUser(userId, username);

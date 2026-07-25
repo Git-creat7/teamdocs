@@ -1,6 +1,7 @@
 package asia.creat.controller;
 
 import asia.creat.common.Result;
+import asia.creat.dto.ChangePasswordDTO;
 import asia.creat.dto.UserLoginDTO;
 import asia.creat.dto.UserRegisterDTO;
 import asia.creat.security.LoginUser;
@@ -25,9 +26,7 @@ public class UserController {
     private final RecentDocumentService recentDocumentService;
     private final TokenRevocationService tokenRevocationService;
 
-    public UserController(UserService userService, RateLimitService rateLimitService,
-                          RecentDocumentService recentDocumentService,
-                          TokenRevocationService tokenRevocationService) {
+    public UserController(UserService userService, RateLimitService rateLimitService, RecentDocumentService recentDocumentService, TokenRevocationService tokenRevocationService) {
         this.userService = userService;
         this.rateLimitService = rateLimitService;
         this.recentDocumentService = recentDocumentService;
@@ -55,14 +54,24 @@ public class UserController {
         return Result.success(loginUser);
     }
 
+    @PutMapping("/password")
+    public Result changePassword(@RequestBody @Validated ChangePasswordDTO dto,
+                                 @AuthenticationPrincipal LoginUser loginUser) {
+        userService.changePassword(loginUser, dto.getOldPassword(), dto.getNewPassword());
+        return Result.success();
+    }
+
     @GetMapping("/recent-documents")
     public Result recent(@AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(recentDocumentService.getRecentDocuments(loginUser.getUserId()));
     }
 
     @PostMapping("/logout")
-    public Result logout(@RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
-        tokenRevocationService.revoke(authorization.substring(7));
+    public Result logout(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ") || authorization.substring(7).isBlank()) {
+            return Result.error("未登录或登录状态已失效");
+        }
+        tokenRevocationService.revoke(authorization.substring(7).trim());
         return Result.success();
     }
 }

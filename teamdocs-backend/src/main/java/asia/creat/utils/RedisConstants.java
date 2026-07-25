@@ -10,6 +10,7 @@ public class RedisConstants {
     public static final String LOGIN_LIMIT_PREFIX = "teamdocs:rate:login:";
     public static final String RECENT_DOCUMENT_PREFIX = "teamdocs:user:recent:";
     public static final String TOKEN_REVOKED_PREFIX = "teamdocs:auth:revoked:";
+    public static final String TOKEN_USER_INVALID_BEFORE_PREFIX = "teamdocs:auth:user-invalid-before:";
 
     //空值设置
     public static final String NULL_VALUE = "NULL";

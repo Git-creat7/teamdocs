@@ -83,6 +83,9 @@ class JwtAuthenticationFilterTest {
         when(tokenRevocationService.isRevoked("token-id")).thenReturn(false);
         when(claims.get("userId", Long.class)).thenReturn(7L);
         when(claims.get("username", String.class)).thenReturn("alice");
+        when(claims.getIssuedAt()).thenReturn(new java.util.Date());
+        when(tokenRevocationService.isUserSessionInvalid(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(false);
 
         filter.doFilter(request, response, filterChain);
 
@@ -91,6 +94,26 @@ class JwtAuthenticationFilterTest {
         LoginUser principal = assertInstanceOf(LoginUser.class, authentication.getPrincipal());
         assertEquals(7L, principal.getUserId());
         assertEquals("alice", principal.getUsername());
+    }
+
+    @Test
+    void shouldRejectTokenWhenUserSessionInvalidated() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/space/list");
+        request.addHeader("Authorization", "Bearer old-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        when(jwtUtils.parseToken("old-token")).thenReturn(claims);
+        when(claims.getId()).thenReturn("token-id");
+        when(tokenRevocationService.isRevoked("token-id")).thenReturn(false);
+        when(claims.get("userId", Long.class)).thenReturn(7L);
+        when(claims.get("username", String.class)).thenReturn("alice");
+        when(claims.getIssuedAt()).thenReturn(new java.util.Date(System.currentTimeMillis() - 60_000L));
+        when(tokenRevocationService.isUserSessionInvalid(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(true);
+
+        filter.doFilter(request, response, filterChain);
+
+        verify(filterChain, never()).doFilter(request, response);
+        assertUnauthorizedResult(response);
     }
 
     @Test

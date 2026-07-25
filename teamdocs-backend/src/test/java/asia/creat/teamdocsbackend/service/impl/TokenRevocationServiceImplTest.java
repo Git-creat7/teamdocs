@@ -17,6 +17,8 @@ import java.time.Duration;
 import java.util.Date;
 
 import static asia.creat.utils.RedisConstants.TOKEN_REVOKED_PREFIX;
+import static asia.creat.utils.RedisConstants.TOKEN_USER_INVALID_BEFORE_PREFIX;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,6 +29,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class TokenRevocationServiceImplTest {
+    private static final long JWT_EXPIRATION_MILLIS = 604_800_000L;
+
     @Mock
     private StringRedisTemplate stringRedisTemplate;
 
@@ -43,7 +47,8 @@ class TokenRevocationServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        tokenRevocationService = new TokenRevocationServiceImpl(stringRedisTemplate, jwtUtils);
+        tokenRevocationService = new TokenRevocationServiceImpl(
+                stringRedisTemplate, jwtUtils, JWT_EXPIRATION_MILLIS);
     }
 
     @Test
@@ -99,5 +104,44 @@ class TokenRevocationServiceImplTest {
 
         assertThrows(BusinessException.class,
                 () -> tokenRevocationService.isRevoked("token-id"));
+    }
+
+    @Test
+    void invalidateAllForUserShouldStoreWatermarkUntilJwtExpiration() {
+        when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        tokenRevocationService.invalidateAllForUser(7L);
+
+        ArgumentCaptor<String> watermarkCaptor = ArgumentCaptor.forClass(String.class);
+        verify(valueOperations).set(
+                eq(TOKEN_USER_INVALID_BEFORE_PREFIX + 7L),
+                watermarkCaptor.capture(),
+                eq(Duration.ofMillis(JWT_EXPIRATION_MILLIS))
+        );
+        long watermark = Long.parseLong(watermarkCaptor.getValue());
+        long now = System.currentTimeMillis();
+        assertTrue(watermark <= now);
+        assertTrue(watermark >= now - 5_000L);
+    }
+
+    @Test
+    void isUserSessionInvalidShouldRejectTokensIssuedBeforeWatermark() {
+        when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
+        long watermark = System.currentTimeMillis();
+        when(valueOperations.get(TOKEN_USER_INVALID_BEFORE_PREFIX + 7L))
+                .thenReturn(String.valueOf(watermark));
+
+        assertTrue(tokenRevocationService.isUserSessionInvalid(
+                7L, new Date(watermark - 1_000L)));
+        assertFalse(tokenRevocationService.isUserSessionInvalid(
+                7L, new Date(watermark + 1_000L)));
+    }
+
+    @Test
+    void isUserSessionInvalidShouldAllowWhenNoWatermark() {
+        when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(TOKEN_USER_INVALID_BEFORE_PREFIX + 7L)).thenReturn(null);
+
+        assertFalse(tokenRevocationService.isUserSessionInvalid(7L, new Date()));
     }
 }
