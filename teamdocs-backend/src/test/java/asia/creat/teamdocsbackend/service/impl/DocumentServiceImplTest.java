@@ -3,6 +3,7 @@ package asia.creat.teamdocsbackend.service.impl;
 import asia.creat.common.BucketType;
 import asia.creat.common.exception.BusinessException;
 import asia.creat.dto.MoveDocumentDTO;
+import asia.creat.dto.PageQuery;
 import asia.creat.entity.Document;
 import asia.creat.entity.Folder;
 import asia.creat.entity.SpaceMember;
@@ -142,6 +143,43 @@ class DocumentServiceImplTest {
     }
 
     @Test
+    void uploadShouldRejectFolderFromAnotherSpace() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "notes.txt",
+                "text/plain",
+                "hello".getBytes(StandardCharsets.UTF_8)
+        );
+        when(folderMapper.selectCount(any())).thenReturn(0L);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.upload(SPACE_ID, 20L, file, LOGIN_USER));
+
+        assertEquals("目标文件夹不存在", ex.getMessage());
+        verify(fileStorageService, never()).upload(any(), any(), any());
+        verify(documentMapper, never()).insert(any(Document.class));
+    }
+
+    @Test
+    void uploadShouldAcceptFolderInCurrentSpace() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "notes.txt",
+                "text/plain",
+                "hello".getBytes(StandardCharsets.UTF_8)
+        );
+        when(folderMapper.selectCount(any())).thenReturn(1L);
+        when(documentMapper.insert(any(Document.class))).thenReturn(1);
+
+        service.upload(SPACE_ID, 20L, file, LOGIN_USER);
+
+        ArgumentCaptor<Document> documentCaptor = ArgumentCaptor.forClass(Document.class);
+        verify(documentMapper).insert(documentCaptor.capture());
+        assertEquals(20L, documentCaptor.getValue().getFolderId());
+        verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), any(String.class));
+    }
+
+    @Test
     void moveShouldRejectFolderFromAnotherSpace() {
         Document document = document(10L, SPACE_ID, USER_ID, 0L);
         Folder targetFolder = new Folder();
@@ -156,6 +194,17 @@ class DocumentServiceImplTest {
                 () -> service.moveDocument(SPACE_ID, 10L, dto, LOGIN_USER));
 
         verify(documentMapper, never()).updateById(any(Document.class));
+    }
+
+    @Test
+    void listByFolderShouldRejectMissingFolder() {
+        when(folderMapper.selectCount(any())).thenReturn(0L);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.listByFolder(SPACE_ID, 20L, new PageQuery(), LOGIN_USER));
+
+        assertEquals("目标文件夹不存在", ex.getMessage());
+        verify(documentMapper, never()).selectPage(any(), any());
     }
 
     @Test

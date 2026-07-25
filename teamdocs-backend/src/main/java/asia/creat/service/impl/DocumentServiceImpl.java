@@ -56,6 +56,7 @@ public class DocumentServiceImpl implements DocumentService {
         if(originalName == null) {
             throw new BusinessException("文件名不能为空");
         }
+        folderId = requireFolderInSpace(spaceId, folderId);
         String ext = originalName.contains(".")
                 ? originalName.substring(originalName.lastIndexOf("."))
                 : "";
@@ -97,6 +98,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @RequireSpaceRole
     public PageResult<Document> listByFolder(@SpaceId Long spaceId, Long folderId, PageQuery pageQuery, LoginUser loginUser) {
+        folderId = requireFolderInSpace(spaceId, folderId);
 
         LambdaQueryWrapper<Document> lqw = new LambdaQueryWrapper<>();
         lqw.eq(Document::getSpaceId, spaceId)
@@ -144,21 +146,15 @@ public class DocumentServiceImpl implements DocumentService {
 
         Document doc = checkDocument(documentId, spaceId);
 
-        if(dto.getTargetFolderId() != null && dto.getTargetFolderId() != 0) {
-            if(folderMapper.selectCount(new LambdaQueryWrapper<Folder>()
-                    .eq(Folder::getId, dto.getTargetFolderId())
-                    .eq(Folder::getSpaceId, spaceId)) == 0) {
-                throw new BusinessException("目标文件夹不存在");
-            }
-        }
+        Long targetFolderId = requireFolderInSpace(spaceId, dto.getTargetFolderId());
 
         SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
-        doc.setFolderId(dto.getTargetFolderId());
+        doc.setFolderId(targetFolderId);
         documentMapper.updateById(doc);
 
-        log.debug("用户 {} 将空间 {} 的文件 {} 移动到文件夹 {}", loginUser.getUserId(), spaceId, doc.getName(), dto.getTargetFolderId());
+        log.debug("用户 {} 将空间 {} 的文件 {} 移动到文件夹 {}", loginUser.getUserId(), spaceId, doc.getName(), targetFolderId);
     }
 
     @Override
@@ -279,6 +275,18 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         return doc;
+    }
+
+    private Long requireFolderInSpace(Long spaceId, Long folderId) {
+        if (folderId == null || folderId == 0) {
+            return 0L;
+        }
+        if (folderMapper.selectCount(new LambdaQueryWrapper<Folder>()
+                .eq(Folder::getId, folderId)
+                .eq(Folder::getSpaceId, spaceId)) == 0) {
+            throw new BusinessException("目标文件夹不存在");
+        }
+        return folderId;
     }
 
 }

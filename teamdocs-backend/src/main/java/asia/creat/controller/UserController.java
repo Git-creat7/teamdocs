@@ -15,6 +15,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 
 import static asia.creat.utils.RedisConstants.*;
@@ -69,6 +70,12 @@ public class UserController {
                                  @AuthenticationPrincipal LoginUser loginUser) {
         userService.changePassword(loginUser, dto.getOldPassword(), dto.getNewPassword());
         return Result.success();
+    }
+
+    @PostMapping("/avatar")
+    public Result updateAvatar(@RequestParam MultipartFile file,
+                               @AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(userService.updateAvatar(loginUser, file));
     }
 
     @GetMapping("/recent-documents")

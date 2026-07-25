@@ -1,10 +1,13 @@
 package asia.creat.teamdocsbackend.service.impl;
 
+import asia.creat.common.BucketType;
 import asia.creat.common.exception.BusinessException;
+import asia.creat.config.MinioProperties;
 import asia.creat.dto.UpdateProfileDTO;
 import asia.creat.entity.User;
 import asia.creat.mapper.UserMapper;
 import asia.creat.security.LoginUser;
+import asia.creat.service.FileStorageService;
 import asia.creat.service.TokenRevocationService;
 import asia.creat.service.impl.UserServiceImpl;
 import asia.creat.utils.JWTUtils;
@@ -20,8 +23,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,6 +36,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -41,6 +48,8 @@ import static org.mockito.Mockito.when;
 class UserServiceImplTest {
     private static final Long USER_ID = 7L;
     private static final LoginUser LOGIN_USER = new LoginUser(USER_ID, "alice");
+    private static final String PUBLIC_ENDPOINT = "http://localhost:9000";
+    private static final String PUBLIC_BUCKET = "teamdocs-public";
 
     @Mock
     private JWTUtils jwtUtils;
@@ -54,6 +63,12 @@ class UserServiceImplTest {
     @Mock
     private TokenRevocationService tokenRevocationService;
 
+    @Mock
+    private FileStorageService fileStorageService;
+
+    @Mock
+    private MinioProperties minioProperties;
+
     private UserServiceImpl userService;
 
     @BeforeAll
@@ -64,7 +79,14 @@ class UserServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        userService = new UserServiceImpl(jwtUtils, userMapper, passwordEncoder, tokenRevocationService);
+        userService = new UserServiceImpl(
+                jwtUtils,
+                userMapper,
+                passwordEncoder,
+                tokenRevocationService,
+                fileStorageService,
+                minioProperties
+        );
     }
 
     @Test
@@ -265,6 +287,76 @@ class UserServiceImplTest {
         assertNull(user.getEmail());
         assertNull(profile.getEmail());
         verify(userMapper, never()).selectCount(any());
+    }
+
+    @Test
+    void updateAvatarShouldUploadToPublicBucketAndDeleteOldObject() {
+        User user = activeUser("encoded-old");
+        user.setAvatar(PUBLIC_ENDPOINT + "/" + PUBLIC_BUCKET + "/avatar/7/old.png");
+        when(userMapper.selectById(USER_ID)).thenReturn(user);
+        when(userMapper.updateById(any(User.class))).thenReturn(1);
+        when(minioProperties.getPublicEndpoint()).thenReturn(PUBLIC_ENDPOINT);
+        when(minioProperties.getBucketPublic()).thenReturn(PUBLIC_BUCKET);
+        when(fileStorageService.getAccessUrl(eq(BucketType.PUBLIC), anyString(), isNull()))
+                .thenAnswer(invocation -> PUBLIC_ENDPOINT + "/" + PUBLIC_BUCKET + "/" + invocation.getArgument(1));
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "avatar.png",
+                "image/png",
+                "img".getBytes(StandardCharsets.UTF_8)
+        );
+
+        UserProfileVO profile = userService.updateAvatar(LOGIN_USER, file);
+
+        ArgumentCaptor<String> objectKeyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(fileStorageService).upload(eq(file), eq(BucketType.PUBLIC), objectKeyCaptor.capture());
+        String newObjectKey = objectKeyCaptor.getValue();
+        assertTrue(newObjectKey.startsWith("avatar/7/"));
+        assertTrue(newObjectKey.endsWith(".png"));
+        assertEquals(PUBLIC_ENDPOINT + "/" + PUBLIC_BUCKET + "/" + newObjectKey, profile.getAvatar());
+        verify(fileStorageService).delete(BucketType.PUBLIC, "avatar/7/old.png");
+    }
+
+    @Test
+    void updateAvatarShouldRejectInvalidContentType() {
+        User user = activeUser("encoded-old");
+        when(userMapper.selectById(USER_ID)).thenReturn(user);
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "avatar.txt",
+                "text/plain",
+                "img".getBytes(StandardCharsets.UTF_8)
+        );
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> userService.updateAvatar(LOGIN_USER, file));
+
+        assertTrue(ex.getMessage().contains("头像仅支持"));
+        verify(fileStorageService, never()).upload(any(), any(), any());
+    }
+
+    @Test
+    void updateAvatarShouldCleanupObjectWhenDatabaseUpdateFails() {
+        User user = activeUser("encoded-old");
+        when(userMapper.selectById(USER_ID)).thenReturn(user);
+        when(userMapper.updateById(any(User.class))).thenReturn(0);
+        when(fileStorageService.getAccessUrl(eq(BucketType.PUBLIC), anyString(), isNull()))
+                .thenAnswer(invocation -> PUBLIC_ENDPOINT + "/" + PUBLIC_BUCKET + "/" + invocation.getArgument(1));
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "avatar.png",
+                "image/png",
+                "img".getBytes(StandardCharsets.UTF_8)
+        );
+
+        assertThrows(BusinessException.class, () -> userService.updateAvatar(LOGIN_USER, file));
+
+        ArgumentCaptor<String> objectKeyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(fileStorageService).upload(eq(file), eq(BucketType.PUBLIC), objectKeyCaptor.capture());
+        verify(fileStorageService).delete(BucketType.PUBLIC, objectKeyCaptor.getValue());
     }
 
     private User activeUser(String encodedPassword) {

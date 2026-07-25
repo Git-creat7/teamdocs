@@ -1,10 +1,13 @@
 package asia.creat.service.impl;
 
+import asia.creat.common.BucketType;
 import asia.creat.common.exception.BusinessException;
+import asia.creat.config.MinioProperties;
 import asia.creat.dto.UpdateProfileDTO;
 import asia.creat.entity.User;
 import asia.creat.mapper.UserMapper;
 import asia.creat.security.LoginUser;
+import asia.creat.service.FileStorageService;
 import asia.creat.service.TokenRevocationService;
 import asia.creat.service.UserService;
 import asia.creat.utils.JWTUtils;
@@ -13,26 +16,46 @@ import asia.creat.vo.UserProfileVO;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 
+@Slf4j
 @Service
 public class UserServiceImpl implements UserService {
+    private static final long MAX_AVATAR_SIZE = 2 * 1024 * 1024;
+    private static final Set<String> ALLOWED_AVATAR_TYPES = Set.of(
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp"
+    );
+
     private final JWTUtils jwtUtils;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final TokenRevocationService tokenRevocationService;
+    private final FileStorageService fileStorageService;
+    private final MinioProperties minioProperties;
 
     public UserServiceImpl(JWTUtils jwtUtils, UserMapper userMapper, PasswordEncoder passwordEncoder,
-                           TokenRevocationService tokenRevocationService) {
+                           TokenRevocationService tokenRevocationService,
+                           FileStorageService fileStorageService,
+                           MinioProperties minioProperties) {
         this.jwtUtils = jwtUtils;
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
         this.tokenRevocationService = tokenRevocationService;
+        this.fileStorageService = fileStorageService;
+        this.minioProperties = minioProperties;
     }
 
     @Override
@@ -160,6 +183,99 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException("更新资料失败");
         }
         return toProfileVO(user);
+    }
+
+    @Override
+    public UserProfileVO updateAvatar(LoginUser loginUser, MultipartFile file) {
+        User user = requireActiveUser(loginUser.getUserId());
+        validateAvatarFile(file);
+
+        String originalName = file.getOriginalFilename();
+        String ext = "";
+        if (StrUtil.isNotBlank(originalName) && originalName.contains(".")) {
+            ext = originalName.substring(originalName.lastIndexOf('.')).toLowerCase(Locale.ROOT);
+        } else {
+            ext = extensionFromContentType(file.getContentType());
+        }
+
+        String objectKey = String.format("avatar/%d/%s%s", user.getId(), UUID.randomUUID(), ext);
+        fileStorageService.upload(file, BucketType.PUBLIC, objectKey);
+
+        String avatarUrl = fileStorageService.getAccessUrl(BucketType.PUBLIC, objectKey, null);
+        String oldAvatar = user.getAvatar();
+        user.setAvatar(avatarUrl);
+        try {
+            int updated = userMapper.updateById(user);
+            if (updated != 1) {
+                throw new BusinessException("更新头像失败");
+            }
+        } catch (RuntimeException e) {
+            try {
+                fileStorageService.delete(BucketType.PUBLIC, objectKey);
+            } catch (RuntimeException cleanupException) {
+                log.error("头像信息保存失败，清理 MinIO 对象失败: objectKey={}", objectKey, cleanupException);
+                e.addSuppressed(cleanupException);
+            }
+            throw e;
+        }
+
+        deleteOldAvatarIfPresent(oldAvatar, objectKey);
+        return toProfileVO(user);
+    }
+
+    private void validateAvatarFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("头像文件不能为空");
+        }
+        if (file.getSize() > MAX_AVATAR_SIZE) {
+            throw new BusinessException("头像大小不能超过 2MB");
+        }
+        String contentType = StrUtil.nullToEmpty(file.getContentType()).toLowerCase(Locale.ROOT);
+        if (!ALLOWED_AVATAR_TYPES.contains(contentType)) {
+            throw new BusinessException("头像仅支持 JPG、PNG、GIF、WEBP");
+        }
+    }
+
+    private String extensionFromContentType(String contentType) {
+        if (contentType == null) {
+            return "";
+        }
+        return switch (contentType.toLowerCase(Locale.ROOT)) {
+            case "image/jpeg" -> ".jpg";
+            case "image/png" -> ".png";
+            case "image/gif" -> ".gif";
+            case "image/webp" -> ".webp";
+            default -> "";
+        };
+    }
+
+    private void deleteOldAvatarIfPresent(String oldAvatar, String newObjectKey) {
+        String oldObjectKey = extractPublicObjectKey(oldAvatar);
+        if (StrUtil.isBlank(oldObjectKey) || oldObjectKey.equals(newObjectKey)) {
+            return;
+        }
+        try {
+            fileStorageService.delete(BucketType.PUBLIC, oldObjectKey);
+        } catch (RuntimeException e) {
+            log.warn("删除旧头像失败: objectKey={}, error={}", oldObjectKey, e.getMessage());
+        }
+    }
+
+    private String extractPublicObjectKey(String avatarUrl) {
+        if (StrUtil.isBlank(avatarUrl)) {
+            return null;
+        }
+        String publicEndpoint = StrUtil.removeSuffix(StrUtil.nullToEmpty(minioProperties.getPublicEndpoint()), "/");
+        String bucket = minioProperties.getBucketPublic();
+        if (StrUtil.isBlank(publicEndpoint) || StrUtil.isBlank(bucket)) {
+            return null;
+        }
+        String prefix = publicEndpoint + "/" + bucket + "/";
+        if (!avatarUrl.startsWith(prefix)) {
+            return null;
+        }
+        String objectKey = avatarUrl.substring(prefix.length());
+        return StrUtil.isBlank(objectKey) ? null : objectKey;
     }
 
     private User requireActiveUser(Long userId) {
