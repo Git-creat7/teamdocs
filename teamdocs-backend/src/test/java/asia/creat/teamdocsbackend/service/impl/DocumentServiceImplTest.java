@@ -28,9 +28,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -86,6 +89,7 @@ class DocumentServiceImplTest {
                 "text/plain",
                 "hello".getBytes(StandardCharsets.UTF_8)
         );
+        when(documentMapper.insert(any(Document.class))).thenReturn(1);
 
         service.upload(SPACE_ID, 0L, file, LOGIN_USER);
 
@@ -97,6 +101,44 @@ class DocumentServiceImplTest {
         assertEquals(0L, saved.getFolderId());
         assertEquals("notes.txt", saved.getName());
         assertEquals(USER_ID, saved.getUploadBy());
+    }
+
+    @Test
+    void uploadShouldDeleteObjectWhenMetadataInsertFails() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "notes.txt",
+                "text/plain",
+                "hello".getBytes(StandardCharsets.UTF_8)
+        );
+        RuntimeException databaseFailure = new RuntimeException("database unavailable");
+        when(documentMapper.insert(any(Document.class))).thenThrow(databaseFailure);
+
+        RuntimeException thrown = assertThrows(RuntimeException.class,
+                () -> service.upload(SPACE_ID, 0L, file, LOGIN_USER));
+
+        ArgumentCaptor<String> objectKeyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), objectKeyCaptor.capture());
+        verify(fileStorageService).delete(BucketType.PRIVATE, objectKeyCaptor.getValue());
+        assertSame(databaseFailure, thrown);
+    }
+
+    @Test
+    void uploadShouldTreatZeroInsertedRowsAsFailure() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "notes.txt",
+                "text/plain",
+                "hello".getBytes(StandardCharsets.UTF_8)
+        );
+        when(documentMapper.insert(any(Document.class))).thenReturn(0);
+
+        assertThrows(BusinessException.class,
+                () -> service.upload(SPACE_ID, 0L, file, LOGIN_USER));
+
+        ArgumentCaptor<String> objectKeyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), objectKeyCaptor.capture());
+        verify(fileStorageService).delete(BucketType.PRIVATE, objectKeyCaptor.getValue());
     }
 
     @Test
@@ -157,6 +199,35 @@ class DocumentServiceImplTest {
                 () -> service.downloadDocument(SPACE_ID, 10L, LOGIN_USER));
 
         verify(recentDocumentService, never()).recordRecentDocument(any(), any());
+    }
+
+    @Test
+    void purgeShouldDeleteObjectBeforeMetadata() {
+        Document document = document(10L, SPACE_ID, USER_ID, 0L);
+        document.setFilePath("space/1/notes.txt");
+        when(documentMapper.selectDeletedDocument(10L)).thenReturn(document);
+        when(documentMapper.purgeDeleteById(10L)).thenReturn(true);
+
+        service.purgeDocument(SPACE_ID, 10L, LOGIN_USER);
+
+        var inOrder = inOrder(fileStorageService, documentMapper);
+        inOrder.verify(fileStorageService).delete(BucketType.PRIVATE, "space/1/notes.txt");
+        inOrder.verify(documentMapper).purgeDeleteById(10L);
+    }
+
+    @Test
+    void purgeShouldKeepMetadataWhenObjectDeletionFails() {
+        Document document = document(10L, SPACE_ID, USER_ID, 0L);
+        document.setFilePath("space/1/notes.txt");
+        when(documentMapper.selectDeletedDocument(10L)).thenReturn(document);
+        doThrow(new BusinessException("文件删除失败"))
+                .when(fileStorageService)
+                .delete(BucketType.PRIVATE, "space/1/notes.txt");
+
+        assertThrows(BusinessException.class,
+                () -> service.purgeDocument(SPACE_ID, 10L, LOGIN_USER));
+
+        verify(documentMapper, never()).purgeDeleteById(any());
     }
 
     private Document document(Long id, Long spaceId, Long uploadBy, Long folderId) {

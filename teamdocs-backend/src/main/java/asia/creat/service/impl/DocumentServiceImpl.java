@@ -71,12 +71,25 @@ public class DocumentServiceImpl implements DocumentService {
         Document doc = new Document();
         doc.setSpaceId(spaceId);
         doc.setFolderId(folderId);
-        doc.setName(file.getOriginalFilename());
+        doc.setName(originalName);
         doc.setFilePath(objectKey);
         doc.setFileSize(file.getSize());
         doc.setFileType(file.getContentType());
         doc.setUploadBy(loginUser.getUserId());
-        documentMapper.insert(doc);
+        try {
+            int inserted = documentMapper.insert(doc);
+            if (inserted != 1) {
+                throw new BusinessException("文件信息保存失败");
+            }
+        } catch (RuntimeException e) {
+            try {
+                fileStorageService.delete(BucketType.PRIVATE, objectKey);
+            } catch (RuntimeException cleanupException) {
+                log.error("文件信息保存失败，清理 MinIO 对象失败: objectKey={}", objectKey, cleanupException);
+                e.addSuppressed(cleanupException);
+            }
+            throw e;
+        }
 
         log.debug("用户 {} 上传了文件 {} 到空间 {} 的文件夹 {}",loginUser.getUserId(), originalName, spaceId, folderId);
     }
@@ -227,6 +240,7 @@ public class DocumentServiceImpl implements DocumentService {
         SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
+        fileStorageService.delete(BucketType.PRIVATE, doc.getFilePath());
         boolean flag = documentMapper.purgeDeleteById(documentId);
 
         if (!flag) {
