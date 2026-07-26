@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import { asList } from '@/utils/normalize'
 
 /**
  * 用户登录
@@ -49,6 +50,14 @@ export function updateAvatarApi(file) {
   const formData = new FormData()
   formData.append('file', file)
   return request.post('/user/avatar', formData)
+}
+
+/**
+ * 获取最近浏览的文档列表 (基于 Redis ZSet，最多 20 条)
+ * @returns {Promise<Array>} RecentDocumentVO[] - { documentId, spaceId, spaceName, name, fileType, fileSize, updatedAt, lastViewedAt }
+ */
+export function getRecentDocumentsApi() {
+  return request.get('/user/recent-documents').then(asList)
 }
 
 /**

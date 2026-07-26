@@ -1,12 +1,20 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import LandingView from '@/views/LandingView.vue'
 import LoginView from '@/views/LoginView.vue'
-import SpaceListView from '@/views/SpaceListView.vue'
-import SpaceDetailView from '@/views/SpaceDetailView.vue'
+import AppShell from '@/layouts/AppShell.vue'
+import HomeView from '@/views/HomeView.vue'
+import RecentView from '@/views/RecentView.vue'
+import TrashView from '@/views/TrashView.vue'
+import SpaceWorkbenchView from '@/views/SpaceWorkbenchView.vue'
 
 const routes = [
+  // 官网落地页：登录墙外的产品门面，与下方 AppShell 同挂 '/'，
+  // 同路径先注册者优先，精确访问 '/' 命中这里
   {
     path: '/',
-    redirect: '/spaces'
+    name: 'Landing',
+    component: LandingView,
+    meta: { requiresAuth: false }
   },
   {
     path: '/login',
@@ -15,17 +23,19 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
-    path: '/spaces',
-    name: 'SpaceList',
-    component: SpaceListView,
-    meta: { requiresAuth: true }
+    path: '/',
+    component: AppShell,
+    meta: { requiresAuth: true },
+    children: [
+      { path: 'home', name: 'Home', component: HomeView },
+      { path: 'recent', name: 'Recent', component: RecentView },
+      { path: 'trash', name: 'Trash', component: TrashView },
+      // 兼容旧路径
+      { path: 'spaces', redirect: '/home' },
+      { path: 'spaces/:spaceId', name: 'SpaceWorkbench', component: SpaceWorkbenchView }
+    ]
   },
-  {
-    path: '/spaces/:spaceId',
-    name: 'SpaceDetail',
-    component: SpaceDetailView,
-    meta: { requiresAuth: true }
-  }
+  { path: '/:pathMatch(.*)*', redirect: '/home' }
 ]
 
 const router = createRouter({
@@ -33,14 +43,15 @@ const router = createRouter({
   routes
 })
 
-// 全局路由前置守卫
+// 全局路由前置守卫 (落地页 '/' 对已登录用户也开放，方便随时回门面看)
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('teamdocs_token')
+  const requiresAuth = to.matched.some((r) => r.meta.requiresAuth)
 
-  if (to.meta.requiresAuth && !token) {
+  if (requiresAuth && !token) {
     next('/login')
   } else if (to.path === '/login' && token) {
-    next('/spaces')
+    next('/home')
   } else {
     next()
   }

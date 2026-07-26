@@ -1,0 +1,116 @@
+/**
+ * 通用格式化工具 (新组件共用；旧视图内的同名函数保持原样不动)
+ */
+
+export function formatBytes(bytes) {
+  if (bytes === 0 || !bytes) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
+/**
+ * 相对时间：刚刚 / N分钟前 / N小时前 / 昨天 HH:mm / YYYY-MM-DD
+ */
+export function formatRelativeTime(dateStr) {
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return '-'
+  const now = new Date()
+  const diff = now - d
+  if (diff < 60 * 1000) return '刚刚'
+  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / 60000)}分钟前`
+
+  const pad = (n) => String(n).padStart(2, '0')
+  const sameDay = d.toDateString() === now.toDateString()
+  if (sameDay) return `${Math.floor(diff / 3600000)}小时前`
+
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  if (d.toDateString() === yesterday.toDateString()) {
+    return `昨天 ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+export function formatDateTime(dateStr) {
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return '-'
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const hours = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  return `${year}/${month}/${day} ${hours}:${minutes}`
+}
+
+export function getFileExt(filename, fileType) {
+  if (filename && filename.includes('.')) {
+    return filename.split('.').pop().toUpperCase()
+  }
+  if (fileType) {
+    return fileType.toUpperCase()
+  }
+  return 'FILE'
+}
+
+/**
+ * 长文件名中间省略：保住开头和结尾 (含扩展名)
+ */
+export function middleEllipsis(name, max = 40) {
+  const s = String(name || '')
+  if (s.length <= max) return s
+  const tail = s.slice(-12)
+  const head = s.slice(0, Math.max(1, max - 13))
+  return `${head}…${tail}`
+}
+
+/**
+ * 把文件名转成安全的搜索关键词：
+ * 去掉 BOOLEAN MODE 操作符 (+ - * " 等)，按 CJK/字母数字切词后空格连接
+ */
+export function toSearchKeyword(name) {
+  if (!name) return ''
+  const tokens = String(name).match(/[一-龥]+|[a-zA-Z0-9]+/g)
+  return tokens ? tokens.join(' ') : ''
+}
+
+/**
+ * 最近文档的统一跳转：进所在空间并用文件名定位 (搜索态 + 高亮)。
+ * 纯符号文件名无法转搜索词时降级进空间根目录并 toast 提示。
+ * 三处入口 (首页/最近浏览页/侧栏) 共用，行为保持一致。
+ */
+export function buildRecentDocRoute(doc, notify) {
+  const keyword = toSearchKeyword(doc.name)
+  if (!keyword) {
+    if (notify) notify('该文件名无法定位，已进入所在空间')
+    return { path: `/spaces/${doc.spaceId}` }
+  }
+  return {
+    path: `/spaces/${doc.spaceId}`,
+    query: { search: keyword, highlight: doc.documentId, t: Date.now() }
+  }
+}
+
+export function getFileTypeColor(ext) {
+  const map = {
+    PDF: '#ef4444',
+    DOCX: '#2563eb',
+    DOC: '#2563eb',
+    XLSX: '#16a34a',
+    XLS: '#16a34a',
+    MD: '#0f172a',
+    TXT: '#64748b',
+    PNG: '#d97706',
+    JPG: '#d97706',
+    JPEG: '#d97706',
+    GIF: '#d97706',
+    WEBP: '#d97706',
+    ZIP: '#8b5cf6',
+    RAR: '#8b5cf6',
+    MP4: '#ec4899'
+  }
+  return map[ext] || '#64748b'
+}
