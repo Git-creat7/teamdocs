@@ -6,6 +6,7 @@ services:
     image: mysql:8.0
     command:
       - --ngram-token-size=2
+      - --innodb-ft-enable-stopword=OFF
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_0900_ai_ci
     environment:

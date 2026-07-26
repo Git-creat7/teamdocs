@@ -7,8 +7,8 @@
 ## 当前位置
 
 **周次**：项目收尾
-**模块**：认证加固 + 核心列表分页 + 业务测试
-**状态**：Spring Security 已接管认证边界，JWT 支持 Redis 撤销，核心大列表已实现数据库分页
+**模块**：官网落地页 + 批量接口 + 前端性能九项修复
+**状态**：`/` 挂登录墙外落地页 (黑白极简风、滚动揭示、demo 账号一键体验)；后端批量标签接口 + /space/list 聚合 VO；68 测试全绿
 
 ---
 
@@ -44,6 +44,8 @@
 - [x] 增加 `jti`、`iat` 和 Redis Token 撤销名单，支持注销当前 Token
 - [x] 为高数据量列表增加 `current/size` 分页、稳定排序和联合索引
 - [ ] 全量 API 回归并整理最终简历项目描述
+- [x] 标签批量接口：`GET /spaces/{id}/documents/tags?documentIds=...`，前端 `loadTagsForDocs` 从 N 个请求收成 1 个批量请求
+- [x] `/space/list` 聚合 VO：一次 JOIN 带出 myRole/memberCount/docCount，消掉首页每空间 2 请求的 N+1
 
 ---
 
@@ -230,6 +232,14 @@
    - 错误：给文档添加标签、重命名标签时只按 `tagId` 查询，没有比较 `tag.spaceId` 与当前空间
    - 正确：抽出 `checkTag(spaceId, tagId)`，在删除、重命名、添加、移除和按标签查询中复用
    - 记忆点：**读接口修过的越权问题，写接口也要系统性排查**。不能只修一个入口，所有接收同类资源 ID 的方法都要统一校验
+
+### 前端联调期 (后端侧发现)
+
+1. ⭐ **ngram 全文索引搜不到 "zip"——InnoDB 默认停用词的连带杀伤**
+   - 现象：文档名含 `zip` 却搜不到；`md`、`txt`、中文都正常
+   - 原因：ngram 把 "zip" 切成 "zi"/"ip"，而 InnoDB 默认停用词表含单词 "i"，**ngram 的规则是 token 里"包含"停用词即整体丢弃**，所以带 i 的英文 bigram 全军覆没 (zi、ip、in、is…)
+   - 修复：`SET PERSIST innodb_ft_enable_stopword = OFF` 后重建两个 FULLTEXT 索引；`docker-compose.dev.yml` 的 mysql command 加 `--innodb-ft-enable-stopword=OFF`；`sql/fulltext_index.sql` 已同步
+   - 记忆点：**ngram + 默认停用词 = 部分英文短词永远进不了索引**。建 ngram 索引前先关停用词，已建过的必须重建才回填
 
 ### W5
 

@@ -66,3 +66,4 @@ CLAUDE.md
 .claude/
 /.env
 /.env.docker
+.gstack/
