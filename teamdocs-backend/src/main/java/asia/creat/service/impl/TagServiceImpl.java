@@ -41,7 +41,7 @@ public class TagServiceImpl implements TagService {
     }
 
     @Override
-    @OperationLog(value = "创建标签", resourceType = "TAG")
+    @OperationLog(value = "创建标签", resourceType = "TAG", resourceName = "#dto.name")
     @RequireSpaceRole({SpaceRole.OWNER, SpaceRole.ADMIN})
     public void createTag(@SpaceId Long spaceId, CreateTagDTO dto, LoginUser loginUser) {
 

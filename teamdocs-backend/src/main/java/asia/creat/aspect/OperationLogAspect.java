@@ -12,7 +12,12 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.core.DefaultParameterNameDiscoverer;
+import org.springframework.core.ParameterNameDiscoverer;
 import org.springframework.core.annotation.Order;
+import org.springframework.expression.ExpressionParser;
+import org.springframework.expression.spel.standard.SpelExpressionParser;
+import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -34,8 +39,34 @@ public class OperationLogAspect {
 
     private final OperationLogService operationLogService;
 
+    private final ExpressionParser spelParser = new SpelExpressionParser();
+    private final ParameterNameDiscoverer parameterNameDiscoverer = new DefaultParameterNameDiscoverer();
+
     public OperationLogAspect(OperationLogService operationLogService) {
         this.operationLogService = operationLogService;
+    }
+
+    private String evalResourceName(String expression, Method method, Object[] args) {
+        if (expression == null || expression.isBlank()) {
+            return null;
+        }
+        try {
+            StandardEvaluationContext context = new StandardEvaluationContext();
+            String[] paramNames = parameterNameDiscoverer.getParameterNames(method);
+            for (int i = 0; i < args.length; i++) {
+                String name = (paramNames != null && i < paramNames.length) ? paramNames[i] : "p" + i;
+                context.setVariable(name, args[i]);
+            }
+            Object value = spelParser.parseExpression(expression).getValue(context);
+            if (value == null) {
+                return null;
+            }
+            String text = value.toString();
+            return text.length() > 255 ? text.substring(0, 255) : text;
+        } catch (Exception e) {
+            log.warn("操作日志: resourceName 表达式求值失败: {}", expression, e);
+            return null;
+        }
     }
 
     //环绕通知，拦截所有使用了@OperationLog注解的方法
@@ -49,6 +80,7 @@ public class OperationLogAspect {
         //获取操作名称和资源类型
         String operationName = operationLog.value();
         String resourceType = operationLog.resourceType();
+        String resourceName = evalResourceName(operationLog.resourceName(), method, pjp.getArgs());
 
 
         //遍历参数
@@ -123,6 +155,7 @@ public class OperationLogAspect {
                 operationLogRecord.setUserId(userId);
                 operationLogRecord.setSpaceId(spaceId);
                 operationLogRecord.setResourceId(resourceId);
+                operationLogRecord.setResourceName(resourceName);
                 operationLogRecord.setMethodName(methodName);
                 operationLogRecord.setRequestMethod(requestMethod);
                 operationLogRecord.setRequestUri(requestUri);

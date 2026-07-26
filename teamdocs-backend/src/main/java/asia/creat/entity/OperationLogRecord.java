@@ -21,6 +21,7 @@ public class OperationLogRecord {
     private String operationName;
     private String resourceType;
     private Long resourceId;
+    private String resourceName;
     private String methodName;
     private String requestMethod;
     private String requestUri;

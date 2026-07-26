@@ -2,9 +2,12 @@ package asia.creat.service.impl;
 
 import asia.creat.entity.OperationLogRecord;
 import asia.creat.mapper.OperationLogMapper;
+import asia.creat.vo.ActivityVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Service
 public class OperationLogServiceImpl implements asia.creat.service.OperationLogService {
@@ -27,5 +30,11 @@ public class OperationLogServiceImpl implements asia.creat.service.OperationLogS
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void saveLog(OperationLogRecord log){
         operationLogMapper.insert(log);
+    }
+
+    @Override
+    public List<ActivityVO> listRecentActivities(Long userId, Long spaceId, Integer limit) {
+        int capped = (limit == null || limit < 1) ? 20 : Math.min(limit, 50);
+        return operationLogMapper.selectRecentActivities(userId, spaceId, capped);
     }
 }

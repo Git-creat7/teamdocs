@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="asia.creat.mapper.OperationLogMapper">
+
+    <select id="selectRecentActivities" resultType="asia.creat.vo.ActivityVO">
+        SELECT
+            ol.id,
+            ol.user_id,
+            u.username,
+            u.avatar,
+            ol.operation_name,
+            ol.resource_type,
+            ol.space_id,
+            s.name AS space_name,
+            d.name AS document_name,
+            ol.resource_name,
+            ol.created_at
+        FROM operation_log ol
+        JOIN user u ON ol.user_id = u.id
+        JOIN space s ON ol.space_id = s.id AND s.deleted = 0
+        LEFT JOIN document d ON ol.resource_type = 'DOCUMENT' AND ol.resource_id = d.id
+        WHERE ol.success = 1
+          AND ol.space_id IN (
+              SELECT sm.space_id FROM space_member sm WHERE sm.user_id = #{userId}
+          )
+        <if test="spaceId != null">
+          AND ol.space_id = #{spaceId}
+        </if>
+        ORDER BY ol.id DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

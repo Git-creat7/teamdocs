@@ -33,7 +33,7 @@ public class CommentServiceImpl implements asia.creat.service.CommentService {
 
 
     @Override
-    @OperationLog(value = "添加评论", resourceType = "COMMENT")
+    @OperationLog(value = "添加评论", resourceType = "COMMENT", resourceName = "#dto.content")
     @RequireSpaceRole
     public void addComment(@SpaceId Long spaceId, Long documentId, AddCommentDTO dto, LoginUser loginUser) {
         checkDocument(spaceId, documentId);

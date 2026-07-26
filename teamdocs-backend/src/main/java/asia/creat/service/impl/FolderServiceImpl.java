@@ -36,7 +36,7 @@ public class FolderServiceImpl implements FolderService {
     }
 
     @Override
-    @OperationLog(value = "创建文件夹", resourceType = "FOLDER")
+    @OperationLog(value = "创建文件夹", resourceType = "FOLDER", resourceName = "#dto.name")
     @RequireSpaceRole
     public void createFolder(@SpaceId Long spaceId, CreateFolderDTO dto, LoginUser loginUser) {
 
@@ -66,7 +66,7 @@ public class FolderServiceImpl implements FolderService {
     }
 
     @Override
-    @OperationLog(value = "重命名文件夹", resourceType = "FOLDER")
+    @OperationLog(value = "重命名文件夹", resourceType = "FOLDER", resourceName = "#dto.newName")
     @RequireSpaceRole
     public void renameFolder(@SpaceId Long spaceId, @OperationTarget Long folderId, RenameFolderDTO dto, LoginUser loginUser) {
 

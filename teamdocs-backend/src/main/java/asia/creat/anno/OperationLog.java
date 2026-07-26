@@ -20,5 +20,5 @@ public @interface OperationLog {
     * */
     String value();
     String resourceType() default "";
-
+    String resourceName() default "";
 }

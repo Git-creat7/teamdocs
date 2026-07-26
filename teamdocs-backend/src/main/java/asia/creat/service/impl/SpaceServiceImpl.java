@@ -54,7 +54,7 @@ public class SpaceServiceImpl implements SpaceService {
 
     @Override
     @Transactional
-    @OperationLog(value = "创建空间", resourceType = "SPACE")
+    @OperationLog(value = "创建空间", resourceType = "SPACE", resourceName = "#dto.name")
     public void createSpace(CreateSpaceDTO dto, LoginUser loginUser) {
         Space space = new Space();
         space.setName(dto.getName());
@@ -121,7 +121,7 @@ public class SpaceServiceImpl implements SpaceService {
 
     @Override
     @RequireSpaceRole({OWNER,ADMIN})
-    @OperationLog(value = "更新空间", resourceType = "SPACE")
+    @OperationLog(value = "更新空间", resourceType = "SPACE", resourceName = "#dto.name")
     public void updateSpace(@SpaceId @OperationTarget Long spaceId, UpdateSpaceDTO dto, LoginUser loginUser) {
         String key = CACHE_SPACE_PREFIX + spaceId;
 
@@ -137,7 +137,7 @@ public class SpaceServiceImpl implements SpaceService {
 
     @Override
     @RequireSpaceRole({OWNER, ADMIN})
-    @OperationLog(value = "添加空间成员", resourceType = "SPACE")
+    @OperationLog(value = "添加空间成员", resourceType = "SPACE", resourceName = "#dto.username")
     public void addMember(@SpaceId @OperationTarget Long spaceId, AddMemberDTO dto, LoginUser loginUser) {
         if (dto.getRole() == OWNER) {
             throw new BusinessException("不能直接添加 OWNER");

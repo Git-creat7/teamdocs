@@ -7,6 +7,7 @@ CREATE TABLE operation_log(
     operation_name VARCHAR(64) NOT NULL COMMENT '操作名称',
     resource_type VARCHAR(32) COMMENT '资源类型',
     resource_id BIGINT COMMENT '资源ID',
+    resource_name VARCHAR(255) COMMENT '资源名称快照 (入参 SpEL 提取)',
     method_name VARCHAR(255) NOT NULL COMMENT '方法名称',
     request_method VARCHAR(10) COMMENT '请求方法，如GET、POST、PUT、DELETE',
     request_uri VARCHAR(512) COMMENT '请求URI',

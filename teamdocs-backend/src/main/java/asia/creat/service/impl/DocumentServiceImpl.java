@@ -59,7 +59,7 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
-    @OperationLog(value = "上传文档", resourceType = "DOCUMENT")
+    @OperationLog(value = "上传文档", resourceType = "DOCUMENT", resourceName = "#file.originalFilename")
     @RequireSpaceRole
     public void upload(@SpaceId Long spaceId, Long folderId, MultipartFile file, LoginUser loginUser) {
 
@@ -120,7 +120,7 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
-    @OperationLog(value = "重命名文档", resourceType = "DOCUMENT")
+    @OperationLog(value = "重命名文档", resourceType = "DOCUMENT", resourceName = "#dto.newName")
     @RequireSpaceRole
     public void renameDocument(@SpaceId Long spaceId, @OperationTarget Long documentId, RenameDocumentDTO dto, LoginUser loginUser) {
 
