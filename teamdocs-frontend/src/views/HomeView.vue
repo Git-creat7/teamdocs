@@ -7,7 +7,7 @@
           <h1 class="greeting-title">{{ greeting }}，{{ displayName }}</h1>
           <p class="greeting-sub">{{ todayText }}</p>
         </div>
-        <div class="greeting-actions">
+        <div v-if="!isEmpty" class="greeting-actions">
           <el-button type="primary" class="greet-btn" @click="editVisible = true; editingSpace = null; resetForm()">
             <el-icon><Plus /></el-icon>
             新建空间
@@ -18,8 +18,60 @@
         </div>
       </div>
 
+      <!-- 空态：三步引导 -->
+      <div v-if="isEmpty" class="onboard-card anim-item" style="--delay: 1">
+        <h2 class="onboard-title">三步开始团队协作</h2>
+        <p class="onboard-sub">创建您的第一个空间，将文档集中管理，与团队成员无缝协作。</p>
+
+        <div class="onboard-steps">
+          <div class="onboard-step is-active">
+            <div class="step-dot">1</div>
+            <div class="step-name">创建空间</div>
+            <div class="step-desc">建立独立的团队或项目工作区</div>
+          </div>
+          <div class="step-line"></div>
+          <div class="onboard-step">
+            <div class="step-dot">2</div>
+            <div class="step-name">上传文档</div>
+            <div class="step-desc">上传 PDF, Markdown 或其他格式文件</div>
+          </div>
+          <div class="step-line"></div>
+          <div class="onboard-step">
+            <div class="step-dot">3</div>
+            <div class="step-name">邀请成员</div>
+            <div class="step-desc">邀请成员加入空间共同编辑</div>
+          </div>
+        </div>
+
+        <el-button
+          type="primary"
+          size="large"
+          class="onboard-cta"
+          @click="editVisible = true; editingSpace = null; resetForm()"
+        >
+          创建第一个空间
+        </el-button>
+      </div>
+
+      <!-- 继续阅读：最近一次看的文档 -->
+      <div
+        v-if="!isEmpty && resumeDoc"
+        class="resume-card anim-item"
+        style="--delay: 1"
+        @click="openRecentDoc(resumeDoc)"
+      >
+        <FileIcon :ext="getFileExt(resumeDoc.name, resumeDoc.fileType)" :size="30" />
+        <div class="resume-body">
+          <span class="resume-name">{{ resumeDoc.name }}</span>
+          <span class="resume-meta">上次看到 {{ formatDateTime(resumeDoc.lastViewedAt) }} · {{ resumeDoc.spaceName }}</span>
+        </div>
+        <el-button type="primary" class="resume-btn" @click.stop="openRecentDoc(resumeDoc)">
+          继续阅读
+        </el-button>
+      </div>
+
       <!-- 快捷动作入口：Notion 式粉彩底卡片 -->
-      <div class="stats-row anim-item" style="--delay: 1">
+      <div v-if="!isEmpty" class="stats-row anim-item" style="--delay: 2">
         <div class="stat-card is-clickable tint-sky" @click="goSpacePanel('members')">
           <div class="stat-icon-box">
             <el-icon :size="22"><User /></el-icon>
@@ -65,55 +117,122 @@
         </div>
       </div>
 
-      <!-- 最近浏览 -->
-      <section class="home-section anim-item" style="--delay: 2">
-        <div class="section-head">
-          <h2 class="section-title">最近浏览</h2>
-          <el-button
-            v-if="recentDocs.length > 0"
-            link
-            type="primary"
-            size="small"
-            @click="router.push('/recent')"
-          >
-            查看全部
-          </el-button>
-        </div>
-
-        <div v-if="loadingRecent" class="recent-grid">
-          <div v-for="i in 4" :key="i" class="recent-card is-skeleton">
-            <el-skeleton :rows="2" animated />
+      <!-- 最近浏览 + 团队动态 双栏 -->
+      <div v-if="!isEmpty" class="home-columns anim-item" style="--delay: 3">
+        <section class="home-section col-main">
+          <div class="section-head">
+            <h2 class="section-title">最近浏览</h2>
+            <el-button
+              v-if="recentDocs.length > 0"
+              link
+              type="primary"
+              size="small"
+              @click="router.push('/recent')"
+            >
+              查看全部
+            </el-button>
           </div>
-        </div>
 
-        <EmptyState
-          v-else-if="recentDocs.length === 0"
-          :icon="History"
-          title="最近还没有浏览过文档"
-          description="打开任意文档后，会在这里留下入口"
-        />
+          <div v-if="loadingRecent" class="recent-grid">
+            <div v-for="i in 4" :key="i" class="recent-card is-skeleton">
+              <el-skeleton :rows="2" animated />
+            </div>
+          </div>
 
-        <div v-else class="recent-grid">
-          <div
-            v-for="doc in recentDocs.slice(0, 8)"
-            :key="doc.documentId"
-            class="recent-card"
-            @click="openRecentDoc(doc)"
-          >
-            <div class="recent-card-top">
-              <FileIcon :ext="getFileExt(doc.name, doc.fileType)" :size="26" />
+          <EmptyState
+            v-else-if="recentDocs.length === 0"
+            :icon="History"
+            title="最近还没有浏览过文档"
+            description="打开任意文档后，会在这里留下入口"
+          />
+
+          <div v-else class="recent-grid">
+            <div
+              v-for="doc in recentDocs.slice(0, 4)"
+              :key="doc.documentId"
+              class="recent-card"
+              @click="openRecentDoc(doc)"
+            >
+              <div class="recent-card-top">
+                <div
+                  class="recent-icon-box"
+                  :style="{ background: fileTintBg(getFileExt(doc.name, doc.fileType)) }"
+                >
+                  <FileIcon :ext="getFileExt(doc.name, doc.fileType)" :size="26" />
+                </div>
+                <span class="recent-time-pill">{{ formatRelativeTime(doc.lastViewedAt) }}</span>
+              </div>
               <span class="recent-card-name" :title="doc.name">{{ doc.name }}</span>
-            </div>
-            <div class="recent-card-meta">
               <span class="recent-space-name">{{ doc.spaceName }}</span>
-              <span class="recent-time">{{ formatDateTime(doc.lastViewedAt) }}</span>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+
+        <section class="home-section col-side">
+          <div class="section-head">
+            <h2 class="section-title activity-title">
+              团队动态
+              <el-icon :size="16" class="activity-title-icon"><UsersRound /></el-icon>
+            </h2>
+          </div>
+
+          <div class="activity-viewport">
+            <div class="activity-scroll">
+          <div v-if="loadingActivities" class="activity-list">
+            <el-skeleton :rows="5" animated />
+          </div>
+
+          <EmptyState
+            v-else-if="activities.length === 0"
+            :icon="UsersRound"
+            title="还没有团队动态"
+            description="空间里的操作会出现在这里"
+          />
+
+          <div v-else class="activity-list">
+            <div v-for="act in activities" :key="act.id" class="activity-item">
+              <el-avatar
+                v-if="!act.avatar"
+                :size="30"
+                class="activity-avatar"
+                :style="{ background: avatarColor(act.username) }"
+              >
+                {{ (act.username || 'U').charAt(0).toUpperCase() }}
+              </el-avatar>
+              <el-avatar v-else :size="30" class="activity-avatar" :src="act.avatar" />
+              <div class="activity-body">
+                <p class="activity-text">
+                  <span class="activity-user">{{ act.username }}</span>
+                  {{ activityVerb(act) }}
+                  <template v-if="activityName(act)">
+                    <a
+                      v-if="activityMeta(act).style === 'doc'"
+                      class="activity-doc"
+                      @click.prevent="openActivityDoc(act)"
+                    >{{ truncateText(activityName(act), 30) }}</a>
+                    <span
+                      v-else-if="activityMeta(act).style === 'strong'"
+                      class="activity-strong"
+                    >{{ truncateText(activityName(act), 30) }}</span>
+                    <span
+                      v-else-if="activityMeta(act).style === 'quote'"
+                      class="activity-quote"
+                    >“{{ truncateText(activityName(act), 42) }}”</span>
+                    <template v-if="activityMeta(act).suffix">{{ activityMeta(act).suffix }}</template>
+                  </template>
+                  <template v-if="act.spaceName"> · {{ act.spaceName }}</template>
+                </p>
+              </div>
+              <span class="activity-time">{{ formatRelativeTime(act.createdAt) }}</span>
+            </div>
+          </div>
+            </div>
+          </div>
+        </section>
+      </div>
 
       <!-- 我的空间 -->
-      <section class="home-section anim-item" style="--delay: 3">
+      <section v-if="!isEmpty" class="home-section anim-item" style="--delay: 4">
         <div class="section-head">
           <h2 class="section-title">我的空间</h2>
         </div>
@@ -271,17 +390,20 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { FolderOpen, MoreHorizontal, Pencil, Trash2, Plus, Clock, ChevronRight, User, Tag, History, FileText } from 'lucide-vue-next'
+import { FolderOpen, MoreHorizontal, Pencil, Trash2, Plus, Clock, ChevronRight, User, Tag, History, FileText, UsersRound } from 'lucide-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
 import FileIcon from '@/components/FileIcon.vue'
 import { getRecentDocumentsApi } from '@/api/user'
+import { getActivitiesApi } from '@/api/activity'
 import { createSpaceApi, updateSpaceApi, deleteSpaceApi } from '@/api/space'
 import { listTagsApi } from '@/api/tag'
 import { storeToRefs } from 'pinia'
 import { useUserStore, useSpacesStore } from '@/stores'
-import { formatDateTime, getFileExt, getFileTypeColor, buildRecentDocRoute } from '@/utils/format'
+import { formatDateTime, formatRelativeTime, getFileExt, getFileTypeColor, buildRecentDocRoute, toSearchKeyword } from '@/utils/format'
 import { tagStyle } from '@/utils/tagColors'
 import { spaceIconPalette } from '@/utils/spaceColors'
+import { avatarColor } from '@/utils/userColors'
+import { activityMeta, activityName, activityVerb, truncateText } from '@/utils/activityText'
 
 const router = useRouter()
 const spacesStore = useSpacesStore()
@@ -291,6 +413,31 @@ const { userInfo } = storeToRefs(useUserStore())
 
 const recentDocs = ref([])
 const loadingRecent = ref(true)
+
+const activities = ref([])
+const loadingActivities = ref(true)
+
+// 空态 = 加载完成且一个空间都没有 → 显示三步引导
+const isEmpty = computed(() => !spacesLoading.value && spaces.value.length === 0)
+
+// 继续阅读卡取最近一条浏览记录
+const resumeDoc = computed(() => recentDocs.value[0] || null)
+
+// 动态里的文档名点击后进所在空间搜索定位 (与最近浏览同一套链路)
+function openActivityDoc(act) {
+  const keyword = toSearchKeyword(act.documentName || act.resourceName)
+  if (!keyword || !act.spaceId) return
+  router.push({
+    path: `/spaces/${act.spaceId}`,
+    query: { search: keyword, t: Date.now() }
+  })
+}
+
+// 文件图标底色：按类型色打 12% 透明浅底
+function fileTintBg(ext) {
+  const c = getFileTypeColor(ext)
+  return `color-mix(in srgb, ${c} 12%, transparent)`
+}
 
 // 角色/成员数/文档数已由 /space/list 聚合随行返回 (space.myRole/memberCount/docCount)，
 // 这里只补 chips 用的标签列表——与角色数据彻底解耦
@@ -370,9 +517,21 @@ function pickSpaceForPanel(space) {
 
 onMounted(() => {
   loadRecent()
+  loadActivities()
   // SWR：立即用 store 里的旧数据渲染，同时后台刷新 (上传/加成员后的数字不再说谎)
   refreshSpaces()
 })
+
+async function loadActivities() {
+  loadingActivities.value = true
+  try {
+    activities.value = await getActivitiesApi(20)
+  } catch (err) {
+    activities.value = []
+  } finally {
+    loadingActivities.value = false
+  }
+}
 
 async function loadRecent() {
   loadingRecent.value = true
@@ -528,6 +687,160 @@ function formatDate(dateStr) {
 
 
 /* 入场动效使用 App.vue 全局的 .anim-item */
+
+/* ===== 空态：三步引导卡 ===== */
+.onboard-card {
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  padding: 3rem 2.5rem 2.75rem;
+  text-align: center;
+  margin-bottom: 2.25rem;
+}
+
+.onboard-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--app-text);
+  margin: 0 0 0.5rem;
+}
+
+.onboard-sub {
+  font-size: 0.9rem;
+  color: var(--app-text-muted);
+  margin: 0 0 2.5rem;
+}
+
+.onboard-steps {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0;
+  max-width: 860px;
+  margin: 0 auto 2.5rem;
+}
+
+.onboard-step {
+  flex: 1;
+  min-width: 0;
+  padding: 1.4rem 1rem;
+  border-radius: 14px;
+  border: 1.5px solid transparent;
+}
+
+.onboard-step.is-active {
+  border-color: var(--app-accent);
+  background: var(--app-panel);
+  box-shadow: 0 10px 26px -12px rgba(37, 99, 235, 0.28);
+}
+
+.step-dot {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  margin: 0 auto 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  background: var(--app-hover);
+  color: var(--app-text-faint);
+}
+
+.onboard-step.is-active .step-dot {
+  background: var(--app-accent);
+  color: #fff;
+}
+
+.step-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--app-text-faint);
+  margin-bottom: 0.4rem;
+}
+
+.onboard-step.is-active .step-name {
+  color: var(--app-accent);
+}
+
+.step-desc {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--app-text-faint);
+}
+
+.onboard-step.is-active .step-desc {
+  color: var(--app-text);
+}
+
+.step-line {
+  flex-shrink: 0;
+  width: 72px;
+  height: 1px;
+  background: var(--app-border);
+  align-self: center;
+}
+
+.onboard-cta {
+  min-width: 200px;
+  height: 46px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* ===== 继续阅读卡 ===== */
+.resume-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--app-panel);
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-standard),
+              box-shadow var(--dur-fast) var(--ease-standard),
+              border-color var(--dur-fast) var(--ease-standard);
+}
+
+.resume-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--app-text-faint);
+  box-shadow: 0 8px 20px -6px rgba(15, 23, 42, 0.1);
+}
+
+.resume-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.resume-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--app-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resume-meta {
+  font-size: 0.78rem;
+  color: var(--app-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resume-btn {
+  flex-shrink: 0;
+  border-radius: 8px;
+  font-weight: 500;
+}
 
 /* 快捷动作：4 列一行，统一主色浅底 */
 .stats-row {
@@ -705,15 +1018,23 @@ function formatDate(dateStr) {
   margin: 0;
 }
 
+/* ===== 双栏：最近浏览与团队动态对等分栏 ===== */
+.home-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2rem;
+  margin-bottom: 2.25rem;
+}
+
+.home-columns .home-section {
+  margin-bottom: 0;
+}
+
 /* 最近浏览卡片 */
 .recent-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.9rem;
-}
-
-@media (max-width: 1100px) {
-  .recent-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 .recent-card {
@@ -743,55 +1064,157 @@ function formatDate(dateStr) {
 
 .recent-card-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 8px;
-  margin-bottom: 0.6rem;
-  min-width: 0;
+  margin-bottom: 0.7rem;
 }
 
-.ext-badge {
-  font-size: 0.62rem;
-  font-weight: 700;
-  color: #ffffff;
-  padding: 2px 5px;
-  border-radius: 4px;
-  letter-spacing: 0.5px;
-  min-width: 28px;
-  text-align: center;
+.recent-icon-box {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.recent-time-pill {
+  font-size: 0.7rem;
+  color: var(--app-text-faint);
+  background: var(--app-hover);
+  border-radius: 999px;
+  padding: 2px 9px;
   flex-shrink: 0;
 }
 
 .recent-card-name {
-  font-size: 0.85rem;
-  font-weight: 500;
+  display: block;
+  font-size: 0.87rem;
+  font-weight: 600;
   color: var(--app-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.recent-card-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  margin-bottom: 0.25rem;
 }
 
 .recent-space-name {
-  font-size: 0.72rem;
-  color: var(--app-accent);
-  background: var(--app-accent-weak);
-  border-radius: 4px;
-  padding: 1px 6px;
+  display: block;
+  font-size: 0.75rem;
+  color: var(--app-text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.recent-time {
+/* ===== 团队动态 ===== */
+.activity-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.activity-title-icon {
+  color: var(--app-text-faint);
+}
+
+/* 右栏高度跟随左栏：滚动区绝对定位、不参与 grid 行高计算，
+   动态再多也只在左栏撑出的高度内滚动，两栏底边恒对齐 */
+.col-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.activity-viewport {
+  flex: 1;
+  position: relative;
+  min-height: 220px;
+}
+
+.activity-scroll {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+}
+
+.activity-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.activity-scroll::-webkit-scrollbar-thumb {
+  background: var(--app-border);
+  border-radius: 999px;
+}
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 0.6rem 0;
+}
+
+.activity-item + .activity-item {
+  border-top: 1px solid var(--app-border-soft);
+}
+
+.activity-avatar {
+  flex-shrink: 0;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.activity-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-text {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--app-text-muted);
+  word-break: break-word;
+}
+
+.activity-user {
+  font-weight: 600;
+  color: var(--app-text);
+}
+
+.activity-doc {
+  color: var(--app-accent);
+  cursor: pointer;
+}
+
+.activity-doc:hover {
+  text-decoration: underline;
+}
+
+.activity-strong {
+  font-weight: 600;
+  color: var(--app-text);
+}
+
+.activity-quote {
+  color: var(--app-text-muted);
+}
+
+.activity-time {
+  flex-shrink: 0;
   font-size: 0.72rem;
   color: var(--app-text-faint);
-  flex-shrink: 0;
+  padding-top: 3px;
 }
 
 /* 空间卡片 */
@@ -1022,5 +1445,37 @@ function formatDate(dateStr) {
 
   .recent-grid { grid-template-columns: 1fr; }
   .space-grid { grid-template-columns: 1fr; }
+
+  .home-columns {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .home-columns .col-main { margin-bottom: 2.25rem; }
+
+  /* 单列堆叠时右栏没有"左栏高度"可跟随，还原为固定高度内滚 */
+  .activity-viewport { min-height: 0; }
+
+  .activity-scroll {
+    position: static;
+    max-height: 380px;
+  }
+
+  .onboard-card { padding: 2rem 1.25rem; }
+
+  .onboard-steps {
+    flex-direction: column;
+    gap: 0.9rem;
+    margin-bottom: 2rem;
+  }
+
+  .step-line {
+    width: 1px;
+    height: 24px;
+    align-self: center;
+  }
+
+  .resume-card { flex-wrap: wrap; }
+  .resume-body { flex-basis: 60%; }
 }
 </style>

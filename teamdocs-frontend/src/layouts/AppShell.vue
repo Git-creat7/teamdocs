@@ -39,6 +39,13 @@
           <el-icon class="nav-icon"><Clock /></el-icon>
           <span v-show="!collapsed" class="nav-label">最近浏览</span>
         </div>
+        <div
+          :class="['nav-item', { active: route.path === '/activities' }]"
+          @click="router.push('/activities')"
+        >
+          <el-icon class="nav-icon"><UsersRound /></el-icon>
+          <span v-show="!collapsed" class="nav-label">团队动态</span>
+        </div>
         <div class="nav-item" @click="goManageTags">
           <el-icon class="nav-icon"><Tag /></el-icon>
           <span v-show="!collapsed" class="nav-label">标签管理</span>
@@ -312,7 +319,8 @@ import {
   Tag,
   FileText,
   SearchX,
-  Menu
+  Menu,
+  UsersRound
 } from 'lucide-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
 import { createSpaceApi } from '@/api/space'

@@ -4,6 +4,7 @@ import LoginView from '@/views/LoginView.vue'
 import AppShell from '@/layouts/AppShell.vue'
 import HomeView from '@/views/HomeView.vue'
 import RecentView from '@/views/RecentView.vue'
+import ActivityView from '@/views/ActivityView.vue'
 import TrashView from '@/views/TrashView.vue'
 import SpaceWorkbenchView from '@/views/SpaceWorkbenchView.vue'
 
@@ -29,6 +30,7 @@ const routes = [
     children: [
       { path: 'home', name: 'Home', component: HomeView },
       { path: 'recent', name: 'Recent', component: RecentView },
+      { path: 'activities', name: 'Activities', component: ActivityView },
       { path: 'trash', name: 'Trash', component: TrashView },
       // 兼容旧路径
       { path: 'spaces', redirect: '/home' },
