@@ -92,6 +92,26 @@ public class TagController {
     /*
     * 筛选标签
     * */
+    /*
+    * 查单文档已打的标签
+    * */
+    @GetMapping("/documents/{documentId}/tags")
+    public Result listTagsByDocument(@PathVariable Long spaceId,
+                                     @PathVariable Long documentId,
+                                     @AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(tagService.listTagsByDocument(spaceId, documentId, loginUser));
+    }
+
+    /*
+    * 批量查多文档标签：documentIds 逗号分隔，返回 { docId: Tag[] }
+    * */
+    @GetMapping("/documents/tags")
+    public Result listTagsByDocuments(@PathVariable Long spaceId,
+                                      @RequestParam List<Long> documentIds,
+                                      @AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(tagService.listTagsByDocuments(spaceId, documentIds, loginUser));
+    }
+
     @GetMapping("/tags/{tagId}/documents")
     public Result listDocumentsByTag(@PathVariable Long spaceId,
                                      @PathVariable Long tagId,

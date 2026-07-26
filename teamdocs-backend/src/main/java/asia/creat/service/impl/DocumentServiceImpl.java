@@ -11,22 +11,29 @@ import asia.creat.dto.MoveDocumentDTO;
 import asia.creat.dto.PageQuery;
 import asia.creat.dto.RenameDocumentDTO;
 import asia.creat.entity.Document;
+import asia.creat.entity.DocumentTag;
 import asia.creat.entity.Folder;
 import asia.creat.entity.SpaceMember;
+import asia.creat.entity.Tag;
 import asia.creat.helper.ResourcePermissionHelper;
 import asia.creat.mapper.DocumentMapper;
+import asia.creat.mapper.DocumentTagMapper;
 import asia.creat.mapper.FolderMapper;
+import asia.creat.mapper.TagMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
 import asia.creat.service.DocumentService;
 import asia.creat.service.FileStorageService;
 import asia.creat.service.RecentDocumentService;
+import asia.creat.vo.DocumentDetailVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.YearMonth;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -38,13 +45,17 @@ public class DocumentServiceImpl implements DocumentService {
     private final ResourcePermissionHelper permissionHelper;
     private final FolderMapper folderMapper;
     private final RecentDocumentService recentDocumentService;
+    private final DocumentTagMapper documentTagMapper;
+    private final TagMapper tagMapper;
 
-    public DocumentServiceImpl(DocumentMapper documentMapper, FileStorageService fileStorageService, ResourcePermissionHelper permissionHelper, FolderMapper folderMapper, RecentDocumentService recentDocumentService) {
+    public DocumentServiceImpl(DocumentMapper documentMapper, FileStorageService fileStorageService, ResourcePermissionHelper permissionHelper, FolderMapper folderMapper, RecentDocumentService recentDocumentService, DocumentTagMapper documentTagMapper, TagMapper tagMapper) {
         this.documentMapper = documentMapper;
         this.fileStorageService = fileStorageService;
         this.permissionHelper = permissionHelper;
         this.folderMapper = folderMapper;
         this.recentDocumentService = recentDocumentService;
+        this.documentTagMapper = documentTagMapper;
+        this.tagMapper = tagMapper;
     }
 
     @Override
@@ -155,6 +166,25 @@ public class DocumentServiceImpl implements DocumentService {
         documentMapper.updateById(doc);
 
         log.debug("用户 {} 将空间 {} 的文件 {} 移动到文件夹 {}", loginUser.getUserId(), spaceId, doc.getName(), targetFolderId);
+    }
+
+    @Override
+    @RequireSpaceRole
+    public DocumentDetailVO getDocumentDetail(@SpaceId Long spaceId, Long documentId, LoginUser loginUser) {
+
+        Document doc = checkDocument(documentId, spaceId);
+
+        List<Long> tagIds = documentTagMapper.selectList(new LambdaQueryWrapper<DocumentTag>()
+                        .eq(DocumentTag::getDocumentId, documentId))
+                .stream().map(DocumentTag::getTagId).toList();
+        List<Tag> tags = tagIds.isEmpty() ? List.of() : tagMapper.selectBatchIds(tagIds);
+
+        DocumentDetailVO vo = new DocumentDetailVO();
+        BeanUtils.copyProperties(doc, vo);
+        vo.setTags(tags);
+
+        recentDocumentService.recordRecentDocument(loginUser.getUserId(), documentId);
+        return vo;
     }
 
     @Override

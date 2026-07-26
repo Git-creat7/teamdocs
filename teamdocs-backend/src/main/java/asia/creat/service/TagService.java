@@ -8,6 +8,7 @@ import asia.creat.entity.Tag;
 import asia.creat.security.LoginUser;
 
 import java.util.List;
+import java.util.Map;
 
 public interface TagService {
     void createTag(Long spaceId, CreateTagDTO dto, LoginUser loginUser);
@@ -23,4 +24,8 @@ public interface TagService {
     void removeTagFromDocument(Long spaceId, Long documentId, Long tagId, LoginUser loginUser);
 
     PageResult<Document> listDocumentsByTag(Long spaceId, Long tagId, PageQuery pageQuery, LoginUser loginUser);
+
+    List<Tag> listTagsByDocument(Long spaceId, Long documentId, LoginUser loginUser);
+
+    Map<Long, List<Tag>> listTagsByDocuments(Long spaceId, List<Long> documentIds, LoginUser loginUser);
 }

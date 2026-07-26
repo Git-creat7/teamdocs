@@ -10,7 +10,9 @@ import asia.creat.entity.SpaceMember;
 import asia.creat.entity.SpaceRole;
 import asia.creat.helper.ResourcePermissionHelper;
 import asia.creat.mapper.DocumentMapper;
+import asia.creat.mapper.DocumentTagMapper;
 import asia.creat.mapper.FolderMapper;
+import asia.creat.mapper.TagMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
 import asia.creat.service.FileStorageService;
@@ -60,6 +62,12 @@ class DocumentServiceImplTest {
     @Mock
     private RecentDocumentService recentDocumentService;
 
+    @Mock
+    private DocumentTagMapper documentTagMapper;
+
+    @Mock
+    private TagMapper tagMapper;
+
     private DocumentServiceImpl service;
 
     @BeforeEach
@@ -69,7 +77,9 @@ class DocumentServiceImplTest {
                 fileStorageService,
                 permissionHelper,
                 folderMapper,
-                recentDocumentService
+                recentDocumentService,
+                documentTagMapper,
+                tagMapper
         );
         SpaceMember member = new SpaceMember();
         member.setRole(SpaceRole.MEMBER);

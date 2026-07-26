@@ -6,6 +6,7 @@ import asia.creat.dto.UpdateMemberRoleDTO;
 import asia.creat.dto.UpdateSpaceDTO;
 import asia.creat.entity.Space;
 import asia.creat.security.LoginUser;
+import asia.creat.vo.SpaceListItemVO;
 import asia.creat.vo.SpaceMemberVO;
 
 import java.util.List;
@@ -13,7 +14,7 @@ import java.util.List;
 public interface SpaceService {
     void createSpace(CreateSpaceDTO dto, LoginUser loginUser);
 
-    List<Space> listMySpaces(LoginUser loginUser);
+    List<SpaceListItemVO> listMySpaces(LoginUser loginUser);
 
     Space getSpaceById(Long id, LoginUser loginUser);
 

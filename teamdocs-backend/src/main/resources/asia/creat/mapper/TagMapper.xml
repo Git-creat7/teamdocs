@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="asia.creat.mapper.TagMapper">
+
+    <select id="selectTagsByDocumentId" resultType="asia.creat.entity.Tag">
+        SELECT t.id,
+               t.space_id,
+               t.name,
+               t.created_at
+        FROM tag t
+                 JOIN document_tag dt ON t.id = dt.tag_id
+        WHERE dt.document_id = #{documentId}
+        ORDER BY t.id
+    </select>
+
+    <select id="selectTagsByDocumentIds" resultType="asia.creat.vo.DocumentTagRelVO">
+        SELECT dt.document_id AS document_id,
+               t.id,
+               t.space_id,
+               t.name,
+               t.created_at
+        FROM document_tag dt
+                 JOIN tag t ON t.id = dt.tag_id
+                 JOIN document d ON d.id = dt.document_id
+        WHERE d.space_id = #{spaceId}
+          AND d.deleted = 0
+          AND dt.document_id IN
+        <foreach collection="documentIds" item="docId" open="(" separator="," close=")">
+            #{docId}
+        </foreach>
+        ORDER BY dt.document_id, t.id
+    </select>
+</mapper>

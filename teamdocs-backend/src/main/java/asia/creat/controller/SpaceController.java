@@ -38,8 +38,7 @@ public class SpaceController {
     * */
     @GetMapping("/list")
     public Result listMySpaces(@AuthenticationPrincipal LoginUser loginUser) {
-        List<Space> spaces = spaceService.listMySpaces(loginUser);
-        return Result.success(spaces);
+        return Result.success(spaceService.listMySpaces(loginUser));
     }
     /*
     * 查单个空间

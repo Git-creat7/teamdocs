@@ -16,10 +16,14 @@ import asia.creat.mapper.TagMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
 import asia.creat.service.TagService;
+import asia.creat.vo.DocumentTagRelVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class TagServiceImpl implements TagService {
@@ -123,6 +127,46 @@ public class TagServiceImpl implements TagService {
         checkTag(spaceId, tagId);
 
         return PageResult.from(documentMapper.listDocumentsByTag(pageQuery.toPage(), spaceId, tagId));
+    }
+
+    @Override
+    @RequireSpaceRole
+    public List<Tag> listTagsByDocument(@SpaceId Long spaceId, Long documentId, LoginUser loginUser) {
+        checkDocument(spaceId, documentId);
+
+        return tagMapper.selectTagsByDocumentId(documentId);
+    }
+
+    @Override
+    @RequireSpaceRole
+    public Map<Long, List<Tag>> listTagsByDocuments(@SpaceId Long spaceId, List<Long> documentIds, LoginUser loginUser) {
+        if (documentIds == null || documentIds.isEmpty()) {
+            return Map.of();
+        }
+        if (documentIds.size() > 200) {
+            throw new BusinessException("单次最多查询 200 个文档");
+        }
+
+        // SQL 里 JOIN document 按 space_id 过滤，越权/不存在的 id 不会出现在结果里；
+        // 请求过但无标签的文档补空列表，前端可据此区分"没标签"和"没查过"
+        List<DocumentTagRelVO> rels = tagMapper.selectTagsByDocumentIds(spaceId, documentIds);
+
+        Map<Long, List<Tag>> result = new LinkedHashMap<>();
+        for (Long docId : documentIds) {
+            result.put(docId, new ArrayList<>());
+        }
+        for (DocumentTagRelVO rel : rels) {
+            Tag tag = new Tag();
+            tag.setId(rel.getId());
+            tag.setSpaceId(rel.getSpaceId());
+            tag.setName(rel.getName());
+            tag.setCreatedAt(rel.getCreatedAt());
+            List<Tag> list = result.get(rel.getDocumentId());
+            if (list != null) {
+                list.add(tag);
+            }
+        }
+        return result;
     }
 
     private Document checkDocument(Long spaceId, Long documentId) {

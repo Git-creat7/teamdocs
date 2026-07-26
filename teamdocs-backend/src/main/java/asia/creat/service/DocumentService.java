@@ -6,6 +6,7 @@ import asia.creat.dto.PageQuery;
 import asia.creat.dto.RenameDocumentDTO;
 import asia.creat.entity.Document;
 import asia.creat.security.LoginUser;
+import asia.creat.vo.DocumentDetailVO;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface DocumentService {
@@ -20,6 +21,8 @@ public interface DocumentService {
     void moveDocument(Long spaceId, Long documentId, MoveDocumentDTO dto, LoginUser loginUser);
 
     String downloadDocument(Long spaceId, Long documentId, LoginUser loginUser);
+
+    DocumentDetailVO getDocumentDetail(Long spaceId, Long documentId, LoginUser loginUser);
 
     PageResult<Document> listTrashedDocuments(Long spaceId, PageQuery pageQuery, LoginUser loginUser);
 

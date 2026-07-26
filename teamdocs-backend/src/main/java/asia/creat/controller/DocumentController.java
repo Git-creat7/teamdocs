@@ -80,6 +80,16 @@ public class DocumentController {
     }
 
     /*
+     * 文档详情 (含标签，访问记入最近浏览)
+     * */
+    @GetMapping("/{documentId}")
+    public Result getDocumentDetail(@PathVariable Long spaceId,
+                                    @PathVariable Long documentId,
+                                    @AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(documentService.getDocumentDetail(spaceId, documentId, loginUser));
+    }
+
+    /*
      * 下载文档
      * */
     @GetMapping("/{documentId}/download")

@@ -19,6 +19,7 @@ import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
 import asia.creat.service.SpaceService;
 import asia.creat.utils.CacheClient;
+import asia.creat.vo.SpaceListItemVO;
 import asia.creat.vo.SpaceMemberVO;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
@@ -69,17 +70,9 @@ public class SpaceServiceImpl implements SpaceService {
     }
 
     @Override
-    public List<Space> listMySpaces(LoginUser loginUser) {
-        // 从 space_member 查出我加入的所有 space_id
-        LambdaQueryWrapper<SpaceMember> lqw = new LambdaQueryWrapper<>();
-        lqw.eq(SpaceMember::getUserId, loginUser.getUserId());
-        List<SpaceMember> members = spaceMemberMapper.selectList(lqw);
-        List<Long> spaceIds = members.stream()
-                .map(SpaceMember::getSpaceId)
-                .toList();
-        // 根据space_id列表查出所有空间信息
-        if (spaceIds.isEmpty())  return Collections.emptyList();
-        return spaceMapper.selectByIds(spaceIds);
+    public List<SpaceListItemVO> listMySpaces(LoginUser loginUser) {
+        // 一次 JOIN 聚合带出 myRole/memberCount/docCount，替代旧的"先查成员再查空间"两步
+        return spaceMapper.selectMySpacesWithMeta(loginUser.getUserId());
     }
 
     @Override
