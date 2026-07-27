@@ -124,5 +124,11 @@
             #{documentId}
         </foreach>
     </select>
+    <select id="selectNameIncludingDeleted" resultType="java.lang.String">
+        SELECT name
+        FROM document
+        WHERE id = #{documentId}
+        AND space_id = #{spaceId}
+    </select>
 
 </mapper>

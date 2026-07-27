@@ -44,6 +44,7 @@ public class UserController {
         userService.register(dto.getUsername(),dto.getPassword());
         return Result.success();
     }
+
     @PostMapping("/login")
     public Result login(@RequestBody @Validated UserLoginDTO dto, HttpServletRequest request){
         String ip = request.getRemoteAddr();

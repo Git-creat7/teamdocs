@@ -14,7 +14,8 @@ public interface DocumentMapper extends BaseMapper<Document> {
     /*
      * 查回收站列表
      * */
-    IPage<Document> selectTrashedDocuments(IPage<Document> page, @Param("spaceId") Long spaceId);
+    IPage<Document> selectTrashedDocuments(IPage<Document> page,
+                                           @Param("spaceId") Long spaceId);
 
     /*
      * 查软删除的文件
@@ -46,5 +47,12 @@ public interface DocumentMapper extends BaseMapper<Document> {
     /*
     * 批量查询最近文档
     * */
-    List<RecentDocumentVO> listAccessibleRecentDocuments(@Param("userId") Long userId,@Param("documentIds") List<Long> documentIds);
+    List<RecentDocumentVO> listAccessibleRecentDocuments(@Param("userId") Long userId,
+                                                         @Param("documentIds") List<Long> documentIds);
+
+    /*
+    * 查询包括删除的文档
+    * */
+    String selectNameIncludingDeleted(@Param("spaceId") Long spaceId,
+                                      @Param("documentId") Long documentId);
 }

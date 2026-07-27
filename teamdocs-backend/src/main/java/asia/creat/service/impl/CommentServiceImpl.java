@@ -33,9 +33,9 @@ public class CommentServiceImpl implements asia.creat.service.CommentService {
 
 
     @Override
-    @OperationLog(value = "添加评论", resourceType = "COMMENT", resourceName = "#dto.content")
+    @OperationLog(value = "添加评论", resourceType = "DOCUMENT")
     @RequireSpaceRole
-    public void addComment(@SpaceId Long spaceId, Long documentId, AddCommentDTO dto, LoginUser loginUser) {
+    public void addComment(@SpaceId Long spaceId,@OperationTarget Long documentId, AddCommentDTO dto, LoginUser loginUser) {
         checkDocument(spaceId, documentId);
         if (dto.getReplyToId() != null) {
             /*
@@ -70,9 +70,9 @@ public class CommentServiceImpl implements asia.creat.service.CommentService {
     }
 
     @Override
-    @OperationLog(value = "删除评论", resourceType = "COMMENT")
+    @OperationLog(value = "删除评论", resourceType = "DOCUMENT")
     @RequireSpaceRole
-    public void deleteComment(@SpaceId Long spaceId, Long documentId,@OperationTarget Long commentId, LoginUser loginUser) {
+    public void deleteComment(@SpaceId Long spaceId,@OperationTarget Long documentId, Long commentId, LoginUser loginUser) {
         checkDocument(spaceId, documentId);
         Comment comment = commentMapper.selectById(commentId);
         if (comment == null || !comment.getDocumentId().equals(documentId)) {

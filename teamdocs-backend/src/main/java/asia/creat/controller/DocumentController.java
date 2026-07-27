@@ -80,7 +80,7 @@ public class DocumentController {
     }
 
     /*
-     * 文档详情 (含标签，访问记入最近浏览)
+     * 文档详情
      * */
     @GetMapping("/{documentId}")
     public Result getDocumentDetail(@PathVariable Long spaceId,
@@ -146,6 +146,3 @@ public class DocumentController {
         return Result.success(documentService.searchDocuments(spaceId, keyword, pageQuery, loginUser));
     }
 }
-/*
- * ps:有些地方该用dto,后期优化一下
- * */

@@ -83,7 +83,7 @@
           <el-icon class="stat-arrow"><ChevronRight /></el-icon>
         </div>
 
-        <div class="stat-card is-clickable tint-lavender" @click="goSpacePanel('tags')">
+        <div class="stat-card is-clickable tint-lavender" @click="router.push('/tags')">
           <div class="stat-icon-box">
             <el-icon :size="22"><Tag /></el-icon>
           </div>

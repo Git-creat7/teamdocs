@@ -69,7 +69,7 @@ public class SpaceController {
         spaceService.updateSpace(spaceId, dto, loginUser);
         return Result.success();
      }
-     // --- 以下为成员管理 ---
+
      /*
      * 添加成员
      * */

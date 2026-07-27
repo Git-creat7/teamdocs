@@ -46,7 +46,10 @@
           <el-icon class="nav-icon"><UsersRound /></el-icon>
           <span v-show="!collapsed" class="nav-label">团队动态</span>
         </div>
-        <div class="nav-item" @click="goManageTags">
+        <div
+          :class="['nav-item', { active: route.path === '/tags' }]"
+          @click="goManageTags"
+        >
           <el-icon class="nav-icon"><Tag /></el-icon>
           <span v-show="!collapsed" class="nav-label">标签管理</span>
         </div>
@@ -105,7 +108,7 @@
                 <el-icon><User /></el-icon>
                 <span>成员</span>
               </div>
-              <div class="space-sublink" @click="goSpacePanel(space.id, 'tags')">
+              <div class="space-sublink" @click="router.push('/tags')">
                 <el-icon><Tag /></el-icon>
                 <span>标签</span>
               </div>
@@ -466,12 +469,7 @@ function goTrash() {
 
 // 主导航「标签管理」：进当前空间 (无上下文时用第一个空间) 并打开标签面板
 function goManageTags() {
-  const sid = activeSpaceId.value || searchSpaceId.value || spaces.value[0]?.id
-  if (!sid) {
-    ElMessage.warning('还没有空间，先创建一个吧')
-    return
-  }
-  goSpacePanel(sid, 'tags')
+  router.push('/tags')
 }
 
 // 侧栏主动作：进当前空间工作台并直接唤起文件选择

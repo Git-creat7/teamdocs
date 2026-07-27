@@ -14,8 +14,11 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/spaces/{spaceId}")
 public class FolderController {
-    @Autowired
-    private FolderService folderService;
+    private final FolderService folderService;
+
+    public FolderController(FolderService folderService) {
+        this.folderService = folderService;
+    }
 
     /*
     * 创建文件夹

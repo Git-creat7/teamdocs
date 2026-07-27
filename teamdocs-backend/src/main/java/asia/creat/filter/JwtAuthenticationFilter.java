@@ -14,6 +14,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -106,8 +107,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        // 请求通过验证，继续传递给下一个过滤器或目标接口
-        log.info("用户 {} 访问了 {}", SecurityContextHolder.getContext().getAuthentication().getName(), requestURI);
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String userInfo = "未认证用户";
+
+        if (auth != null && auth.getPrincipal() instanceof LoginUser loginUser) {
+            userInfo = String.format("%s(id: %s)", loginUser.getUsername(), loginUser.getUserId());
+        }
+
+        log.info("用户 {} 访问了 {}", userInfo, requestURI);
         filterChain.doFilter(request,response);
     }
 }
