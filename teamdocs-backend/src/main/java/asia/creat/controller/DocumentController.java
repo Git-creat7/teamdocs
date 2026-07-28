@@ -101,6 +101,16 @@ public class DocumentController {
     }
 
     /*
+     * 在线预览文档
+     * */
+    @GetMapping("/{documentId}/preview")
+    public Result previewDocument(@PathVariable Long spaceId,
+                                  @PathVariable Long documentId,
+                                  @AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(documentService.previewDocument(spaceId, documentId, loginUser));
+    }
+
+    /*
      * 回收站：查表
      * */
     @GetMapping("trash")

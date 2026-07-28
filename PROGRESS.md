@@ -7,8 +7,8 @@
 ## 当前位置
 
 **周次**：项目收尾
-**模块**：官网落地页 + 批量接口 + 前端性能九项修复
-**状态**：`/` 挂登录墙外落地页 (黑白极简风、滚动揭示、demo 账号一键体验)；后端批量标签接口 + /space/list 聚合 VO；68 测试全绿
+**模块**：文档在线预览（后端完成，前端待接入）
+**状态**：新增预览专用接口与 `inline` 预签名 URL，下载仍保持 `attachment`；80 测试全绿
 
 ---
 
@@ -24,12 +24,15 @@
 - [x] W6: Docker Compose（MySQL + Redis + MinIO + Backend）+ 环境模板 + README + 容器/API 验证
 - [x] 收尾加固：Spring Security 认证边界 + 统一 401 JSON + JWT 当前 Token 注销
 - [x] 收尾分页：文档列表/回收站/搜索/标签文档/评论统一数据库分页
-- [x] 收尾测试：移除外部 Redis 伪测试，补 JWT Filter、空间权限、文档生命周期和分页单测
+- [x] 收尾测试：移除外部 Redis 伪测试，补 JWT Filter、空间权限、评论权限、文档生命周期和分页单测
+- [x] 数据卫生：删除标签和彻底删除文档时同步清理 `document_tag`，数据库操作由事务保护
+- [x] 在线预览后端：新增 `GET /spaces/{spaceId}/documents/{documentId}/preview`，返回文档元数据与 `inline` MinIO 预签名 URL
 
 ---
 
 ## 进行中
 
+- [ ] 在线预览前端：接入 file-viewer，并验证 MinIO CORS 与实际文件预览
 - [ ] 项目收尾：全量 API 回归 + 最终简历项目描述
 
 ---
