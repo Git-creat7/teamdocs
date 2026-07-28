@@ -94,7 +94,7 @@ public class TagServiceImpl implements TagService {
     }
 
     @Override
-    @OperationLog(value = "重命名标签", resourceType = "TAG")
+    @OperationLog(value = "重命名标签", resourceType = "TAG",resourceName = "#newName")
     @RequireSpaceRole({SpaceRole.OWNER, SpaceRole.ADMIN})
     public void renameTag(@SpaceId Long spaceId, @OperationTarget Long tagId, String newName, LoginUser loginUser) {
 

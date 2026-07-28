@@ -14,7 +14,7 @@ const ACTIVITY_META = {
   '彻底删除文档': { short: '彻底删除了', full: '彻底删除了文档', style: 'strong' },
   '为文件添加标签': { short: '给', full: '为文档添加了标签', style: 'doc', suffix: '打了标签' },
   '移除文件标签': { short: '移除了', full: '移除了文档标签', style: 'doc', suffix: '的标签' },
-  '添加评论': { short: '发表了评论：', full: '发表了评论', style: 'quote' },
+  '添加评论': { short: '在“', full: '发表了评论', style: 'doc', suffix: '”发表了评论' },
   '删除评论': { short: '删除了评论', full: '删除了评论' },
   '创建文件夹': { short: '创建了文件夹', full: '创建了文件夹', style: 'strong' },
   '重命名文件夹': { short: '重命名了文件夹', full: '重命名了文件夹', style: 'strong' },
@@ -39,6 +39,9 @@ export function activityMeta(act) {
 export function activityName(act) {
   const meta = activityMeta(act)
   if (!meta.style) return ''
+  if (act.operationName === '添加评论') {
+    return act.resourceType === 'DOCUMENT' ? (act.resourceName || act.documentName || '') : ''
+  }
   return act.documentName || act.resourceName || ''
 }
 

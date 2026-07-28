@@ -4,6 +4,7 @@ import asia.creat.anno.OperationLog;
 import asia.creat.anno.OperationTarget;
 import asia.creat.anno.SpaceId;
 import asia.creat.entity.OperationLogRecord;
+import asia.creat.helper.OperationResourceNameResolver;
 import asia.creat.security.LoginUser;
 import asia.creat.service.OperationLogService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -38,12 +39,14 @@ public class OperationLogAspect {
     * */
 
     private final OperationLogService operationLogService;
+    private final OperationResourceNameResolver operationResourceNameResolver;
 
     private final ExpressionParser spelParser = new SpelExpressionParser();
     private final ParameterNameDiscoverer parameterNameDiscoverer = new DefaultParameterNameDiscoverer();
 
-    public OperationLogAspect(OperationLogService operationLogService) {
+    public OperationLogAspect(OperationLogService operationLogService,OperationResourceNameResolver operationResourceNameResolver) {
         this.operationLogService = operationLogService;
+        this.operationResourceNameResolver = operationResourceNameResolver;
     }
 
     private String evalResourceName(String expression, Method method, Object[] args) {
@@ -106,6 +109,11 @@ public class OperationLogAspect {
                     resourceId = (Long) args[i];
                 }
             }
+        }
+
+        //解析资源名称
+        if (resourceName == null || resourceName.isBlank()) {
+            resourceName = operationResourceNameResolver    .resolve(resourceType, resourceId, spaceId);
         }
 
 
