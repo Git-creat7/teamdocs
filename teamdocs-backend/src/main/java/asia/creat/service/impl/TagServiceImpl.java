@@ -19,6 +19,7 @@ import asia.creat.service.TagService;
 import asia.creat.vo.DocumentTagRelVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -63,11 +64,16 @@ public class TagServiceImpl implements TagService {
     }
 
     @Override
+    @Transactional
     @OperationLog(value = "删除标签", resourceType = "TAG")
     @RequireSpaceRole({SpaceRole.OWNER, SpaceRole.ADMIN})
     public void deleteTag(@SpaceId Long spaceId, @OperationTarget Long tagId, LoginUser loginUser) {
 
         checkTag(spaceId, tagId);
+
+        LambdaQueryWrapper<DocumentTag> relationQuery = new LambdaQueryWrapper<>();
+        relationQuery.eq(DocumentTag::getTagId, tagId);
+        documentTagMapper.delete(relationQuery);
 
         LambdaQueryWrapper<Tag> lqw = new LambdaQueryWrapper<>();
         lqw.eq(Tag::getSpaceId, spaceId);

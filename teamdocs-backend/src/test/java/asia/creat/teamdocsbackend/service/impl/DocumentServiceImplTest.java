@@ -18,6 +18,7 @@ import asia.creat.security.SpaceContext;
 import asia.creat.service.FileStorageService;
 import asia.creat.service.RecentDocumentService;
 import asia.creat.service.impl.DocumentServiceImpl;
+import asia.creat.vo.DocumentPreviewVO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -265,12 +266,24 @@ class DocumentServiceImplTest {
         String url = service.downloadDocument(SPACE_ID, 10L, LOGIN_USER);
 
         assertEquals("https://files.example/notes.txt", url);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> paramsCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(fileStorageService).getAccessUrl(
+                eq(BucketType.PRIVATE),
+                eq("space/1/notes.txt"),
+                paramsCaptor.capture()
+        );
+        assertEquals(
+                "attachment; filename*=UTF-8''notes.txt",
+                paramsCaptor.getValue().get("response-content-disposition")
+        );
         verify(recentDocumentService).recordRecentDocument(USER_ID, 10L);
     }
 
     @Test
     void downloadShouldNotRecordRecentWhenUrlGenerationFails() {
         Document document = document(10L, SPACE_ID, USER_ID, 0L);
+        document.setName("notes.txt");
         document.setFilePath("space/1/notes.txt");
         when(documentMapper.selectById(10L)).thenReturn(document);
         when(fileStorageService.getAccessUrl(any(), any(), any()))
@@ -283,7 +296,61 @@ class DocumentServiceImplTest {
     }
 
     @Test
-    void purgeShouldDeleteObjectBeforeMetadata() {
+    void previewShouldReturnMetadataAndEncodedInlineUrl() {
+        Document document = document(10L, SPACE_ID, USER_ID, 0L);
+        document.setName("季度 报告.pdf");
+        document.setFileType("application/pdf");
+        document.setFileSize(1024L);
+        document.setFilePath("space/1/report.pdf");
+        when(documentMapper.selectById(10L)).thenReturn(document);
+        when(fileStorageService.getAccessUrl(
+                eq(BucketType.PRIVATE),
+                eq("space/1/report.pdf"),
+                any(Map.class)
+        )).thenReturn("https://files.example/report.pdf");
+
+        DocumentPreviewVO result = service.previewDocument(SPACE_ID, 10L, LOGIN_USER);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> paramsCaptor = ArgumentCaptor.forClass(Map.class);
+        var ordered = inOrder(fileStorageService, recentDocumentService);
+        ordered.verify(fileStorageService).getAccessUrl(
+                eq(BucketType.PRIVATE),
+                eq("space/1/report.pdf"),
+                paramsCaptor.capture()
+        );
+        ordered.verify(recentDocumentService).recordRecentDocument(USER_ID, 10L);
+        assertEquals(1, paramsCaptor.getValue().size());
+        assertEquals(
+                "inline; filename*=UTF-8''%E5%AD%A3%E5%BA%A6%20%E6%8A%A5%E5%91%8A.pdf",
+                paramsCaptor.getValue().get("response-content-disposition")
+        );
+        assertEquals(10L, result.getDocumentId());
+        assertEquals("季度 报告.pdf", result.getName());
+        assertEquals("application/pdf", result.getFileType());
+        assertEquals(1024L, result.getFileSize());
+        assertEquals("https://files.example/report.pdf", result.getUrl());
+    }
+
+    @Test
+    void previewShouldNotRecordRecentWhenUrlGenerationFails() {
+        Document document = document(10L, SPACE_ID, USER_ID, 0L);
+        document.setName("notes.txt");
+        document.setFilePath("space/1/notes.txt");
+        when(documentMapper.selectById(10L)).thenReturn(document);
+        when(fileStorageService.getAccessUrl(any(), any(), any()))
+                .thenThrow(new BusinessException("生成访问URL失败"));
+
+        assertThrows(
+                BusinessException.class,
+                () -> service.previewDocument(SPACE_ID, 10L, LOGIN_USER)
+        );
+
+        verify(recentDocumentService, never()).recordRecentDocument(any(), any());
+    }
+
+    @Test
+    void purgeShouldDeleteObjectAndRelationsBeforeMetadata() {
         Document document = document(10L, SPACE_ID, USER_ID, 0L);
         document.setFilePath("space/1/notes.txt");
         when(documentMapper.selectDeletedDocument(10L)).thenReturn(document);
@@ -291,8 +358,9 @@ class DocumentServiceImplTest {
 
         service.purgeDocument(SPACE_ID, 10L, LOGIN_USER);
 
-        var inOrder = inOrder(fileStorageService, documentMapper);
+        var inOrder = inOrder(fileStorageService, documentTagMapper, documentMapper);
         inOrder.verify(fileStorageService).delete(BucketType.PRIVATE, "space/1/notes.txt");
+        inOrder.verify(documentTagMapper).delete(any());
         inOrder.verify(documentMapper).purgeDeleteById(10L);
     }
 
@@ -308,6 +376,7 @@ class DocumentServiceImplTest {
         assertThrows(BusinessException.class,
                 () -> service.purgeDocument(SPACE_ID, 10L, LOGIN_USER));
 
+        verify(documentTagMapper, never()).delete(any());
         verify(documentMapper, never()).purgeDeleteById(any());
     }
 

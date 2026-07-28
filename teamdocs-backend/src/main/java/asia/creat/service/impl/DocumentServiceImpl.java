@@ -26,12 +26,16 @@ import asia.creat.service.DocumentService;
 import asia.creat.service.FileStorageService;
 import asia.creat.service.RecentDocumentService;
 import asia.creat.vo.DocumentDetailVO;
+import asia.creat.vo.DocumentPreviewVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
@@ -196,11 +200,32 @@ public class DocumentServiceImpl implements DocumentService {
         String url = fileStorageService.getAccessUrl(
                     BucketType.PRIVATE,
                     doc.getFilePath(),
-                    Map.of("response-content-disposition", "attachment; filename=\"" + doc.getName() + "\"")
+                    Map.of("response-content-disposition", buildContentDisposition("attachment", doc.getName()))
                 );
         recentDocumentService.recordRecentDocument(loginUser.getUserId(), documentId);
         return url;
 
+    }
+
+    @Override
+    @RequireSpaceRole
+    public DocumentPreviewVO previewDocument(@SpaceId Long spaceId, Long documentId, LoginUser loginUser) {
+        Document doc = checkDocument(documentId, spaceId);
+        String url = fileStorageService.getAccessUrl(
+                BucketType.PRIVATE,
+                doc.getFilePath(),
+                Map.of("response-content-disposition", buildContentDisposition("inline", doc.getName()))
+        );
+
+        recentDocumentService.recordRecentDocument(loginUser.getUserId(), documentId);
+
+        DocumentPreviewVO vo = new DocumentPreviewVO();
+        vo.setDocumentId(doc.getId());
+        vo.setName(doc.getName());
+        vo.setFileType(doc.getFileType());
+        vo.setFileSize(doc.getFileSize());
+        vo.setUrl(url);
+        return vo;
     }
 
 
@@ -250,6 +275,7 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
+    @Transactional
     @OperationLog(value = "彻底删除文档", resourceType = "DOCUMENT")
     @RequireSpaceRole
     public void purgeDocument(@SpaceId Long spaceId, @OperationTarget Long documentId, LoginUser loginUser) {
@@ -268,6 +294,11 @@ public class DocumentServiceImpl implements DocumentService {
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
         fileStorageService.delete(BucketType.PRIVATE, doc.getFilePath());
+
+        LambdaQueryWrapper<DocumentTag> relationQuery = new LambdaQueryWrapper<>();
+        relationQuery.eq(DocumentTag::getDocumentId, documentId);
+        documentTagMapper.delete(relationQuery);
+
         boolean flag = documentMapper.purgeDeleteById(documentId);
 
         if (!flag) {
@@ -305,6 +336,12 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         return doc;
+    }
+
+    private String buildContentDisposition(String type, String filename) {
+        String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        return type + "; filename*=UTF-8''" + encodedFilename;
     }
 
     private Long requireFolderInSpace(Long spaceId, Long folderId) {
