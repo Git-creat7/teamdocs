@@ -1,0 +1,46 @@
+/**
+ * 全局布局容器系统
+ * 原则：不逐页调宽度，所有页面统一套这 4 个容器
+ * 用法：在页面最外层 div 上加 class，例如 <div class="layout-wide">
+ */
+
+/* 窄容器：表单、设置、登录等 */
+.layout-narrow {
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 0 24px;
+}
+
+/* 中容器：文档详情、评论、预览 */
+.layout-medium {
+  max-width: 960px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 0 24px;
+}
+
+/* 宽容器：表格、列表、工作台 */
+.layout-wide {
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 0 24px;
+}
+
+/* 全宽容器：仪表盘、复杂工作台 */
+.layout-full {
+  width: 100%;
+  max-width: none;
+  padding: 0 24px;
+}
+
+/* 移动端：减少两侧留白 */
+@media (max-width: 768px) {
+  .layout-narrow,
+  .layout-medium,
+  .layout-wide,
+  .layout-full {
+    padding: 0 16px;
+  }
+}

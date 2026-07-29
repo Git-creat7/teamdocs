@@ -85,8 +85,4 @@ defineProps({
 .empty-action {
   margin-top: 1rem;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .empty-ring { animation: none; }
-}
 </style>

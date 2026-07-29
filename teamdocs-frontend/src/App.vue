@@ -320,31 +320,4 @@ html, body {
     max-width: 86vw;
   }
 }
-
-/* 尊重系统减弱动效偏好：全部动画静止直出 */
-@media (prefers-reduced-motion: reduce) {
-  .anim-item,
-  .stagger-rows .el-table__row,
-  .stagger-rows .recent-row,
-  .stagger-rows .trash-row,
-  .dialog-fade-enter-active,
-  .dialog-fade-enter-active .el-overlay-dialog,
-  .dialog-fade-leave-active,
-  .dialog-fade-leave-active .el-overlay-dialog,
-  .el-drawer.rtl {
-    animation: none !important;
-    opacity: 1;
-  }
-  .page-enter-active,
-  .page-leave-active,
-  .el-zoom-in-top-enter-active,
-  .el-zoom-in-top-leave-active,
-  .el-drawer-fade-enter-active,
-  .el-drawer-fade-leave-active {
-    transition: none !important;
-  }
-  .el-button:active {
-    transform: none;
-  }
-}
 </style>

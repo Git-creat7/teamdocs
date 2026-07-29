@@ -78,19 +78,18 @@ export function toSearchKeyword(name) {
 }
 
 /**
- * 最近文档的统一跳转：进所在空间并用文件名定位 (搜索态 + 高亮)。
- * 纯符号文件名无法转搜索词时降级进空间根目录并 toast 提示。
+ * 最近文档的统一跳转：直接打开详情预览，不再绕 search + highlight。
  * 三处入口 (首页/最近浏览页/侧栏) 共用，行为保持一致。
+ * notify 参数保留以兼容旧调用，已不再使用。
  */
 export function buildRecentDocRoute(doc, notify) {
-  const keyword = toSearchKeyword(doc.name)
-  if (!keyword) {
-    if (notify) notify('该文件名无法定位，已进入所在空间')
-    return { path: `/spaces/${doc.spaceId}` }
+  void notify
+  if (!doc?.spaceId || !doc?.documentId) {
+    return { path: doc?.spaceId ? `/spaces/${doc.spaceId}` : '/home' }
   }
   return {
     path: `/spaces/${doc.spaceId}`,
-    query: { search: keyword, highlight: doc.documentId, t: Date.now() }
+    query: { doc: doc.documentId, tab: 'preview' }
   }
 }
 

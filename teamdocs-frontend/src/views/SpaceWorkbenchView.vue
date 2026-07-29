@@ -43,8 +43,8 @@
     </div>
 
     <!-- ===== 主体：文件夹树 + 文件列表 ===== -->
-    <div class="wb-body">
-      <aside class="wb-tree-panel anim-item" style="--delay: 1">
+    <div class="wb-body" ref="wbBodyRef">
+      <aside class="wb-tree-panel anim-item" v-show="!isSplitMode && !(isMobile && detailDoc)" style="--delay: 1">
         <div class="tree-panel-header">
           <span class="tree-panel-title">文件夹</span>
           <div class="tree-header-actions">
@@ -91,21 +91,21 @@
         </div>
       </aside>
 
-      <section class="wb-content anim-item" style="--delay: 2">
-        <!-- 文档详情态：文档卡置顶 + 评论区占满 -->
-        <DocumentDetailPanel
-          v-if="detailDoc"
-          :space-id="spaceId"
-          :doc="detailDoc"
-          :tags="docTagsMap[detailDoc.id] || []"
-          :my-role="myRole"
-          :current-user-id="userInfo?.userId"
-          @close="detailDoc = null"
-          @download="handleDownload"
-        />
+      <section class="wb-content anim-item" :class="{ 'is-split': isSplitMode, 'is-mobile-detail': isMobile && detailDoc }" style="--delay: 2">
 
-        <template v-else>
-        <div class="toolbar">
+        <!-- 左侧：列表区域 (分栏时为 master，否则为全宽) -->
+        <div class="master-list-area" v-show="showListInDetail">
+          <div class="toolbar" :class="{'compact-mode': isSplitMode}">
+          <el-button
+            v-if="isSplitMode"
+            text
+            size="small"
+            class="split-back-btn"
+            @click="returnToFileTree"
+          >
+            <ArrowLeft :size="16" />
+            返回文件树
+          </el-button>
           <!-- 搜索/筛选态显示结果说明，正常态显示面包屑 -->
           <div v-if="viewMode === 'search'" class="breadcrumb-container">
             <span class="breadcrumb-current">搜索 “{{ activeKeyword }}” 的结果 ({{ docTotal }})</span>
@@ -157,10 +157,15 @@
               />
             </el-select>
 
-            <el-button size="small" class="new-folder-btn" @click="openCreateFolderDialog">
+            <el-button v-show="!isSplitMode" size="small" class="new-folder-btn" @click="openCreateFolderDialog">
               <el-icon><FolderPlus /></el-icon>
               新建文件夹
             </el-button>
+            <el-tooltip v-show="isSplitMode" content="新建文件夹" placement="top">
+              <el-button size="small" class="new-folder-btn icon-only" @click="openCreateFolderDialog">
+                <el-icon><FolderPlus /></el-icon>
+              </el-button>
+            </el-tooltip>
           </div>
         </div>
 
@@ -198,14 +203,17 @@
         </div>
 
         <div v-else class="table-container stagger-rows">
-          <div v-if="docTotal > documents.length" class="list-cap-hint">
-            当前仅显示前 {{ documents.length }} 个文档，共 {{ docTotal }} 个
-          </div>
-          <el-table
-            :data="combinedList"
-            style="width: 100%; max-width: 1080px"
-            :row-class-name="rowClassName"
-          >
+          <div class="table-inner">
+            <div v-if="docTotal > documents.length" class="list-cap-hint">
+              当前仅显示前 {{ documents.length }} 个文档，共 {{ docTotal }} 个
+            </div>
+            <el-table
+              :data="combinedList"
+              style="width: 100%"
+              :row-class-name="rowClassName"
+              :cell-style="{ padding: '12px 0' }"
+              :header-cell-style="{ background: 'var(--app-panel-soft)', color: 'var(--app-text-muted)', fontWeight: 600, fontSize: '0.8rem', borderBottom: '1px solid var(--app-border)' }"
+            >
             <el-table-column label="名称" min-width="260">
               <template #default="{ row }">
                 <div
@@ -226,7 +234,7 @@
             </el-table-column>
 
             <!-- 独立标签列 (对标图) -->
-            <el-table-column v-if="!isMobile" label="标签" width="200">
+            <el-table-column v-if="!isMobile && !isSplitMode" label="标签" width="200">
               <template #default="{ row }">
                 <div v-if="!row.isFolder && (docTagsMap[row.id] || []).length" class="tag-cell">
                   <span
@@ -245,13 +253,13 @@
               </template>
             </el-table-column>
 
-            <el-table-column v-if="!isMobile" label="大小" width="120">
+            <el-table-column v-if="!isMobile && !isSplitMode" label="大小" width="120">
               <template #default="{ row }">
                 <span class="size-text">{{ row.isFolder ? '-' : formatBytes(row.fileSize) }}</span>
               </template>
             </el-table-column>
 
-            <el-table-column v-if="!isMobile" label="更新时间" width="130">
+            <el-table-column v-if="!isMobile && !isSplitMode" label="更新时间" width="130">
               <template #default="{ row }">
                 <span class="date-text">{{ formatRelativeTime(row.updatedAt || row.createdAt) }}</span>
               </template>
@@ -265,6 +273,9 @@
                   </span>
                   <template #dropdown>
                     <el-dropdown-menu>
+                      <el-dropdown-item v-if="!row.isFolder" command="preview">
+                        <el-icon><View /></el-icon>预览
+                      </el-dropdown-item>
                       <el-dropdown-item v-if="!row.isFolder" command="download">
                         <el-icon><Download /></el-icon>下载
                       </el-dropdown-item>
@@ -290,11 +301,29 @@
             </el-table-column>
           </el-table>
         </div>
-        </template>
+        </div>
+        </div>
+
+        <!-- 右侧：详情面板 (分栏时为 detail，普通详情为全宽) -->
+        <div class="detail-panel-wrapper" v-if="detailDoc">
+          <DocumentDetailPanel
+            :key="detailDoc.id"
+            :space-id="spaceId"
+            :doc="detailDoc"
+            :tags="docTagsMap[detailDoc.id] || []"
+            :my-role="myRole"
+            :current-user-id="userInfo?.userId"
+            :active-tab="route.query.tab || 'preview'"
+            :show-back-button="!isSplitMode"
+            @update:active-tab="updateDetailTab"
+            @close="closeDetail"
+            @download="handleDownload"
+          />
+        </div>
       </section>
     </div>
 
-    <!-- 新建文件夹 -->
+    <!-- 移动文档/文件夹的目标选择器 -->
     <el-dialog
       v-model="createFolderDialogVisible"
       title="新建文件夹"
@@ -336,7 +365,7 @@
       @confirm="handleMoveConfirm"
     />
 
-    <!-- 空间成员抽屉 -->
+    <!-- 标签管理 -->
     <MembersDrawer
       v-model="membersVisible"
       :space-id="spaceId"
@@ -369,8 +398,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { View } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Upload,
@@ -387,7 +417,8 @@ import {
   FolderInput,
   ChevronsDownUp,
   SearchX,
-  CloudUpload
+  CloudUpload,
+  ArrowLeft
 } from 'lucide-vue-next'
 import { getSpaceDetailApi, listMembersApi } from '@/api/space'
 import {
@@ -433,6 +464,42 @@ mq.addEventListener('change', (e) => { isMobile.value = e.matches })
 const spaceId = ref(0)
 const spaceInfo = ref(null)
 
+// 响应式 ResizeObserver 分栏判定
+const wbBodyRef = ref(null)
+const wbBodyWidth = ref(0)
+let resizeObserver = null
+
+onMounted(() => {
+  resizeObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      wbBodyWidth.value = entry.contentRect.width
+    }
+  })
+  if (wbBodyRef.value) {
+    resizeObserver.observe(wbBodyRef.value)
+  }
+  initFromRoute()
+})
+
+onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+  }
+})
+
+// 文档详情态 (文档置顶 + 评论区)
+const detailDoc = ref(null)
+
+const isSplitMode = computed(() => {
+  return detailDoc.value && !isMobile.value && wbBodyWidth.value >= 900
+})
+const showListInDetail = computed(() => {
+  if (!detailDoc.value) return true
+  if (isMobile.value) return false
+  if (wbBodyWidth.value < 900) return false
+  return true
+})
+
 // 受控树：treeData + expandedKeys，不用 lazy
 const treeRef = ref(null)
 const treeData = ref([])
@@ -465,10 +532,14 @@ const spaceTags = ref([])
 const highlightDocId = ref(null)
 
 function rowClassName({ row }) {
+  let cls = ''
   if (!row.isFolder && highlightDocId.value && row.id === highlightDocId.value) {
-    return 'row-highlight'
+    cls += 'row-highlight '
   }
-  return ''
+  if (!row.isFolder && detailDoc.value && row.id === detailDoc.value.id) {
+    cls += 'active-row '
+  }
+  return cls
 }
 
 // 成员与角色
@@ -489,8 +560,21 @@ const movePickerVisible = ref(false)
 const moveTarget = ref(null)
 const activeDoc = ref(null)
 
-// 文档详情态 (文档置顶 + 评论区)
-const detailDoc = ref(null)
+function updateDetailTab(tab) {
+  if (route.query.tab === tab) return
+  // 只改 tab，保留 doc；不碰 search/highlight，避免误触发搜索刷新
+  router.replace({
+    query: { ...route.query, tab }
+  })
+}
+
+/**
+ * 返回文件树：详情 + 搜索/高亮 query 一并清掉，回到当前目录列表。
+ * 详情面板「返回」按钮走这里，避免停留在搜索结果态。
+ */
+function closeDetail() {
+  returnToFileTree()
+}
 
 /**
  * 回到目录视图的唯一出口：搜索态 / 标签筛选态 / 详情态 / 高亮全部在这里清，
@@ -503,22 +587,53 @@ function resetViewState({ clearQuery = true } = {}) {
   selectedTagId.value = null
   activeTagName.value = ''
   highlightDocId.value = null
-  if (clearQuery && (route.query.search || route.query.panel)) {
-    router.replace({ path: route.path })
+  if (
+    clearQuery &&
+    (route.query.search || route.query.panel || route.query.doc || route.query.highlight || route.query.t)
+  ) {
+    const q = { ...route.query }
+    delete q.search
+    delete q.panel
+    delete q.doc
+    delete q.tab
+    delete q.highlight
+    delete q.t
+    router.replace({ path: route.path, query: q })
   }
 }
 
-function openDocDetail(doc) {
-  // 先用列表行数据即时渲染，再用详情接口刷新 (含最新标签；后端同时记入最近浏览)
-  detailDoc.value = doc
-  getDocumentDetailApi(spaceId.value, doc.id)
+/** 清掉 doc/tab/search/highlight/t，回到当前目录文件树 */
+async function returnToFileTree() {
+  resetViewState()
+  await loadCurrentFolderContent()
+}
+
+function openDocDetail(doc, tab = 'preview') {
+  // 打开详情只保留 doc + tab，不继承 search/highlight/t，避免详情与搜索态纠缠
+  router.push({
+    query: { doc: doc.id, tab }
+  })
+}
+
+function syncDocDetailFromId(docId) {
+  if (!spaceId.value) return
+
+  // Try to find from current list
+  const existing = documents.value.find((d) => d.id === docId)
+  if (existing) {
+    detailDoc.value = existing
+  } else if (!detailDoc.value || detailDoc.value.id !== docId) {
+    detailDoc.value = { id: docId, name: '加载中...', fileSize: 0 }
+  }
+
+  getDocumentDetailApi(spaceId.value, docId)
     .then((detail) => {
-      if (!detail || detailDoc.value?.id !== doc.id) return
-      detailDoc.value = { ...doc, ...detail }
-      setFromDetail(doc.id, detail.tags)
+      if (!detail || detailDoc.value?.id !== docId) return
+      detailDoc.value = { ...(existing || detailDoc.value), ...detail }
+      setFromDetail(docId, detail.tags)
     })
     .catch(() => {
-      // 详情拉取失败降级保持列表行数据
+      // 降级或者关闭
     })
 }
 
@@ -552,9 +667,7 @@ const combinedList = computed(() => {
   return [...foldersMapped, ...docsMapped]
 })
 
-onMounted(() => {
-  initFromRoute()
-})
+// initFromRoute() moved to onMounted
 
 // 侧栏切换空间：同一组件实例被复用，必须 watch 路由参数整体重置
 watch(() => route.params.spaceId, (val, oldVal) => {
@@ -579,6 +692,24 @@ watch(() => [route.query.panel, route.query.t], () => {
   if (route.name !== 'SpaceWorkbench') return
   applyPanelFromQuery()
 })
+
+// 详情同步：等 spaceId 初始化后再拉，避免路由先到、space 未就绪时空请求
+watch(
+  () => [route.query.doc, spaceId.value],
+  () => {
+    if (route.name !== 'SpaceWorkbench') return
+    if (!spaceId.value) return
+    const docId = Number(route.query.doc)
+    if (docId > 0) {
+      if (!detailDoc.value || detailDoc.value.id !== docId) {
+        syncDocDetailFromId(docId)
+      }
+    } else {
+      detailDoc.value = null
+    }
+  },
+  { immediate: true }
+)
 
 function applyPanelFromQuery() {
   const panel = String(route.query.panel || '')
@@ -621,9 +752,7 @@ async function initFromRoute() {
     return
   }
 
-  spaceId.value = spaceIdNum
-
-  // 重置视图状态 (query 保留：search/panel 参数在下面消费)
+  // 先清本地状态，再设 spaceId：避免 watcher 先开详情、随后又被 reset 清掉
   resetViewState({ clearQuery: false })
   currentFolderId.value = 0
   treeData.value = []
@@ -636,14 +765,16 @@ async function initFromRoute() {
   members.value = []
   myRole.value = ''
 
+  spaceId.value = spaceIdNum
+
   const ok = await loadSpaceDetail()
   if (!ok) return
 
   const tasks = [loadRootTree(), loadMembers(), loadSpaceTags()]
 
-  // 带搜索参数进来 (全局搜索跳转) 直接进搜索态，否则加载根目录
+  // 带搜索参数进来 (全局搜索跳转) 直接进搜索态；有 doc 时优先目录+详情，不进搜索
   const keyword = String(route.query.search || '').trim()
-  if (keyword) {
+  if (keyword && !route.query.doc) {
     highlightDocId.value = Number(route.query.highlight) || null
     tasks.push(runSearch(keyword))
   } else {
@@ -856,6 +987,9 @@ function buildBreadcrumbFromTree(folderId, fallbackName = '') {
 /* ========== 搜索 / 标签筛选 ========== */
 
 async function runSearch(keyword) {
+  // 已在看详情时不要被搜索把页面重置成结果列表（例如切评论 tab 不应触发刷新）
+  if (route.query.doc) return
+
   detailDoc.value = null
   loadingDocuments.value = true
   viewMode.value = 'search'
@@ -867,10 +1001,10 @@ async function runSearch(keyword) {
     docTotal.value = page.total
     loadTagsForDocs(documents.value)
 
-    // 从最近浏览/全局搜索带 highlight 跳入且命中结果：直接打开详情，省一次点击
+    // 全局搜索带 highlight 跳入且命中结果：直接打开详情，省一次点击
     if (highlightDocId.value) {
       const hit = page.records.find((d) => d.id === highlightDocId.value)
-      if (hit) openDocDetail(hit)
+      if (hit && Number(route.query.doc) !== hit.id) openDocDetail(hit)
     }
   } catch (err) {
     documents.value = []
@@ -915,8 +1049,7 @@ function handleDocTagsChanged({ docId, tag, added }) {
 
 async function exitFilterMode() {
   if (viewMode.value === 'folder' && !detailDoc.value) return
-  resetViewState()
-  await loadCurrentFolderContent()
+  await returnToFileTree()
 }
 
 /* ========== 目录内容 ========== */
@@ -1135,10 +1268,12 @@ function handleItemCommand(command, row) {
     } else if (command === 'delete') {
       handleFolderDelete(row)
     }
+  } else if (command === 'preview') {
+    openDocDetail(row, 'preview')
   } else if (command === 'download') {
     handleDownload(row)
   } else if (command === 'comments') {
-    openDocDetail(row)
+    openDocDetail(row, 'comments')
   } else if (command === 'tags') {
     activeDoc.value = row
     docTagsVisible.value = true
@@ -1167,6 +1302,9 @@ async function handleMoveConfirm(targetFolderId) {
     } else {
       await moveDocumentApi(spaceId.value, target.id, targetFolderId)
       ElMessage.success(`文档 "${target.name}" 已移动`)
+      if (detailDoc.value && detailDoc.value.id === target.id) {
+        closeDetail()
+      }
       await loadCurrentFolderContent()
     }
   } catch (err) {
@@ -1301,8 +1439,14 @@ function handleDocRename(doc) {
     try {
       await renameDocumentApi(spaceId.value, doc.id, finalName)
       ElMessage.success('文档重命名成功')
+      if (detailDoc.value && detailDoc.value.id === doc.id) {
+        detailDoc.value.name = finalName
+      }
       if (viewMode.value === 'folder') {
         await loadCurrentFolderContent()
+      } else {
+        const found = documents.value.find(d => d.id === doc.id)
+        if (found) found.name = finalName
       }
     } catch (err) {
       // 拦截器处理
@@ -1319,10 +1463,14 @@ function handleDocDelete(doc) {
     try {
       await deleteDocumentApi(spaceId.value, doc.id)
       ElMessage.success('文档已删除，可在回收站找回')
+      if (detailDoc.value && detailDoc.value.id === doc.id) {
+        closeDetail()
+      }
       if (viewMode.value === 'folder') {
         await loadCurrentFolderContent()
       } else {
         documents.value = documents.value.filter((d) => d.id !== doc.id)
+        docTotal.value = Math.max(0, docTotal.value - 1)
       }
     } catch (err) {
       // 拦截器处理
@@ -1374,13 +1522,90 @@ function formatDate(dateStr) {
   overflow: hidden;
 }
 
+/* ============ 分栏布局 (Master-Detail) ============ */
+.master-list-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+.wb-content.is-split {
+  flex-direction: row;
+}
+.wb-content.is-split .master-list-area {
+  flex: none;
+  width: clamp(300px, 35%, 380px);
+  border-right: 1px solid var(--app-border);
+}
+
+.detail-panel-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 560px;
+  height: 100%;
+}
+
+.wb-content.is-mobile-detail .detail-panel-wrapper {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--app-bg);
+  min-width: 0;
+}
+.wb-content.is-mobile-detail .master-list-area {
+  display: none;
+}
+
+/* ============ 顶栏操作区 ============ */
+.toolbar {
+  padding: 0.8rem 1.2rem;
+  border-bottom: 1px solid var(--app-border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--app-panel-soft);
+  min-width: 0;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 紧凑态工具栏 (分栏时) */
+.toolbar.compact-mode .breadcrumb-container {
+  display: none;
+}
+.toolbar.compact-mode .tag-filter-select {
+  display: none;
+}
+.toolbar.compact-mode .toolbar-actions {
+  width: auto;
+  margin-left: auto;
+  justify-content: flex-end;
+}
+.split-back-btn {
+  flex-shrink: 0;
+  color: var(--app-text-muted);
+}
+.split-back-btn:hover {
+  color: var(--app-accent);
+}
+.new-folder-btn.icon-only {
+  padding: 8px;
+}
+
 /* ===== 工作台头部 ===== */
 .wb-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 24px 12px;
+  padding: 16px 24px 14px;
   background: var(--app-panel);
   border-bottom: 1px solid var(--app-border);
   flex-shrink: 0;
@@ -1529,12 +1754,12 @@ function formatDate(dateStr) {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 0.86rem;
   color: var(--app-text-2);
   cursor: pointer;
-  transition: background-color var(--dur-fast) var(--ease-standard);
-  margin-bottom: 4px;
+  transition: all 0.15s ease;
+  margin-bottom: 2px;
 }
 
 .tree-item-root:hover {
@@ -1547,6 +1772,10 @@ function formatDate(dateStr) {
   font-weight: 600;
 }
 
+.active-row {
+  background-color: var(--app-hover-soft) !important;
+}
+
 .folder-icon {
   font-size: 1rem;
   color: var(--app-text-muted);
@@ -1554,6 +1783,29 @@ function formatDate(dateStr) {
 
 .tree-item-root.active .folder-icon {
   color: var(--app-accent);
+}
+
+.danger-item {
+  color: var(--el-color-danger);
+}
+
+.doc-preview-dialog__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 24px;
+}
+.doc-preview-dialog__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:deep(.doc-preview-dialog .el-dialog__body) {
+  height: 78vh;
+  padding-top: 8px;
 }
 
 .folder-name {
@@ -1569,9 +1821,10 @@ function formatDate(dateStr) {
 }
 
 .custom-folder-tree :deep(.el-tree-node__content) {
-  height: 34px;
-  border-radius: 6px;
+  height: 36px;
+  border-radius: 8px;
   padding-right: 8px;
+  transition: background-color 0.15s ease;
 }
 
 .custom-folder-tree :deep(.el-tree-node__expand-icon) {
@@ -1639,21 +1892,22 @@ function formatDate(dateStr) {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--app-panel);
+  background: var(--app-bg);
   margin: 14px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid var(--app-border);
   overflow: hidden;
 }
 
-.toolbar {
-  padding: 0.8rem 1.2rem;
+/* 内容区工具栏 (wb-content 内) */
+.wb-content .toolbar {
+  padding: 0.9rem 1.5rem;
   border-bottom: 1px solid var(--app-border-soft);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: var(--app-panel-soft);
+  background: var(--app-panel);
   min-width: 0;
 }
 
@@ -1739,18 +1993,43 @@ function formatDate(dateStr) {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  padding: 12px 16px 16px;
+}
+
+/* 表格内容居中限宽，两侧留白，带卡片感 */
+.table-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  background: var(--app-panel);
+  border-radius: 12px;
+  border: 1px solid var(--app-border-soft);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+}
+
+/* 分栏模式下表格占满窄列，不居中 */
+.wb-content.is-split .table-inner {
+  max-width: none;
+  margin: 0;
 }
 
 .list-cap-hint {
-  padding: 0.5rem 1.25rem 0;
+  padding: 0.75rem 1.25rem;
   font-size: 0.8rem;
   color: var(--app-text-faint);
+  background: var(--app-panel-soft);
+  border-bottom: 1px solid var(--app-border-soft);
 }
 
 .item-name-cell {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 4px 0;
 }
 
 .folder-cell {
@@ -1759,32 +2038,46 @@ function formatDate(dateStr) {
 
 .doc-cell {
   cursor: pointer;
+  transition: transform 0.15s ease;
 }
 
 .doc-cell:hover .item-name {
   color: var(--app-accent);
 }
 
+.doc-cell:hover {
+  transform: translateX(2px);
+}
+
 .folder-badge-icon {
-  width: 26px;
-  height: 26px;
-  background: var(--app-hover);
-  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, var(--app-hover) 0%, var(--app-panel-soft) 100%);
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--app-text-2);
+  border: 1px solid var(--app-border-soft);
+  transition: all 0.2s ease;
+}
+
+.folder-cell:hover .folder-badge-icon {
+  background: var(--app-accent-weak);
+  color: var(--app-accent);
+  border-color: var(--app-accent);
 }
 
 .ext-badge {
   font-size: 0.65rem;
   font-weight: 700;
   color: #ffffff;
-  padding: 2px 5px;
-  border-radius: 4px;
+  padding: 3px 6px;
+  border-radius: 6px;
   letter-spacing: 0.5px;
-  min-width: 28px;
+  min-width: 30px;
   text-align: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .item-name {
@@ -1793,6 +2086,7 @@ function formatDate(dateStr) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: color 0.15s ease;
 }
 
 .item-name.font-medium {
@@ -1802,7 +2096,7 @@ function formatDate(dateStr) {
 .tag-cell {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
   overflow: hidden;
 }
@@ -1811,36 +2105,48 @@ function formatDate(dateStr) {
 .row-tag-chip {
   font-size: 0.68rem;
   font-weight: 500;
-  padding: 1px 8px;
+  padding: 2px 10px;
   border-radius: 999px;
   border: 1px solid transparent;
   white-space: nowrap;
   flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.row-tag-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
 }
 
 .row-tag-more {
   font-size: 0.68rem;
   color: var(--app-text-faint);
   flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--app-hover);
 }
 
 .type-text, .size-text, .date-text {
   font-size: 0.825rem;
   color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .more-action-btn {
   cursor: pointer;
   color: var(--app-text-faint);
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 6px 10px;
+  border-radius: 6px;
   transition: all 0.2s;
   outline: none;
+  border: 1px solid transparent;
 }
 
 .more-action-btn:hover {
   color: var(--app-text);
   background-color: var(--app-hover);
+  border-color: var(--app-border);
 }
 
 .dialog-footer {

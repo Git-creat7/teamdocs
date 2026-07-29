@@ -22,7 +22,7 @@ CREATE TABLE document (
     space_id    BIGINT       NOT NULL COMMENT '所属空间',
     folder_id   BIGINT       NOT NULL DEFAULT 0 COMMENT '所属文件夹，0表示根目录',
     name        VARCHAR(255) NOT NULL COMMENT '文档显示名',
-    file_type   VARCHAR(32)  DEFAULT NULL COMMENT '文件类型（pdf/docx/md/png等）',
+    file_type   VARCHAR(255) DEFAULT NULL COMMENT '文件 MIME 类型',
     file_size   BIGINT       DEFAULT NULL COMMENT '文件大小（字节）',
     file_path   VARCHAR(512) NOT NULL COMMENT '存储路径',
     description VARCHAR(512) DEFAULT NULL COMMENT '文档描述',
