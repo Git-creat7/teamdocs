@@ -42,6 +42,17 @@ export function downloadDocumentApi(spaceId, documentId) {
 }
 
 /**
+ * 获取文档在线预览所需的元数据与预签名 URL
+ * 独立于下载接口：预览走 /preview，绝不复用 /download
+ * @param {number|string} spaceId
+ * @param {number|string} documentId
+ * @returns {Promise<Object>} { documentId, name, fileType, fileSize, url }
+ */
+export function previewDocumentApi(spaceId, documentId) {
+  return request.get(`/spaces/${spaceId}/documents/${documentId}/preview`)
+}
+
+/**
  * 文档详情 (含标签列表；后端同时记入最近浏览)
  * @param {number|string} spaceId
  * @param {number|string} documentId

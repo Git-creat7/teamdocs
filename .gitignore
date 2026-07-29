@@ -39,6 +39,8 @@ dist/
 dist-ssr/
 test-results/
 .npm/
+teamdocs-frontend/public/vendor/
+teamdocs-frontend/public/flyfish-viewer-assets.json
 
 # Logs
 npm-debug.log*
@@ -61,9 +63,7 @@ pnpm-debug.log*
 *.lock
 .cache/
 
-# claude
-CLAUDE.md
-.claude/
+# Repository-local secrets
 /.env
 /.env.docker
 .gstack/

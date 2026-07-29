@@ -598,23 +598,4 @@ async function handleSubmit() {
   75%, 100% { transform: scale(2.2); opacity: 0; }
 }
 
-/* ===== 减弱动效 =====
-   reduce ≠ 无动画：入场降级为纯透明度淡入 (无位移无缩放)，
-   只彻底禁掉无限循环的装饰动画和 hover 位移 */
-@media (prefers-reduced-motion: reduce) {
-  .card-enter,
-  .enter-rise {
-    animation-name: fade-in;
-  }
-  .deco-box {
-    animation: none !important;
-  }
-  .auth-card:hover,
-  .field-input:focus,
-  .submit-btn:hover,
-  .theme-btn:hover,
-  .switch-btn:hover {
-    transform: none;
-  }
-}
 </style>

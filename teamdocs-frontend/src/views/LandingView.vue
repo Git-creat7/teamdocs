@@ -947,22 +947,4 @@ async function handleDemo() {
   .lp-features { padding: 64px 24px; }
   .lp-final { padding: 80px 24px; }
 }
-
-/* ===== 减弱动效 ===== */
-@media (prefers-reduced-motion: reduce) {
-  .lp-line,
-  .lp-line-top {
-    animation: none;
-    opacity: 0.35;
-  }
-  .lp-ticker-track,
-  .lp-trusted-track {
-    animation: none;
-  }
-  .reveal {
-    opacity: 1;
-    transform: none;
-    transition: none;
-  }
-}
 </style>

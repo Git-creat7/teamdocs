@@ -8,6 +8,7 @@ import ActivityView from '@/views/ActivityView.vue'
 import TrashView from '@/views/TrashView.vue'
 import TagManageView from '@/views/TagManageView.vue'
 import SpaceWorkbenchView from '@/views/SpaceWorkbenchView.vue'
+import DocumentPreviewPage from '@/views/DocumentPreviewPage.vue'
 
 const routes = [
   // 官网落地页：登录墙外的产品门面，与下方 AppShell 同挂 '/'，
@@ -38,6 +39,12 @@ const routes = [
       { path: 'spaces', redirect: '/home' },
       { path: 'spaces/:spaceId', name: 'SpaceWorkbench', component: SpaceWorkbenchView }
     ]
+  },
+  {
+    path: '/preview/:spaceId/:documentId',
+    name: 'DocumentPreview',
+    component: DocumentPreviewPage,
+    meta: { requiresAuth: true }
   },
   { path: '/:pathMatch(.*)*', redirect: '/home' }
 ]
