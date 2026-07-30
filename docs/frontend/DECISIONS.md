@@ -96,7 +96,7 @@ Axios 拦截器必须处理：业务 `code`、HTTP 401、网络错误。不要�
 - nickname：最长 50；可传空串清空（后端 trim 后 blank → null）
 - email：合法邮箱，最长 100；可传空串清空；唯一
 - 头像：JPG/PNG/GIF/WEBP，业务上限 2MB；**FormData 不要手写 Content-Type**（交给浏览器带 boundary）
-- 容器 multipart 已放宽到约 20MB（文档上传用）；头像仍以业务 2MB 为准
+- 容器 multipart 单文件上限为 100MB（文档上传用）；头像仍以业务 2MB 为准
 
 **登录 / 注册行为**
 

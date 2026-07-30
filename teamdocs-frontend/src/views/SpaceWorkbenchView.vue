@@ -48,26 +48,30 @@
         <div class="tree-panel-header">
           <span class="tree-panel-title">文件夹</span>
           <div class="tree-header-actions">
-            <el-tooltip content="收起全部" placement="top">
-              <el-icon class="tree-add-btn" @click="collapseAllFolders"><ChevronsDownUp /></el-icon>
-            </el-tooltip>
             <el-tooltip content="新建文件夹" placement="top">
               <el-icon class="tree-add-btn" @click="openCreateFolderDialog"><FolderPlus /></el-icon>
             </el-tooltip>
           </div>
         </div>
         <div class="tree-panel-content">
-          <div
+          <button
+            type="button"
             :class="['tree-item-root', { active: currentFolderId === 0 && viewMode === 'folder' }]"
-            @click="navigateToFolder({ id: 0, name: spaceInfo?.name || '根目录' }, 'sidebar')"
+            :aria-expanded="rootTreeExpanded"
+            @click="handleRootFolderClick"
           >
-            <el-icon class="folder-icon"><FolderOpen /></el-icon>
+            <ChevronRight :size="14" :class="['tree-root-expand-icon', { expanded: rootTreeExpanded }]" />
+            <el-icon class="folder-icon">
+              <FolderOpen v-if="rootTreeExpanded" />
+              <Folder v-else />
+            </el-icon>
             <span class="folder-name">全部文件</span>
-          </div>
+          </button>
 
           <!-- 受控树：不用 lazy，展开状态由 expandedKeys + node.expanded 稳住 -->
           <el-tree
             v-if="spaceId > 0"
+            v-show="rootTreeExpanded"
             ref="treeRef"
             :data="treeData"
             :props="treeProps"
@@ -318,6 +322,9 @@
             @update:active-tab="updateDetailTab"
             @close="closeDetail"
             @download="handleDownload"
+            @rename="handleDocRename"
+            @tags="handleItemCommand('tags', $event)"
+            @move="handleItemCommand('move', $event)"
           />
         </div>
       </section>
@@ -415,7 +422,7 @@ import {
   Tag,
   MessageSquare,
   FolderInput,
-  ChevronsDownUp,
+  ChevronRight,
   SearchX,
   CloudUpload,
   ArrowLeft
@@ -504,6 +511,7 @@ const showListInDetail = computed(() => {
 const treeRef = ref(null)
 const treeData = ref([])
 const expandedKeys = ref([])
+const rootTreeExpanded = ref(true)
 const loadedFolderIds = ref(new Set())
 const treeProps = {
   label: 'name',
@@ -633,7 +641,12 @@ function syncDocDetailFromId(docId) {
       setFromDetail(docId, detail.tags)
     })
     .catch(() => {
-      // 降级或者关闭
+      if (Number(route.query.doc) !== docId) return
+      detailDoc.value = null
+      const query = { ...route.query }
+      delete query.doc
+      delete query.tab
+      router.replace({ query })
     })
 }
 
@@ -757,6 +770,7 @@ async function initFromRoute() {
   currentFolderId.value = 0
   treeData.value = []
   expandedKeys.value = []
+  rootTreeExpanded.value = true
   loadedFolderIds.value = new Set()
   subFolders.value = []
   documents.value = []
@@ -1110,7 +1124,7 @@ function syncTreeSelection(folderId) {
   })
 }
 
-async function navigateToFolder(folder, fromSource = 'table') {
+async function navigateToFolder(folder, fromSource = 'table', { expandTree = true } = {}) {
   if (!folder) return
 
   // 处于筛选态或详情态时，任何目录导航先统一回到目录视图并强制刷新
@@ -1122,7 +1136,7 @@ async function navigateToFolder(folder, fromSource = 'table') {
   if (folder.id === currentFolderId.value && fromSource !== 'force') {
     if (folder.id) {
       await loadTreeChildren(folder.id)
-      ensureExpanded(folder.id)
+      if (expandTree) ensureExpanded(folder.id)
     }
     syncTreeSelection(folder.id || 0)
     return
@@ -1147,17 +1161,30 @@ async function navigateToFolder(folder, fromSource = 'table') {
 
   currentFolderId.value = folder.id
   await loadTreeChildren(folder.id)
-  ensureExpanded(folder.id)
+  if (expandTree) ensureExpanded(folder.id)
   await loadCurrentFolderContent()
   syncTreeSelection(folder.id)
 }
 
-async function handleTreeNodeClick(data) {
+async function handleRootFolderClick() {
+  rootTreeExpanded.value = !rootTreeExpanded.value
+  if (!rootTreeExpanded.value) collapseAllTreeNodes()
+  await navigateToFolder({ id: 0, name: spaceInfo.value?.name || '根目录' }, 'sidebar')
+}
+
+async function handleTreeNodeClick(data, node) {
   if (!data?.id) return
-  // 先拉子节点写入 treeData，再标记展开，避免 lazy 闪缩
-  await loadTreeChildren(data.id)
-  ensureExpanded(data.id)
-  await navigateToFolder(data, 'sidebar')
+  if (node?.expanded) {
+    node.collapse()
+    handleTreeNodeCollapse(data)
+  } else {
+    await loadTreeChildren(data.id)
+    if (!treeRef.value?.getNode(data.id)?.isLeaf) {
+      ensureExpanded(data.id)
+    }
+  }
+
+  await navigateToFolder(data, 'sidebar', { expandTree: false })
 }
 
 async function handleTreeNodeExpand(data) {
@@ -1190,19 +1217,19 @@ function handleTreeNodeCollapse(data) {
     if (!treeRef.value) return
     removeIds.forEach((id) => {
       const n = treeRef.value.getNode(id)
-      if (n && n.expanded) n.expanded = false
+      if (n?.expanded) n.collapse()
     })
   })
 }
 
-function collapseAllFolders() {
+function collapseAllTreeNodes() {
   const ids = [...expandedKeys.value]
   expandedKeys.value = []
   nextTick(() => {
     if (!treeRef.value) return
     ids.forEach((id) => {
-      const n = treeRef.value.getNode(id)
-      if (n && n.expanded) n.expanded = false
+      const node = treeRef.value.getNode(id)
+      if (node?.expanded) node.collapse()
     })
   })
 }
@@ -1228,15 +1255,15 @@ function triggerUpload() {
   }
 }
 
-// 与后端 multipart 容器上限 (20MB) 对齐的前端预检
-const MAX_UPLOAD_SIZE = 20 * 1024 * 1024
+// 与后端 multipart 单文件上限 (100MB) 对齐的前端预检
+const MAX_UPLOAD_SIZE = 100 * 1024 * 1024
 
 async function handleFileSelected(event) {
   const file = event.target.files?.[0]
   if (!file) return
 
   if (file.size > MAX_UPLOAD_SIZE) {
-    ElMessage.error('文件大小不能超过 20MB')
+    ElMessage.error('文件大小不能超过 100MB')
     if (event?.target) event.target.value = ''
     return
   }
@@ -1750,12 +1777,17 @@ function formatDate(dateStr) {
 }
 
 .tree-item-root {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 8px 10px;
+  border: 0;
   border-radius: 8px;
+  background: transparent;
+  font-family: inherit;
   font-size: 0.86rem;
+  text-align: left;
   color: var(--app-text-2);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1764,6 +1796,11 @@ function formatDate(dateStr) {
 
 .tree-item-root:hover {
   background-color: var(--app-hover);
+}
+
+.tree-item-root:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: -2px;
 }
 
 .tree-item-root.active {
@@ -1779,6 +1816,17 @@ function formatDate(dateStr) {
 .folder-icon {
   font-size: 1rem;
   color: var(--app-text-muted);
+}
+
+.tree-root-expand-icon {
+  flex-shrink: 0;
+  color: var(--app-text-faint);
+  transition: transform 150ms var(--ease-standard), color var(--dur-fast) var(--ease-standard);
+}
+
+.tree-root-expand-icon.expanded {
+  color: var(--app-text-muted);
+  transform: rotate(90deg);
 }
 
 .tree-item-root.active .folder-icon {

@@ -68,16 +68,6 @@ export function middleEllipsis(name, max = 40) {
 }
 
 /**
- * 把文件名转成安全的搜索关键词：
- * 去掉 BOOLEAN MODE 操作符 (+ - * " 等)，按 CJK/字母数字切词后空格连接
- */
-export function toSearchKeyword(name) {
-  if (!name) return ''
-  const tokens = String(name).match(/[一-龥]+|[a-zA-Z0-9]+/g)
-  return tokens ? tokens.join(' ') : ''
-}
-
-/**
  * 最近文档的统一跳转：直接打开详情预览，不再绕 search + highlight。
  * 三处入口 (首页/最近浏览页/侧栏) 共用，行为保持一致。
  * notify 参数保留以兼容旧调用，已不再使用。

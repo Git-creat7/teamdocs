@@ -67,11 +67,14 @@ const viewerRef = ref(null)
 const downloading = ref(false)
 
 // 预览类别判定：优先用后端 fileType (MIME)，回退到文件名扩展名
-const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']
+const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'heic', 'heif']
 const PDF_EXT = ['pdf']
 const TEXT_EXT = ['txt', 'md', 'markdown', 'csv', 'log', 'json', 'xml', 'yaml', 'yml',
   'js', 'ts', 'html', 'css', 'java', 'py', 'go', 'sql']
-const OFFICE_EXT = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx']
+const OFFICE_EXT = [
+  'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  'ofd', 'rtf', 'odt', 'ods', 'odp'
+]
 
 function resolveCategory(m) {
   const mime = String(m.fileType || '').toLowerCase()
@@ -94,47 +97,10 @@ const viewerOptions = computed(() => ({
       return false
     }
   },
-  // 隐藏 PDF 左侧页面导航/目录/缩略图
-  sidebar: false,
-  outline: false,
-  thumbnails: false,
-  nav: false,
-  pageNav: false,
-  pageNavigation: false,
-  sidebarView: false,
-  sidebarVisible: false,
-  hideSidebar: true,
-  hideOutline: true,
-  hideThumbnails: true,
-  hideNav: true,
-  hidePageNav: true,
-  hidePageNavigation: true,
-  hideSidebarView: true,
-  hideSidebarVisible: true,
-  sidebarOpen: false,
-  outlineOpen: false,
-  thumbnailsOpen: false,
-  navOpen: false,
-  pageNavOpen: false,
-  pageNavigationOpen: false,
-  sidebarViewOpen: false,
-  sidebarVisibleOpen: false,
-  enableSidebar: false,
-  enableOutline: false,
-  enableThumbnails: false,
-  enableNav: false,
-  enablePageNav: false,
-  enablePageNavigation: false,
-  enableSidebarView: false,
-  enableSidebarVisible: false,
-  showSidebar: false,
-  showOutline: false,
-  showThumbnails: false,
-  showNav: false,
-  showPageNav: false,
-  showPageNavigation: false,
-  showSidebarView: false,
-  showSidebarVisible: false
+  pdf: {
+    // 隐藏 PDF 左侧的页面与目录导航，同时移除导航开关。
+    navigation: false
+  }
 }))
 
 async function load() {

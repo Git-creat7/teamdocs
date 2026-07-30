@@ -11,7 +11,7 @@ import asia.creat.vo.DocumentPreviewVO;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface DocumentService {
-    void upload(Long spaceId, Long folderId, MultipartFile file, LoginUser loginUser);
+    Long upload(Long spaceId, Long folderId, MultipartFile file, LoginUser loginUser);
 
     PageResult<Document> listByFolder(Long spaceId, Long folderId, PageQuery pageQuery, LoginUser loginUser);
 

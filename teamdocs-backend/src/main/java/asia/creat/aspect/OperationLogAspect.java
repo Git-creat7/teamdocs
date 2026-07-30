@@ -136,7 +136,13 @@ public class OperationLogAspect {
         String errorMessage = null;
 
         try{
-            return pjp.proceed();
+            Object result = pjp.proceed();
+            if (resourceId == null
+                    && operationLog.resourceIdFromResult()
+                    && result instanceof Number number) {
+                resourceId = number.longValue();
+            }
+            return result;
         }catch (Throwable throwable){
             success = 0;
             errorMessage = throwable.getMessage();
