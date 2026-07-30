@@ -63,9 +63,14 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
-    @OperationLog(value = "上传文档", resourceType = "DOCUMENT", resourceName = "#file.originalFilename")
+    @OperationLog(
+            value = "上传文档",
+            resourceType = "DOCUMENT",
+            resourceName = "#file.originalFilename",
+            resourceIdFromResult = true
+    )
     @RequireSpaceRole
-    public void upload(@SpaceId Long spaceId, Long folderId, MultipartFile file, LoginUser loginUser) {
+    public Long upload(@SpaceId Long spaceId, Long folderId, MultipartFile file, LoginUser loginUser) {
 
         String originalName = file.getOriginalFilename();
         if(originalName == null) {
@@ -108,6 +113,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         log.debug("用户 {} 上传了文件 {} 到空间 {} 的文件夹 {}",loginUser.getUserId(), originalName, spaceId, folderId);
+        return doc.getId();
     }
 
     @Override

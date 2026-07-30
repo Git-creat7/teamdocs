@@ -26,9 +26,9 @@ export function uploadDocumentApi(spaceId, folderId, file) {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('folderId', folderId)
-  // 上传经后端写 MinIO，单独放宽超时，避免被全局 10s 掐断
+  // 100MB 文件需先传后端再写入 MinIO，单独放宽到 5 分钟。
   return request.post(`/spaces/${spaceId}/documents/upload`, formData, {
-    timeout: 120000
+    timeout: 300000
   })
 }
 

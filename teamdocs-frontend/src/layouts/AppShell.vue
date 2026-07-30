@@ -1,5 +1,5 @@
 <template>
-  <div class="shell-root">
+  <div :class="['shell-root', { 'sidebar-resizing': sidebarResizing }]">
     <!-- 移动端抽屉遮罩 -->
     <div
       v-if="isMobile && mobileSidebarOpen"
@@ -8,7 +8,14 @@
     ></div>
 
     <!-- ===== 左侧侧栏 (桌面常驻可折叠 / 移动端抽屉) ===== -->
-    <aside :class="['shell-sidebar', { collapsed: collapsed && !isMobile, 'mobile-open': mobileSidebarOpen }]">
+    <aside
+      :class="['shell-sidebar', {
+        collapsed: effectiveCollapsed,
+        resizing: sidebarResizing,
+        'mobile-open': mobileSidebarOpen
+      }]"
+      :style="!isMobile && !collapsed ? { width: `${sidebarWidth}px` } : undefined"
+    >
       <!-- Logo 区：品牌名 + 副标题 -->
       <div class="sidebar-brand" @click="router.push('/home')">
         <div class="brand-logo">
@@ -17,7 +24,7 @@
             <path d="M3 7V17C3 18.1046 3.89543 19 5 19" stroke="white" stroke-width="2"/>
           </svg>
         </div>
-        <div v-show="!collapsed" class="brand-texts">
+        <div v-show="!effectiveCollapsed" class="brand-texts">
           <span class="brand-text">TeamDocs</span>
           <span class="brand-sub">Document Hub</span>
         </div>
@@ -30,40 +37,40 @@
           @click="router.push('/home')"
         >
           <el-icon class="nav-icon"><Home /></el-icon>
-          <span v-show="!collapsed" class="nav-label">首页</span>
+          <span v-show="!effectiveCollapsed" class="nav-label">首页</span>
         </div>
         <div
           :class="['nav-item', { active: route.path === '/recent' }]"
           @click="router.push('/recent')"
         >
           <el-icon class="nav-icon"><Clock /></el-icon>
-          <span v-show="!collapsed" class="nav-label">最近浏览</span>
+          <span v-show="!effectiveCollapsed" class="nav-label">最近浏览</span>
         </div>
         <div
           :class="['nav-item', { active: route.path === '/activities' }]"
           @click="router.push('/activities')"
         >
           <el-icon class="nav-icon"><UsersRound /></el-icon>
-          <span v-show="!collapsed" class="nav-label">团队动态</span>
+          <span v-show="!effectiveCollapsed" class="nav-label">团队动态</span>
         </div>
         <div
           :class="['nav-item', { active: route.path === '/tags' }]"
           @click="goManageTags"
         >
           <el-icon class="nav-icon"><Tag /></el-icon>
-          <span v-show="!collapsed" class="nav-label">标签管理</span>
+          <span v-show="!effectiveCollapsed" class="nav-label">标签管理</span>
         </div>
         <div
           :class="['nav-item', { active: route.path === '/trash' }]"
           @click="goTrash"
         >
           <el-icon class="nav-icon"><Trash2 /></el-icon>
-          <span v-show="!collapsed" class="nav-label">回收站</span>
+          <span v-show="!effectiveCollapsed" class="nav-label">回收站</span>
         </div>
       </nav>
 
       <!-- 主动作：上传文档 -->
-      <div v-show="!collapsed" class="sidebar-cta">
+      <div v-show="!effectiveCollapsed" class="sidebar-cta">
         <button type="button" class="upload-cta" @click="goUpload">
           <Plus :size="16" :stroke-width="2.4" />
           上传文档
@@ -72,7 +79,7 @@
 
       <!-- 空间列表 -->
       <div class="sidebar-spaces">
-        <div v-show="!collapsed" class="spaces-header">
+        <div v-show="!effectiveCollapsed" class="spaces-header">
           <span class="spaces-title">我的空间</span>
           <el-tooltip content="新建空间" placement="right">
             <el-icon class="spaces-add-btn" @click="createSpaceVisible = true"><Plus /></el-icon>
@@ -84,16 +91,21 @@
             <el-tooltip
               :content="space.name"
               placement="right"
-              :disabled="!collapsed"
+              :disabled="!effectiveCollapsed"
             >
               <div
                 :class="['space-item', { active: activeSpaceId === space.id }]"
-                @click="router.push(`/spaces/${space.id}`)"
+                role="button"
+                tabindex="0"
+                :aria-expanded="expandedSpaceIds.has(space.id)"
+                @click="handleSpaceClick(space.id)"
+                @keydown.enter.prevent="handleSpaceClick(space.id)"
+                @keydown.space.prevent="handleSpaceClick(space.id)"
               >
                 <span class="space-bullet" :style="{ backgroundColor: spaceDotColor(space.id) }"></span>
-                <span v-show="!collapsed" class="space-item-name">{{ space.name }}</span>
+                <span v-show="!effectiveCollapsed" class="space-item-name">{{ space.name }}</span>
                 <el-icon
-                  v-show="!collapsed"
+                  v-show="!effectiveCollapsed"
                   :class="['space-expand-icon', { expanded: expandedSpaceIds.has(space.id) }]"
                   @click.stop="toggleSpaceExpand(space.id)"
                 >
@@ -103,7 +115,7 @@
             </el-tooltip>
 
             <!-- 展开的直达入口：成员 / 标签 / 回收站 -->
-            <div v-if="!collapsed && expandedSpaceIds.has(space.id)" class="space-sublinks">
+            <div v-if="!effectiveCollapsed && expandedSpaceIds.has(space.id)" class="space-sublinks">
               <div class="space-sublink" @click="goSpacePanel(space.id, 'members')">
                 <el-icon><User /></el-icon>
                 <span>成员</span>
@@ -119,7 +131,7 @@
             </div>
           </div>
 
-          <div v-if="!spacesLoading && spaces.length === 0 && !collapsed" class="spaces-empty">
+          <div v-if="!spacesLoading && spaces.length === 0 && !effectiveCollapsed" class="spaces-empty">
             还没有空间
             <el-button link type="primary" size="small" @click="createSpaceVisible = true">
               去创建
@@ -128,7 +140,7 @@
         </div>
 
         <!-- 最近文档迷你分组：最快回到工作的入口 -->
-        <div v-if="!collapsed && sidebarRecentDocs.length > 0" class="sidebar-recent">
+        <div v-if="!effectiveCollapsed && sidebarRecentDocs.length > 0" class="sidebar-recent">
           <div class="spaces-header">
             <span class="spaces-title">最近文档</span>
           </div>
@@ -148,7 +160,7 @@
 
       <!-- 底部：我的身份卡 + 折叠 -->
       <div class="sidebar-footer">
-        <div v-if="!collapsed && userInfo" class="identity-card">
+        <div v-if="!effectiveCollapsed && userInfo" class="identity-card">
           <el-avatar :size="30" :src="userInfo.avatar || undefined" class="identity-avatar">
             {{ (userInfo.nickname || userInfo.username || 'U').charAt(0).toUpperCase() }}
           </el-avatar>
@@ -157,14 +169,33 @@
             <span class="identity-sub">{{ spaces.length }} 个空间</span>
           </div>
         </div>
-        <div class="nav-item" @click="collapsed = !collapsed">
+        <div class="nav-item" @click="toggleSidebar">
           <el-icon class="nav-icon">
-            <PanelLeftOpen v-if="collapsed" />
+            <PanelLeftOpen v-if="effectiveCollapsed" />
             <PanelLeftClose v-else />
           </el-icon>
-          <span v-show="!collapsed" class="nav-label">收起侧栏</span>
+          <span v-show="!effectiveCollapsed" class="nav-label">
+            {{ isMobile ? '关闭侧栏' : '收起侧栏' }}
+          </span>
         </div>
       </div>
+
+      <div
+        v-if="!collapsed && !isMobile"
+        class="sidebar-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整侧栏宽度"
+        :aria-valuemin="SIDEBAR_MIN_WIDTH"
+        :aria-valuemax="SIDEBAR_MAX_WIDTH"
+        :aria-valuenow="Math.round(sidebarWidth)"
+        :aria-valuetext="`${Math.round(sidebarWidth)} 像素`"
+        tabindex="0"
+        title="拖动调整侧栏宽度"
+        @pointerdown="startSidebarResize"
+        @lostpointercapture="handleSidebarResizeLostCapture"
+        @keydown="handleSidebarResizeKeydown"
+      ></div>
     </aside>
 
     <!-- ===== 右侧主区 ===== -->
@@ -180,30 +211,29 @@
         >
           <Menu :size="20" />
         </button>
-        <!-- 左：搜索范围空间选择器 (带彩色圆点) -->
-        <el-select
-          v-model="searchSpaceId"
-          class="search-scope-select"
-          placeholder="范围"
-          :disabled="spaces.length === 0"
-        >
-          <template #prefix>
-            <span
-              class="scope-dot"
-              :style="{ backgroundColor: searchSpaceId ? spaceDotColor(searchSpaceId) : '#2563eb' }"
-            ></span>
-          </template>
-          <el-option label="全部空间" :value="0" />
-          <el-option
-            v-for="space in spaces"
-            :key="space.id"
-            :label="space.name"
-            :value="space.id"
-          />
-        </el-select>
-
-        <!-- 中：全局搜索 -->
+        <!-- 全局搜索：范围选择器与关键词输入组成同一个搜索条件组 -->
         <div class="topbar-search">
+          <el-select
+            v-model="searchSpaceId"
+            class="search-scope-select"
+            placeholder="范围"
+            :disabled="spaces.length === 0"
+          >
+            <template #prefix>
+              <span
+                class="scope-dot"
+                :style="{ backgroundColor: searchSpaceId ? spaceDotColor(searchSpaceId) : '#2563eb' }"
+              ></span>
+            </template>
+            <el-option label="全部空间" :value="0" />
+            <el-option
+              v-for="space in spaces"
+              :key="space.id"
+              :label="space.name"
+              :value="space.id"
+            />
+          </el-select>
+
           <el-input
             v-model.trim="searchKeyword"
             class="global-search-input"
@@ -306,7 +336,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -351,15 +381,160 @@ watch(collapsed, (val) => {
   localStorage.setItem('teamdocs_sidebar_collapsed', val ? '1' : '0')
 })
 
+const SIDEBAR_WIDTH_STORAGE_KEY = 'teamdocs_sidebar_width'
+const SIDEBAR_DEFAULT_WIDTH = 232
+const SIDEBAR_MIN_WIDTH = 200
+const SIDEBAR_MAX_WIDTH = 360
+
+function clampSidebarWidth(width) {
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width))
+}
+
+function getInitialSidebarWidth() {
+  const savedWidth = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
+  if (savedWidth === null) return SIDEBAR_DEFAULT_WIDTH
+
+  const parsedWidth = Number(savedWidth)
+  return Number.isFinite(parsedWidth)
+    ? clampSidebarWidth(parsedWidth)
+    : SIDEBAR_DEFAULT_WIDTH
+}
+
+const sidebarWidth = ref(getInitialSidebarWidth())
+const sidebarResizing = ref(false)
+let resizePointerId = null
+let resizeHandleElement = null
+let resizeStartX = 0
+let resizeStartWidth = SIDEBAR_DEFAULT_WIDTH
+
+function persistSidebarWidth() {
+  localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth.value)))
+}
+
+function removeSidebarResizeListeners() {
+  window.removeEventListener('pointermove', handleSidebarResizeMove)
+  window.removeEventListener('pointerup', handleSidebarResizeEnd)
+  window.removeEventListener('pointercancel', handleSidebarResizeEnd)
+  window.removeEventListener('blur', handleSidebarResizeBlur)
+}
+
+function stopSidebarResize(shouldPersist = true) {
+  if (sidebarResizing.value && shouldPersist) persistSidebarWidth()
+
+  const activePointerId = resizePointerId
+  const activeHandle = resizeHandleElement
+  sidebarResizing.value = false
+  resizePointerId = null
+  resizeHandleElement = null
+  removeSidebarResizeListeners()
+
+  if (activePointerId !== null && activeHandle?.hasPointerCapture(activePointerId)) {
+    activeHandle.releasePointerCapture(activePointerId)
+  }
+}
+
+function startSidebarResize(event) {
+  if (event.button !== 0 || collapsed.value || isMobile.value) return
+
+  event.preventDefault()
+  resizePointerId = event.pointerId
+  resizeHandleElement = event.currentTarget
+  resizeStartX = event.clientX
+  resizeStartWidth = sidebarWidth.value
+  sidebarResizing.value = true
+  resizeHandleElement.setPointerCapture(event.pointerId)
+
+  window.addEventListener('pointermove', handleSidebarResizeMove, { passive: false })
+  window.addEventListener('pointerup', handleSidebarResizeEnd)
+  window.addEventListener('pointercancel', handleSidebarResizeEnd)
+  window.addEventListener('blur', handleSidebarResizeBlur)
+}
+
+function handleSidebarResizeMove(event) {
+  if (!sidebarResizing.value || event.pointerId !== resizePointerId) return
+  if (event.pointerType === 'mouse' && event.buttons === 0) {
+    stopSidebarResize()
+    return
+  }
+
+  event.preventDefault()
+  sidebarWidth.value = clampSidebarWidth(
+    resizeStartWidth + event.clientX - resizeStartX
+  )
+}
+
+function handleSidebarResizeEnd(event) {
+  if (resizePointerId !== null && event.pointerId !== resizePointerId) return
+  stopSidebarResize()
+}
+
+function handleSidebarResizeLostCapture(event) {
+  if (sidebarResizing.value && event.pointerId === resizePointerId) {
+    stopSidebarResize()
+  }
+}
+
+function handleSidebarResizeBlur() {
+  stopSidebarResize()
+}
+
+function handleSidebarResizeKeydown(event) {
+  let nextWidth
+  switch (event.key) {
+    case 'ArrowLeft':
+      nextWidth = sidebarWidth.value - 8
+      break
+    case 'ArrowRight':
+      nextWidth = sidebarWidth.value + 8
+      break
+    case 'Home':
+      nextWidth = SIDEBAR_MIN_WIDTH
+      break
+    case 'End':
+      nextWidth = SIDEBAR_MAX_WIDTH
+      break
+    default:
+      return
+  }
+
+  event.preventDefault()
+  sidebarWidth.value = clampSidebarWidth(nextWidth)
+  persistSidebarWidth()
+}
+
 // 移动端：侧栏变抽屉，汉堡键唤起，导航后自动收起
 const mq = window.matchMedia('(max-width: 768px)')
 const isMobile = ref(mq.matches)
 mq.addEventListener('change', (e) => { isMobile.value = e.matches })
 const mobileSidebarOpen = ref(false)
+const effectiveCollapsed = computed(() => collapsed.value && !isMobile.value)
+
+function toggleSidebar() {
+  if (isMobile.value) {
+    mobileSidebarOpen.value = false
+    return
+  }
+  collapsed.value = !collapsed.value
+}
+
+watch([collapsed, isMobile], ([isCollapsed, mobile]) => {
+  if (isCollapsed || mobile) stopSidebarResize()
+})
 
 watch(() => route.fullPath, () => {
   mobileSidebarOpen.value = false
 })
+
+// 打开文档详情时收起桌面侧栏，为列表与预览释放横向空间。
+watch(
+  [() => route.name, () => route.query.doc, isMobile],
+  ([routeName, docId, mobile]) => {
+    if (!mobile && routeName === 'SpaceWorkbench' && Number(docId) > 0) {
+      collapsed.value = true
+    }
+  },
+  { immediate: true }
+)
 
 // 当前激活的空间 (用于侧栏高亮)
 const activeSpaceId = computed(() => {
@@ -387,14 +562,24 @@ watch(activeSpaceId, (id) => {
   }
 }, { immediate: true })
 
-function toggleSpaceExpand(id) {
+function setSpaceExpanded(id, expanded) {
   const next = new Set(expandedSpaceIds.value)
-  if (next.has(id)) {
-    next.delete(id)
-  } else {
+  if (expanded) {
     next.add(id)
+  } else {
+    next.delete(id)
   }
   expandedSpaceIds.value = next
+}
+
+function toggleSpaceExpand(id) {
+  setSpaceExpanded(id, !expandedSpaceIds.value.has(id))
+}
+
+async function handleSpaceClick(id) {
+  const shouldExpand = !expandedSpaceIds.value.has(id)
+  await router.push(`/spaces/${id}`)
+  setSpaceExpanded(id, shouldExpand)
 }
 
 function goSpacePanel(id, panel) {
@@ -547,6 +732,10 @@ onMounted(() => {
   refreshSpaces()
   loadSidebarRecent()
 })
+
+onUnmounted(() => {
+  stopSidebarResize(false)
+})
 </script>
 
 <style scoped>
@@ -558,9 +747,16 @@ onMounted(() => {
   background-color: var(--app-bg);
 }
 
+.shell-root.sidebar-resizing,
+.shell-root.sidebar-resizing * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
 /* ===== 侧栏 ===== */
 .shell-sidebar {
   width: 232px;
+  position: relative;
   background: var(--app-panel-soft);
   border-right: 1px solid var(--app-border);
   display: flex;
@@ -570,8 +766,42 @@ onMounted(() => {
   overflow: hidden;
 }
 
+.shell-sidebar.resizing {
+  transition: none;
+}
+
 .shell-sidebar.collapsed {
   width: 60px;
+}
+
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.sidebar-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  background: transparent;
+  transform: translateX(-50%);
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+
+.sidebar-resizer:hover::after,
+.sidebar-resizer:focus-visible::after,
+.shell-sidebar.resizing .sidebar-resizer::after {
+  background: var(--app-accent);
 }
 
 .sidebar-brand {
@@ -756,6 +986,11 @@ onMounted(() => {
 
 .space-item:hover {
   background-color: var(--app-hover);
+}
+
+.space-item:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: -2px;
 }
 
 .space-item.active {
@@ -979,11 +1214,13 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-/* 对标图布局：范围选择器独立居左，搜索框独立居中 */
+/* 搜索范围与关键词保持紧邻，作为一个完整的搜索条件组居中展示。 */
 .topbar-search {
   flex: 1;
   display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -1006,6 +1243,8 @@ onMounted(() => {
 }
 
 .global-search-input {
+  flex: 1 1 460px;
+  min-width: 0;
   max-width: 460px;
 }
 

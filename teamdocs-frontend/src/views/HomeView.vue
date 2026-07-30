@@ -18,6 +18,14 @@
         </div>
       </div>
 
+      <!-- 新手引导进度横幅：有空间但三步未走完时显示 -->
+      <OnboardingBanner
+        v-if="!spacesLoading"
+        :spaces="spaces"
+        class="anim-item"
+        style="--delay: 1"
+      />
+
       <!-- 空态：三步引导 -->
       <div v-if="isEmpty" class="onboard-card anim-item" style="--delay: 1">
         <h2 class="onboard-title">三步开始团队协作</h2>
@@ -206,12 +214,12 @@
                   {{ activityVerb(act) }}
                   <template v-if="activityName(act)">
                     <a
-                      v-if="activityMeta(act).style === 'doc'"
+                      v-if="canOpenActivityDocument(act)"
                       class="activity-doc"
                       @click.prevent="openActivityDoc(act)"
                     >{{ truncateText(activityName(act), 30) }}</a>
                     <span
-                      v-else-if="activityMeta(act).style === 'strong'"
+                      v-else-if="activityMeta(act).style === 'doc' || activityMeta(act).style === 'strong'"
                       class="activity-strong"
                     >{{ truncateText(activityName(act), 30) }}</span>
                     <span
@@ -393,6 +401,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { FolderOpen, MoreHorizontal, Pencil, Trash2, Plus, Clock, ChevronRight, User, Tag, History, FileText, UsersRound } from 'lucide-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
 import FileIcon from '@/components/FileIcon.vue'
+import OnboardingBanner from '@/components/OnboardingBanner.vue'
 import { getRecentDocumentsApi } from '@/api/user'
 import { getActivitiesApi } from '@/api/activity'
 import { createSpaceApi, updateSpaceApi, deleteSpaceApi } from '@/api/space'
@@ -403,7 +412,7 @@ import { formatDateTime, formatRelativeTime, getFileExt, getFileTypeColor, build
 import { tagStyle } from '@/utils/tagColors'
 import { spaceIconPalette } from '@/utils/spaceColors'
 import { avatarColor } from '@/utils/userColors'
-import { activityMeta, activityName, activityVerb, truncateText } from '@/utils/activityText'
+import { activityMeta, activityName, activityVerb, canOpenActivityDocument, truncateText } from '@/utils/activityText'
 
 const router = useRouter()
 const spacesStore = useSpacesStore()
@@ -423,13 +432,11 @@ const isEmpty = computed(() => !spacesLoading.value && spaces.value.length === 0
 // 继续阅读卡取最近一条浏览记录
 const resumeDoc = computed(() => recentDocs.value[0] || null)
 
-// 动态里的文档名点击后进所在空间搜索定位 (与最近浏览同一套链路)
 function openActivityDoc(act) {
-  const keyword = toSearchKeyword(act.documentName || act.resourceName)
-  if (!keyword || !act.spaceId) return
+  if (!canOpenActivityDocument(act) || !act.spaceId) return
   router.push({
     path: `/spaces/${act.spaceId}`,
-    query: { search: keyword, t: Date.now() }
+    query: { doc: act.resourceId, tab: 'preview' }
   })
 }
 

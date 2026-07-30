@@ -13,7 +13,7 @@ const ACTIVITY_META = {
   '恢复文档': { short: '恢复了', full: '恢复了文档', style: 'doc' },
   '彻底删除文档': { short: '彻底删除了', full: '彻底删除了文档', style: 'strong' },
   '为文件添加标签': { short: '给', full: '为文档添加了标签', style: 'doc', suffix: '打了标签' },
-  '移除文件标签': { short: '移除了', full: '移除了文档标签', style: 'doc', suffix: '的标签' },
+  '从文件移除标签': { short: '移除了', full: '移除了文档标签', style: 'doc', suffix: '的标签' },
   '添加评论': { short: '在“', full: '发表了评论', style: 'doc', suffix: '”发表了评论' },
   '删除评论': { short: '删除了评论', full: '删除了评论' },
   '创建文件夹': { short: '创建了文件夹', full: '创建了文件夹', style: 'strong' },
@@ -31,6 +31,7 @@ const ACTIVITY_META = {
 }
 
 const FALLBACK_META = {}
+const NON_OPENABLE_DOCUMENT_OPERATIONS = new Set(['删除文档', '彻底删除文档'])
 
 export function activityMeta(act) {
   return ACTIVITY_META[act.operationName] || FALLBACK_META
@@ -49,6 +50,13 @@ export function activityVerb(act) {
   const meta = activityMeta(act)
   if (!meta.short) return act.operationName
   return activityName(act) ? meta.short : meta.full
+}
+
+export function canOpenActivityDocument(act) {
+  return activityMeta(act).style === 'doc'
+    && act?.resourceType === 'DOCUMENT'
+    && Number(act?.resourceId) > 0
+    && !NON_OPENABLE_DOCUMENT_OPERATIONS.has(act.operationName)
 }
 
 export function truncateText(s, max = 40) {

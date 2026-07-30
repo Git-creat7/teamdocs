@@ -8,9 +8,9 @@ spring:
     name: teamdocs-backend
   servlet:
     multipart:
-      # 容器上限需 ≥ 业务上限；头像业务限制 2MB，文档可更大
-      max-file-size: 20MB
-      max-request-size: 25MB
+      # 容器上限需 ≥ 业务上限；头像业务限制 2MB，文档限制 100MB
+      max-file-size: 100MB
+      max-request-size: 105MB
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration

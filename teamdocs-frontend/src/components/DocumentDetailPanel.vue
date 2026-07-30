@@ -28,10 +28,24 @@
             </template>
           </div>
         </div>
-        <el-button type="primary" plain size="small" class="download-btn" @click="$emit('download', doc)">
-          <el-icon><Download /></el-icon>
-          下 载
-        </el-button>
+        <div class="doc-hero-actions">
+          <el-button type="primary" plain size="small" class="doc-action-btn" @click="$emit('download', doc)">
+            <el-icon><Download /></el-icon>
+            下载
+          </el-button>
+          <el-button size="small" class="doc-action-btn" @click="$emit('rename', doc)">
+            <el-icon><Pencil /></el-icon>
+            重命名
+          </el-button>
+          <el-button size="small" class="doc-action-btn" @click="$emit('tags', doc)">
+            <el-icon><Tag /></el-icon>
+            标签
+          </el-button>
+          <el-button size="small" class="doc-action-btn" @click="$emit('move', doc)">
+            <el-icon><FolderInput /></el-icon>
+            移动到
+          </el-button>
+        </div>
       </div>
     </div>
 
@@ -161,7 +175,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Download, MessageSquare, UserRound } from 'lucide-vue-next'
+import { ArrowLeft, Download, FolderInput, MessageSquare, Pencil, Tag, UserRound } from 'lucide-vue-next'
 import { View, FullScreen } from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
 import FileIcon from '@/components/FileIcon.vue'
@@ -180,7 +194,7 @@ const props = defineProps({
   showBackButton: { type: Boolean, default: true }
 })
 
-const emit = defineEmits(['close', 'download', 'update:activeTab'])
+const emit = defineEmits(['close', 'download', 'rename', 'tags', 'move', 'update:activeTab'])
 
 const router = useRouter()
 const PAGE_SIZE = 100
@@ -357,11 +371,9 @@ function handleDelete(comment) {
   flex-direction: column;
 }
 
-/* 详情内容居中限宽，大屏不散漫 */
+/* 详情各区域占满右侧面板，优先把横向空间留给文档预览。 */
 .detail-root > * {
-  max-width: 960px;
-  margin-left: auto;
-  margin-right: auto;
+  box-sizing: border-box;
   width: 100%;
 }
 
@@ -444,8 +456,15 @@ function handleDelete(comment) {
   white-space: nowrap;
 }
 
-.download-btn {
+.doc-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-shrink: 0;
+}
+
+.doc-action-btn {
+  margin-left: 0 !important;
   border-radius: 8px;
 }
 
@@ -484,12 +503,22 @@ function handleDelete(comment) {
   background: var(--app-panel);
 }
 
+.detail-tabs :deep(.el-tabs__nav-scroll) {
+  box-sizing: border-box;
+  padding: 0 16px;
+}
+
 /* 预览 Tab 内容 */
 .preview-wrapper {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  margin: 12px 16px 16px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .preview-actions {
@@ -693,12 +722,22 @@ function handleDelete(comment) {
 @media (max-width: 768px) {
   .doc-hero { padding: 0.7rem 0.9rem 0.9rem; }
 
+  .detail-tabs :deep(.el-tabs__nav-scroll) { padding: 0 12px; }
+  .preview-wrapper { margin: 8px; }
+
   .doc-hero-main {
     flex-wrap: wrap;
     gap: 10px;
   }
 
-  .download-btn {
+  .doc-hero-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .doc-action-btn {
     width: 100%;
     justify-content: center;
   }

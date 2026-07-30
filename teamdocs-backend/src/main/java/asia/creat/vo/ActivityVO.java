@@ -12,6 +12,7 @@ public class ActivityVO {
     private String avatar;
     private String operationName;
     private String resourceType;
+    private Long resourceId;
     private Long spaceId;
     private String spaceName;
     private String documentName;

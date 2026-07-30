@@ -101,9 +101,13 @@ class DocumentServiceImplTest {
                 "text/plain",
                 "hello".getBytes(StandardCharsets.UTF_8)
         );
-        when(documentMapper.insert(any(Document.class))).thenReturn(1);
+        when(documentMapper.insert(any(Document.class))).thenAnswer(invocation -> {
+            Document document = invocation.getArgument(0);
+            document.setId(88L);
+            return 1;
+        });
 
-        service.upload(SPACE_ID, 0L, file, LOGIN_USER);
+        Long documentId = service.upload(SPACE_ID, 0L, file, LOGIN_USER);
 
         verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), any(String.class));
         ArgumentCaptor<Document> documentCaptor = ArgumentCaptor.forClass(Document.class);
@@ -113,6 +117,7 @@ class DocumentServiceImplTest {
         assertEquals(0L, saved.getFolderId());
         assertEquals("notes.txt", saved.getName());
         assertEquals(USER_ID, saved.getUploadBy());
+        assertEquals(88L, documentId);
     }
 
     @Test

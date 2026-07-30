@@ -51,12 +51,12 @@
               {{ activityVerb(act) }}
               <template v-if="activityName(act)">
                 <a
-                  v-if="activityMeta(act).style === 'doc'"
+                  v-if="canOpenActivityDocument(act)"
                   class="row-doc"
                   @click.prevent="openActivityDoc(act)"
                 >{{ truncateText(activityName(act), 40) }}</a>
                 <span
-                  v-else-if="activityMeta(act).style === 'strong'"
+                  v-else-if="activityMeta(act).style === 'doc' || activityMeta(act).style === 'strong'"
                   class="row-strong"
                 >{{ truncateText(activityName(act), 40) }}</span>
                 <span
@@ -84,10 +84,10 @@ import { UsersRound } from 'lucide-vue-next'
 import { getActivitiesApi } from '@/api/activity'
 import EmptyState from '@/components/EmptyState.vue'
 import { useSpacesStore } from '@/stores'
-import { formatRelativeTime, toSearchKeyword } from '@/utils/format'
+import { formatRelativeTime } from '@/utils/format'
 import { avatarColor } from '@/utils/userColors'
 import { spaceIconPalette } from '@/utils/spaceColors'
-import { activityMeta, activityName, activityVerb, truncateText } from '@/utils/activityText'
+import { activityMeta, activityName, activityVerb, canOpenActivityDocument, truncateText } from '@/utils/activityText'
 
 const router = useRouter()
 const spacesStore = useSpacesStore()
@@ -120,11 +120,10 @@ function switchSpace(spaceId) {
 }
 
 function openActivityDoc(act) {
-  const keyword = toSearchKeyword(act.documentName || act.resourceName)
-  if (!keyword || !act.spaceId) return
+  if (!canOpenActivityDocument(act) || !act.spaceId) return
   router.push({
     path: `/spaces/${act.spaceId}`,
-    query: { search: keyword, t: Date.now() }
+    query: { doc: act.resourceId, tab: 'preview' }
   })
 }
 </script>
