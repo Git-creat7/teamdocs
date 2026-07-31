@@ -46,8 +46,8 @@ html, body {
   --app-hover-soft: #f8fafc;
   --app-text: #0f172a;
   --app-text-2: #334155;
-  --app-text-muted: #64748b;
-  --app-text-faint: #94a3b8;
+  --app-text-muted: #627287;
+  --app-text-faint: #627287;
   --app-accent: #2563eb;
   --app-accent-weak: #e8efff;
   --app-highlight: #fef9e7;
@@ -244,6 +244,22 @@ html, body {
   .el-message-box {
     width: 86vw !important;
     max-width: 86vw;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
 </style>

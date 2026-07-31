@@ -9,6 +9,9 @@
 
     <!-- ===== 左侧侧栏 (桌面常驻可折叠 / 移动端抽屉) ===== -->
     <aside
+      id="app-sidebar"
+      :inert="isMobile && !mobileSidebarOpen"
+      :aria-hidden="isMobile && !mobileSidebarOpen ? 'true' : undefined"
       :class="['shell-sidebar', {
         collapsed: effectiveCollapsed,
         resizing: sidebarResizing,
@@ -17,8 +20,8 @@
       :style="!isMobile && !effectiveCollapsed ? { width: `${sidebarWidth}px` } : undefined"
     >
       <!-- Logo 区：品牌名 + 副标题 -->
-      <div class="sidebar-brand" @click="router.push('/home')">
-        <div class="brand-logo">
+      <RouterLink class="sidebar-brand" to="/home" aria-label="TeamDocs 首页">
+        <div class="brand-logo" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" class="brand-svg">
             <path d="M19 3H9C7.89543 3 7 3.89543 7 5V19C7 20.1046 7.89543 21 9 21H19C20.1046 21 21 20.1046 21 19V5C21 3.89543 20.1046 3 19 3Z" stroke="white" stroke-width="2"/>
             <path d="M3 7V17C3 18.1046 3.89543 19 5 19" stroke="white" stroke-width="2"/>
@@ -28,45 +31,56 @@
           <span class="brand-text">TeamDocs</span>
           <span class="brand-sub">Document Hub</span>
         </div>
-      </div>
+      </RouterLink>
 
       <!-- 主导航 -->
-      <nav class="sidebar-nav">
-        <div
+      <nav class="sidebar-nav" aria-label="主导航">
+        <RouterLink
+          to="/home"
           :class="['nav-item', { active: route.path === '/home' }]"
-          @click="router.push('/home')"
+          aria-label="首页"
+          :aria-current="route.path === '/home' ? 'page' : undefined"
         >
           <el-icon class="nav-icon"><Home /></el-icon>
           <span v-show="!effectiveCollapsed" class="nav-label">首页</span>
-        </div>
-        <div
+        </RouterLink>
+        <RouterLink
+          to="/recent"
           :class="['nav-item', { active: route.path === '/recent' }]"
-          @click="router.push('/recent')"
+          aria-label="最近浏览"
+          :aria-current="route.path === '/recent' ? 'page' : undefined"
         >
           <el-icon class="nav-icon"><Clock /></el-icon>
           <span v-show="!effectiveCollapsed" class="nav-label">最近浏览</span>
-        </div>
-        <div
+        </RouterLink>
+        <RouterLink
+          to="/activities"
           :class="['nav-item', { active: route.path === '/activities' }]"
-          @click="router.push('/activities')"
+          aria-label="团队动态"
+          :aria-current="route.path === '/activities' ? 'page' : undefined"
         >
           <el-icon class="nav-icon"><UsersRound /></el-icon>
           <span v-show="!effectiveCollapsed" class="nav-label">团队动态</span>
-        </div>
-        <div
+        </RouterLink>
+        <RouterLink
+          to="/tags"
           :class="['nav-item', { active: route.path === '/tags' }]"
-          @click="goManageTags"
+          aria-label="标签管理"
+          :aria-current="route.path === '/tags' ? 'page' : undefined"
         >
           <el-icon class="nav-icon"><Tag /></el-icon>
           <span v-show="!effectiveCollapsed" class="nav-label">标签管理</span>
-        </div>
-        <div
+        </RouterLink>
+        <button
+          type="button"
           :class="['nav-item', { active: route.path === '/trash' }]"
+          aria-label="回收站"
+          :aria-current="route.path === '/trash' ? 'page' : undefined"
           @click="goTrash"
         >
           <el-icon class="nav-icon"><Trash2 /></el-icon>
           <span v-show="!effectiveCollapsed" class="nav-label">回收站</span>
-        </div>
+        </button>
       </nav>
 
       <!-- 主动作：上传文档 -->
@@ -82,7 +96,14 @@
         <div v-show="!effectiveCollapsed" class="spaces-header">
           <span class="spaces-title">我的空间</span>
           <el-tooltip content="新建空间" placement="right">
-            <el-icon class="spaces-add-btn" @click="createSpaceVisible = true"><Plus /></el-icon>
+            <button
+              type="button"
+              class="spaces-add-btn"
+              aria-label="新建空间"
+              @click="createSpaceVisible = true"
+            >
+              <el-icon><Plus /></el-icon>
+            </button>
           </el-tooltip>
         </div>
 
@@ -116,18 +137,33 @@
 
             <!-- 展开的直达入口：成员 / 标签 / 回收站 -->
             <div v-if="!effectiveCollapsed && expandedSpaceIds.has(space.id)" class="space-sublinks">
-              <div class="space-sublink" @click="goSpacePanel(space.id, 'members')">
+              <button
+                type="button"
+                class="space-sublink"
+                :aria-label="`${space.name}：成员`"
+                @click="goSpacePanel(space.id, 'members')"
+              >
                 <el-icon><User /></el-icon>
                 <span>成员</span>
-              </div>
-              <div class="space-sublink" @click="router.push('/tags')">
+              </button>
+              <button
+                type="button"
+                class="space-sublink"
+                :aria-label="`${space.name}：标签`"
+                @click="router.push('/tags')"
+              >
                 <el-icon><Tag /></el-icon>
                 <span>标签</span>
-              </div>
-              <div class="space-sublink" @click="router.push({ path: '/trash', query: { spaceId: space.id } })">
+              </button>
+              <button
+                type="button"
+                class="space-sublink"
+                :aria-label="`${space.name}：回收站`"
+                @click="router.push({ path: '/trash', query: { spaceId: space.id } })"
+              >
                 <el-icon><Trash2 /></el-icon>
                 <span>回收站</span>
-              </div>
+              </button>
             </div>
           </div>
 
@@ -169,7 +205,14 @@
             <span class="identity-sub">{{ spaces.length }} 个空间</span>
           </div>
         </div>
-        <div class="nav-item" @click="toggleSidebar">
+        <button
+          type="button"
+          class="nav-item"
+          aria-controls="app-sidebar"
+          :aria-expanded="isMobile ? mobileSidebarOpen : !effectiveCollapsed"
+          :aria-label="isMobile ? '关闭侧栏' : (effectiveCollapsed ? '展开侧栏' : '收起侧栏')"
+          @click="toggleSidebar"
+        >
           <el-icon class="nav-icon">
             <PanelLeftOpen v-if="effectiveCollapsed" />
             <PanelLeftClose v-else />
@@ -177,7 +220,7 @@
           <span v-show="!effectiveCollapsed" class="nav-label">
             {{ isMobile ? '关闭侧栏' : '收起侧栏' }}
           </span>
-        </div>
+        </button>
       </div>
 
       <div
@@ -207,6 +250,9 @@
           type="button"
           class="hamburger-btn"
           title="打开菜单"
+          aria-label="打开菜单"
+          aria-controls="app-sidebar"
+          :aria-expanded="mobileSidebarOpen"
           @click="mobileSidebarOpen = true"
         >
           <Menu :size="20" />
@@ -276,19 +322,21 @@
           title="所有空间里都没有找到匹配的文档"
           description="搜索会匹配各空间的文档名与标签"
         />
-        <div
+        <button
           v-for="doc in globalResults"
           :key="`${doc.spaceId}-${doc.id}`"
+          type="button"
           class="global-result-row"
+          :aria-label="`打开文档 ${doc.name}，位于 ${doc.spaceName}`"
           @click="openGlobalResult(doc)"
         >
           <FileIcon :ext="getFileExt(doc.name, doc.fileType)" :size="30" />
-          <div class="gr-main">
+          <span class="gr-main">
             <span class="gr-name" :title="doc.name">{{ doc.name }}</span>
             <span class="gr-meta">{{ doc.spaceName }} · {{ formatDateTime(doc.updatedAt) }}</span>
-          </div>
+          </span>
           <el-icon class="gr-arrow"><ChevronRight /></el-icon>
-        </div>
+        </button>
       </div>
     </el-dialog>
 
@@ -654,11 +702,6 @@ function goTrash() {
   router.push({ path: '/trash', query: { spaceId: sid } })
 }
 
-// 主导航「标签管理」：进当前空间 (无上下文时用第一个空间) 并打开标签面板
-function goManageTags() {
-  router.push('/tags')
-}
-
 // 侧栏主动作：进当前空间工作台并直接唤起文件选择
 function goUpload() {
   const sid = activeSpaceId.value || searchSpaceId.value || spaces.value[0]?.id
@@ -814,6 +857,9 @@ onUnmounted(() => {
   padding: 0 14px;
   cursor: pointer;
   flex-shrink: 0;
+  color: inherit;
+  text-decoration: none;
+  box-sizing: border-box;
 }
 
 .brand-logo {
@@ -905,6 +951,13 @@ onUnmounted(() => {
   transition: background-color var(--dur-fast) var(--ease-standard);
   white-space: nowrap;
   overflow: hidden;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  box-sizing: border-box;
 }
 
 .nav-item:hover {
@@ -953,11 +1006,18 @@ onUnmounted(() => {
 }
 
 .spaces-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 14px;
   color: var(--app-text-faint);
   cursor: pointer;
   padding: 3px;
   border-radius: 4px;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  line-height: 1;
 }
 
 .spaces-add-btn:hover {
@@ -988,11 +1048,6 @@ onUnmounted(() => {
 
 .space-item:hover {
   background-color: var(--app-hover);
-}
-
-.space-item:focus-visible {
-  outline: 2px solid var(--app-accent);
-  outline-offset: -2px;
 }
 
 .space-item.active {
@@ -1048,11 +1103,6 @@ onUnmounted(() => {
   cursor: pointer;
   transition: background-color var(--dur-fast) var(--ease-standard);
   overflow: hidden;
-}
-
-.recent-doc-item:focus-visible {
-  outline: 2px solid #6366f1;
-  outline-offset: -2px;
 }
 
 .recent-doc-item:hover {
@@ -1129,6 +1179,12 @@ onUnmounted(() => {
   color: var(--app-text-muted);
   cursor: pointer;
   transition: background-color 0.15s, color 0.15s;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  box-sizing: border-box;
 }
 
 .space-sublink:hover {
@@ -1368,10 +1424,30 @@ onUnmounted(() => {
   border-radius: 10px;
   cursor: pointer;
   transition: background-color 0.15s;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  box-sizing: border-box;
 }
 
 .global-result-row:hover {
   background-color: var(--app-hover);
+}
+
+.sidebar-brand:focus-visible,
+.nav-item:focus-visible,
+.upload-cta:focus-visible,
+.spaces-add-btn:focus-visible,
+.space-item:focus-visible,
+.space-sublink:focus-visible,
+.recent-doc-item:focus-visible,
+.hamburger-btn:focus-visible,
+.global-result-row:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: -2px;
 }
 
 .gr-ext-badge {
