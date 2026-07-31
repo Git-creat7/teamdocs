@@ -14,16 +14,22 @@
           description="打开任意文档后，会在这里留下入口"
         />
 
-        <div v-for="doc in docs" :key="doc.documentId" class="recent-row" @click="openRecentDoc(doc)">
+        <button
+          v-for="doc in docs"
+          :key="doc.documentId"
+          type="button"
+          class="recent-row"
+          @click="openRecentDoc(doc)"
+        >
           <FileIcon :ext="getFileExt(doc.name, doc.fileType)" :size="30" />
-          <div class="row-main">
+          <span class="row-main">
             <span class="row-name" :title="doc.name">{{ doc.name }}</span>
             <span class="row-meta">
               {{ doc.spaceName }} · {{ formatBytes(doc.fileSize) }}
             </span>
-          </div>
+          </span>
           <span class="row-time">{{ formatDateTime(doc.lastViewedAt) }}</span>
-        </div>
+        </button>
       </div>
     </div>
   </div>
@@ -98,10 +104,17 @@ function openRecentDoc(doc) {
 }
 
 .recent-row {
+  appearance: none;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 13px 18px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
   transition: background-color var(--dur-fast) var(--ease-standard);
 }
@@ -111,6 +124,14 @@ function openRecentDoc(doc) {
 }
 
 .recent-row:hover {
+  background-color: var(--app-hover-soft);
+}
+
+.recent-row:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--app-accent);
+  outline-offset: -2px;
   background-color: var(--app-hover-soft);
 }
 

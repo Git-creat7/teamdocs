@@ -220,20 +220,26 @@
             >
             <el-table-column label="名称" min-width="260">
               <template #default="{ row }">
-                <div
+                <button
                   v-if="row.isFolder"
+                  type="button"
                   class="item-name-cell folder-cell"
                   @click="navigateToFolder(row, 'table')"
                 >
-                  <div class="folder-badge-icon">
+                  <span class="folder-badge-icon">
                     <el-icon><Folder /></el-icon>
-                  </div>
+                  </span>
                   <span class="item-name font-medium">{{ row.name }}</span>
-                </div>
-                <div v-else class="item-name-cell doc-cell" @click="openDocDetail(row)">
+                </button>
+                <button
+                  v-else
+                  type="button"
+                  class="item-name-cell doc-cell"
+                  @click="openDocDetail(row)"
+                >
                   <FileIcon :ext="row.ext" :size="26" />
                   <span class="item-name" :title="row.name">{{ middleEllipsis(row.name, 44) }}</span>
-                </div>
+                </button>
               </template>
             </el-table-column>
 
@@ -2080,18 +2086,26 @@ function formatDate(dateStr) {
 }
 
 .item-name-cell {
+  appearance: none;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.folder-cell {
-  cursor: pointer;
+.item-name-cell:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
 }
 
 .doc-cell {
-  cursor: pointer;
   transition: transform 0.15s ease;
 }
 

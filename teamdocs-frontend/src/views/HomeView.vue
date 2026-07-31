@@ -80,7 +80,7 @@
 
       <!-- 快捷动作入口：Notion 式粉彩底卡片 -->
       <div v-if="!isEmpty" class="stats-row anim-item" style="--delay: 2">
-        <div class="stat-card is-clickable tint-sky" @click="goSpacePanel('members')">
+        <button type="button" class="stat-card is-clickable tint-sky" @click="goSpacePanel('members')">
           <div class="stat-icon-box">
             <el-icon :size="22"><User /></el-icon>
           </div>
@@ -89,9 +89,9 @@
             <span class="stat-label">邀请伙伴进空间协作</span>
           </div>
           <el-icon class="stat-arrow"><ChevronRight /></el-icon>
-        </div>
+        </button>
 
-        <div class="stat-card is-clickable tint-lavender" @click="router.push('/tags')">
+        <button type="button" class="stat-card is-clickable tint-lavender" @click="router.push('/tags')">
           <div class="stat-icon-box">
             <el-icon :size="22"><Tag /></el-icon>
           </div>
@@ -100,9 +100,9 @@
             <span class="stat-label">为文档建立分类体系</span>
           </div>
           <el-icon class="stat-arrow"><ChevronRight /></el-icon>
-        </div>
+        </button>
 
-        <div class="stat-card is-clickable tint-peach" @click="goTrash">
+        <button type="button" class="stat-card is-clickable tint-peach" @click="goTrash">
           <div class="stat-icon-box">
             <el-icon :size="22"><Trash2 /></el-icon>
           </div>
@@ -111,9 +111,9 @@
             <span class="stat-label">已删文档可恢复</span>
           </div>
           <el-icon class="stat-arrow"><ChevronRight /></el-icon>
-        </div>
+        </button>
 
-        <div class="stat-card is-clickable tint-mint" @click="router.push('/recent')">
+        <button type="button" class="stat-card is-clickable tint-mint" @click="router.push('/recent')">
           <div class="stat-icon-box">
             <el-icon :size="22"><Clock /></el-icon>
           </div>
@@ -122,7 +122,7 @@
             <span class="stat-label">继续上次看的文档</span>
           </div>
           <el-icon class="stat-arrow"><ChevronRight /></el-icon>
-        </div>
+        </button>
       </div>
 
       <!-- 最近浏览 + 团队动态 双栏 -->
@@ -155,9 +155,10 @@
           />
 
           <div v-else class="recent-grid">
-            <div
+            <button
               v-for="doc in recentDocs.slice(0, 4)"
               :key="doc.documentId"
+              type="button"
               class="recent-card"
               @click="openRecentDoc(doc)"
             >
@@ -172,7 +173,7 @@
               </div>
               <span class="recent-card-name" :title="doc.name">{{ doc.name }}</span>
               <span class="recent-space-name">{{ doc.spaceName }}</span>
-            </div>
+            </button>
           </div>
         </section>
 
@@ -213,11 +214,12 @@
                   <span class="activity-user">{{ act.username }}</span>
                   {{ activityVerb(act) }}
                   <template v-if="activityName(act)">
-                    <a
+                    <button
                       v-if="canOpenActivityDocument(act)"
+                      type="button"
                       class="activity-doc"
-                      @click.prevent="openActivityDoc(act)"
-                    >{{ truncateText(activityName(act), 30) }}</a>
+                      @click="openActivityDoc(act)"
+                    >{{ truncateText(activityName(act), 30) }}</button>
                     <span
                       v-else-if="activityMeta(act).style === 'doc' || activityMeta(act).style === 'strong'"
                       class="activity-strong"
@@ -338,9 +340,10 @@
       destroy-on-close
     >
       <div class="space-pick-list">
-        <div
+        <button
           v-for="space in spaces"
           :key="space.id"
+          type="button"
           class="space-pick-item"
           @click="pickSpaceForPanel(space)"
         >
@@ -352,7 +355,7 @@
           </div>
           <span class="space-pick-name">{{ space.name }}</span>
           <el-icon class="space-pick-arrow"><ChevronRight /></el-icon>
-        </div>
+        </button>
       </div>
     </el-dialog>
 
@@ -867,6 +870,8 @@ function formatDate(dateStr) {
 }
 
 .stat-card {
+  width: 100%;
+  appearance: none;
   background: var(--app-panel);
   border: 1px solid var(--app-border);
   border-radius: 14px;
@@ -875,6 +880,9 @@ function formatDate(dateStr) {
   align-items: center;
   gap: 13px;
   min-width: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   transition: transform var(--dur-fast) var(--ease-standard),
               box-shadow var(--dur-fast) var(--ease-standard),
               border-color var(--dur-fast) var(--ease-standard);
@@ -887,6 +895,14 @@ function formatDate(dateStr) {
 .stat-card.is-clickable:hover {
   box-shadow: 0 8px 20px -6px rgba(55, 53, 47, 0.14);
   transform: translateY(-2px);
+}
+
+.stat-card.is-clickable:focus-visible,
+.recent-card:focus-visible,
+.space-pick-item:focus-visible,
+.activity-doc:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
 }
 
 /* Notion 粉彩底：卡面着色，图标盒改半透明白 */
@@ -966,12 +982,19 @@ function formatDate(dateStr) {
 }
 
 .space-pick-item {
+  width: 100%;
+  appearance: none;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
+  border: 0;
   border-radius: 10px;
+  background: transparent;
+  color: inherit;
   cursor: pointer;
+  font: inherit;
+  text-align: left;
   transition: background-color 0.15s;
 }
 
@@ -1050,6 +1073,8 @@ function formatDate(dateStr) {
 }
 
 .recent-card {
+  width: 100%;
+  appearance: none;
   background: var(--app-panel);
   border: 1px solid var(--app-border);
   border-radius: 10px;
@@ -1059,6 +1084,9 @@ function formatDate(dateStr) {
               box-shadow var(--dur-fast) var(--ease-standard),
               border-color var(--dur-fast) var(--ease-standard);
   min-width: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
 .recent-card:hover {
@@ -1205,8 +1233,13 @@ function formatDate(dateStr) {
 }
 
 .activity-doc {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--app-accent);
   cursor: pointer;
+  font: inherit;
 }
 
 .activity-doc:hover {
