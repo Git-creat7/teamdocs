@@ -7,6 +7,7 @@ import RecentView from '@/views/RecentView.vue'
 import ActivityView from '@/views/ActivityView.vue'
 import TrashView from '@/views/TrashView.vue'
 import TagManageView from '@/views/TagManageView.vue'
+import SettingsView from '@/views/SettingsView.vue'
 import SpaceWorkbenchView from '@/views/SpaceWorkbenchView.vue'
 import DocumentPreviewPage from '@/views/DocumentPreviewPage.vue'
 
@@ -35,6 +36,7 @@ const routes = [
       { path: 'activities', name: 'Activities', component: ActivityView },
       { path: 'tags', name: 'Tags', component: TagManageView },
       { path: 'trash', name: 'Trash', component: TrashView },
+      { path: 'settings', name: 'Settings', component: SettingsView },
       // 兼容旧路径
       { path: 'spaces', redirect: '/home' },
       { path: 'spaces/:spaceId', name: 'SpaceWorkbench', component: SpaceWorkbenchView }

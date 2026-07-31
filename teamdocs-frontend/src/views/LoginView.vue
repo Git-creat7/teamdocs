@@ -1,19 +1,5 @@
 <template>
-  <div class="auth-root" :data-theme="currentTheme">
-    <!-- 主题切换器 -->
-    <div class="theme-bar enter-fade" style="--d: 1.45s">
-      <button
-        v-for="t in themeList"
-        :key="t.key"
-        type="button"
-        :class="['theme-btn', { active: currentTheme === t.key }]"
-        :title="t.name"
-        @click="setTheme(t.key)"
-      >
-        <component :is="t.icon" :size="15" :stroke-width="2.2" />
-      </button>
-    </div>
-
+  <div class="auth-root">
     <!-- 居中卡片 -->
     <div class="auth-center">
       <div class="auth-card card-enter">
@@ -102,25 +88,10 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Eye, EyeOff, Sun, Moon, Coffee, Cherry, Zap, Loader2 } from 'lucide-vue-next'
-import { storeToRefs } from 'pinia'
-import { useThemeStore } from '@/stores/theme'
+import { Eye, EyeOff, Loader2 } from 'lucide-vue-next'
 import { loginApi, registerApi } from '@/api/user'
 
 const router = useRouter()
-
-const themeList = [
-  { key: 'day', name: 'Day', icon: Sun },
-  { key: 'night', name: 'Night', icon: Moon },
-  { key: 'coffee', name: 'Coffee', icon: Coffee },
-  { key: 'sakura', name: 'Sakura', icon: Cherry },
-  { key: 'cyberpunk', name: 'Cyberpunk', icon: Zap }
-]
-
-// 全局主题 store：登录页选的主题延续到整个应用
-const themeStore = useThemeStore()
-const { theme: currentTheme } = storeToRefs(themeStore)
-const setTheme = themeStore.setTheme
 
 const isLogin = ref(true)
 const showPassword = ref(false)
@@ -181,7 +152,7 @@ async function handleSubmit() {
 </script>
 
 <style scoped>
-/* ===== 主题变量：一组变量五套配色，切换全局 0.5s 过渡 ===== */
+/* ===== 固定浅色登录界面 ===== */
 .auth-root {
   --bg: #ffffff;
   --card-bg: #f9fafb;
@@ -191,68 +162,12 @@ async function handleSubmit() {
   --btn-bg: #0a0a0a;
   --btn-text: #ffffff;
   --btn-hover: #1f2937;
-  --chip-bg: #e5e7eb;
-  --chip-hover: #d1d5db;
-
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
   font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, 'Courier New', monospace;
-  transition: background-color 0.5s ease, color 0.5s ease;
   position: relative;
   overflow: hidden;
-}
-
-.auth-root[data-theme='night'] {
-  --bg: #000000;
-  --card-bg: #111827;
-  --text: #ffffff;
-  --accent: #60a5fa;
-  --border: #ffffff;
-  --btn-bg: #ffffff;
-  --btn-text: #0a0a0a;
-  --btn-hover: #e5e7eb;
-  --chip-bg: #1f2937;
-  --chip-hover: #374151;
-}
-
-.auth-root[data-theme='coffee'] {
-  --bg: #fffbeb;
-  --card-bg: #fef3c7;
-  --text: #78350f;
-  --accent: #b45309;
-  --border: #78350f;
-  --btn-bg: #78350f;
-  --btn-text: #fffbeb;
-  --btn-hover: #92400e;
-  --chip-bg: #fde68a;
-  --chip-hover: #fcd34d;
-}
-
-.auth-root[data-theme='sakura'] {
-  --bg: #fdf2f8;
-  --card-bg: #fce7f3;
-  --text: #831843;
-  --accent: #be185d;
-  --border: #831843;
-  --btn-bg: #831843;
-  --btn-text: #fdf2f8;
-  --btn-hover: #9d174d;
-  --chip-bg: #fbcfe8;
-  --chip-hover: #f9a8d4;
-}
-
-.auth-root[data-theme='cyberpunk'] {
-  --bg: #111827;
-  --card-bg: #000000;
-  --text: #4ade80;
-  --accent: #22d3ee;
-  --border: #4ade80;
-  --btn-bg: #4ade80;
-  --btn-text: #000000;
-  --btn-hover: #86efac;
-  --chip-bg: #1f2937;
-  --chip-hover: #374151;
 }
 
 /* ===== 入场动效 =====
@@ -295,39 +210,6 @@ async function handleSubmit() {
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
-}
-
-/* ===== 主题切换器 ===== */
-.theme-bar {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  display: flex;
-  gap: 8px;
-  z-index: 10;
-}
-
-.theme-btn {
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 8px;
-  background: var(--chip-bg);
-  color: var(--text);
-  cursor: pointer;
-  transition: transform 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-.theme-btn:hover {
-  transform: scale(1.1);
-  background: var(--chip-hover);
-}
-
-.theme-btn.active {
-  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--border);
 }
 
 /* ===== 卡片 ===== */

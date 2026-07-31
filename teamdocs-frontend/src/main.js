@@ -2,12 +2,10 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
-import 'element-plus/theme-chalk/dark/css-vars.css'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 
 import App from './App.vue'
 import router from './router'
-import { useThemeStore } from '@/stores/theme'
 import FileViewer from '@file-viewer/vue3'
 import '@file-viewer/vue3/dist/file-viewer3.css'
 import '@/assets/styles/layout.css'
@@ -21,7 +19,9 @@ app.use(ElementPlus, {
 app.use(router)
 app.use(FileViewer)
 
-// 启动即应用持久化主题 (login 选择的主题全站生效)
-useThemeStore()
+// 主题功能已移除，启动时清理旧版本留下的主题状态并固定浅色模式。
+localStorage.removeItem('teamdocs_theme')
+document.documentElement.removeAttribute('data-theme')
+document.documentElement.classList.remove('dark')
 
 app.mount('#app')

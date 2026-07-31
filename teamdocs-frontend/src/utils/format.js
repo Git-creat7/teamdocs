@@ -67,22 +67,6 @@ export function middleEllipsis(name, max = 40) {
   return `${head}…${tail}`
 }
 
-/**
- * 最近文档的统一跳转：直接打开详情预览，不再绕 search + highlight。
- * 三处入口 (首页/最近浏览页/侧栏) 共用，行为保持一致。
- * notify 参数保留以兼容旧调用，已不再使用。
- */
-export function buildRecentDocRoute(doc, notify) {
-  void notify
-  if (!doc?.spaceId || !doc?.documentId) {
-    return { path: doc?.spaceId ? `/spaces/${doc.spaceId}` : '/home' }
-  }
-  return {
-    path: `/spaces/${doc.spaceId}`,
-    query: { doc: doc.documentId, tab: 'preview' }
-  }
-}
-
 export function getFileTypeColor(ext) {
   const map = {
     PDF: '#ef4444',

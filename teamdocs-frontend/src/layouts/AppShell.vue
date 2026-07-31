@@ -14,7 +14,7 @@
         resizing: sidebarResizing,
         'mobile-open': mobileSidebarOpen
       }]"
-      :style="!isMobile && !collapsed ? { width: `${sidebarWidth}px` } : undefined"
+      :style="!isMobile && !effectiveCollapsed ? { width: `${sidebarWidth}px` } : undefined"
     >
       <!-- Logo 区：品牌名 + 副标题 -->
       <div class="sidebar-brand" @click="router.push('/home')">
@@ -181,7 +181,7 @@
       </div>
 
       <div
-        v-if="!collapsed && !isMobile"
+        v-if="!effectiveCollapsed && !isMobile"
         class="sidebar-resizer"
         role="separator"
         aria-orientation="vertical"
@@ -359,48 +359,37 @@ import EmptyState from '@/components/EmptyState.vue'
 import { createSpaceApi } from '@/api/space'
 import { searchDocumentsApi } from '@/api/document'
 import { storeToRefs } from 'pinia'
-import { useUserStore, useSpacesStore } from '@/stores'
+import { usePreferencesStore, useUserStore, useSpacesStore } from '@/stores'
+import {
+  SIDEBAR_DEFAULT_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH
+} from '@/stores/preferences'
 import UserMenu from '@/components/UserMenu.vue'
 import FileIcon from '@/components/FileIcon.vue'
-import { formatDateTime, getFileExt, middleEllipsis, buildRecentDocRoute } from '@/utils/format'
+import { formatDateTime, getFileExt, middleEllipsis } from '@/utils/format'
 import { spaceDotColor } from '@/utils/spaceColors'
 import { getRecentDocumentsApi } from '@/api/user'
+import { useDocumentNavigation } from '@/composables/useDocumentNavigation'
 
 const route = useRoute()
 const router = useRouter()
+const { openDocument } = useDocumentNavigation()
 
 const spacesStore = useSpacesStore()
 const userStore = useUserStore()
+const preferencesStore = usePreferencesStore()
 const { spaces, loading: spacesLoading } = storeToRefs(spacesStore)
 const { userInfo } = storeToRefs(userStore)
+const {
+  sidebarCollapsed: collapsed,
+  sidebarWidth,
+  autoCollapseSidebar,
+  searchScopeMode
+} = storeToRefs(preferencesStore)
 const refreshSpaces = spacesStore.refresh
 const refreshUser = userStore.refresh
 
-const collapsed = ref(localStorage.getItem('teamdocs_sidebar_collapsed') === '1')
-watch(collapsed, (val) => {
-  localStorage.setItem('teamdocs_sidebar_collapsed', val ? '1' : '0')
-})
-
-const SIDEBAR_WIDTH_STORAGE_KEY = 'teamdocs_sidebar_width'
-const SIDEBAR_DEFAULT_WIDTH = 232
-const SIDEBAR_MIN_WIDTH = 200
-const SIDEBAR_MAX_WIDTH = 360
-
-function clampSidebarWidth(width) {
-  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width))
-}
-
-function getInitialSidebarWidth() {
-  const savedWidth = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
-  if (savedWidth === null) return SIDEBAR_DEFAULT_WIDTH
-
-  const parsedWidth = Number(savedWidth)
-  return Number.isFinite(parsedWidth)
-    ? clampSidebarWidth(parsedWidth)
-    : SIDEBAR_DEFAULT_WIDTH
-}
-
-const sidebarWidth = ref(getInitialSidebarWidth())
 const sidebarResizing = ref(false)
 let resizePointerId = null
 let resizeHandleElement = null
@@ -408,7 +397,7 @@ let resizeStartX = 0
 let resizeStartWidth = SIDEBAR_DEFAULT_WIDTH
 
 function persistSidebarWidth() {
-  localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth.value)))
+  preferencesStore.persistSidebarWidth()
 }
 
 function removeSidebarResizeListeners() {
@@ -434,7 +423,7 @@ function stopSidebarResize(shouldPersist = true) {
 }
 
 function startSidebarResize(event) {
-  if (event.button !== 0 || collapsed.value || isMobile.value) return
+  if (event.button !== 0 || effectiveCollapsed.value || isMobile.value) return
 
   event.preventDefault()
   resizePointerId = event.pointerId
@@ -458,7 +447,7 @@ function handleSidebarResizeMove(event) {
   }
 
   event.preventDefault()
-  sidebarWidth.value = clampSidebarWidth(
+  preferencesStore.setSidebarWidth(
     resizeStartWidth + event.clientX - resizeStartX
   )
 }
@@ -498,7 +487,7 @@ function handleSidebarResizeKeydown(event) {
   }
 
   event.preventDefault()
-  sidebarWidth.value = clampSidebarWidth(nextWidth)
+  preferencesStore.setSidebarWidth(nextWidth)
   persistSidebarWidth()
 }
 
@@ -507,17 +496,33 @@ const mq = window.matchMedia('(max-width: 768px)')
 const isMobile = ref(mq.matches)
 mq.addEventListener('change', (e) => { isMobile.value = e.matches })
 const mobileSidebarOpen = ref(false)
-const effectiveCollapsed = computed(() => collapsed.value && !isMobile.value)
+const detailSidebarExpanded = ref(false)
+const hasDocumentDetail = computed(() =>
+  route.name === 'SpaceWorkbench' && Number(route.query.doc) > 0
+)
+const automaticDetailCollapse = computed(() =>
+  autoCollapseSidebar.value
+  && hasDocumentDetail.value
+  && !detailSidebarExpanded.value
+  && !isMobile.value
+)
+const effectiveCollapsed = computed(() =>
+  (collapsed.value || automaticDetailCollapse.value) && !isMobile.value
+)
 
 function toggleSidebar() {
   if (isMobile.value) {
     mobileSidebarOpen.value = false
     return
   }
+  if (automaticDetailCollapse.value && !collapsed.value) {
+    detailSidebarExpanded.value = true
+    return
+  }
   collapsed.value = !collapsed.value
 }
 
-watch([collapsed, isMobile], ([isCollapsed, mobile]) => {
+watch([effectiveCollapsed, isMobile], ([isCollapsed, mobile]) => {
   if (isCollapsed || mobile) stopSidebarResize()
 })
 
@@ -525,14 +530,9 @@ watch(() => route.fullPath, () => {
   mobileSidebarOpen.value = false
 })
 
-// 打开文档详情时收起桌面侧栏，为列表与预览释放横向空间。
 watch(
-  [() => route.name, () => route.query.doc, isMobile],
-  ([routeName, docId, mobile]) => {
-    if (!mobile && routeName === 'SpaceWorkbench' && Number(docId) > 0) {
-      collapsed.value = true
-    }
-  },
+  [() => route.name, () => route.query.doc, autoCollapseSidebar],
+  () => { detailSidebarExpanded.value = false },
   { immediate: true }
 )
 
@@ -550,15 +550,13 @@ const searchKeyword = ref('')
 // 空间直达入口的展开状态 (必须先于下面 immediate watch 声明，否则 TDZ 报错)
 const expandedSpaceIds = ref(new Set())
 
-watch(activeSpaceId, (id) => {
+watch([activeSpaceId, searchScopeMode], ([id]) => {
+  searchSpaceId.value = searchScopeMode.value === 'all' ? 0 : (id || 0)
   if (id) {
-    searchSpaceId.value = id
     // 进入某空间时自动展开它的直达入口
     if (!expandedSpaceIds.value.has(id)) {
       expandedSpaceIds.value = new Set([...expandedSpaceIds.value, id])
     }
-  } else {
-    searchSpaceId.value = 0
   }
 }, { immediate: true })
 
@@ -636,9 +634,13 @@ async function handleGlobalSearch() {
 function openGlobalResult(doc) {
   globalSearchVisible.value = false
   searchKeyword.value = ''
-  router.push({
-    path: `/spaces/${doc.spaceId}`,
-    query: { search: globalKeyword.value, highlight: doc.id, t: Date.now() }
+  openDocument({
+    spaceId: doc.spaceId,
+    documentId: doc.id,
+    workspaceRoute: {
+      path: `/spaces/${doc.spaceId}`,
+      query: { search: globalKeyword.value, highlight: doc.id, t: Date.now() }
+    }
   })
 }
 
@@ -724,7 +726,7 @@ async function loadSidebarRecent() {
 watch(() => route.path, loadSidebarRecent)
 
 function openSidebarRecentDoc(doc) {
-  router.push(buildRecentDocRoute(doc, ElMessage.info))
+  openDocument({ spaceId: doc.spaceId, documentId: doc.documentId })
 }
 
 onMounted(() => {
