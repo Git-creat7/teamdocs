@@ -90,8 +90,9 @@ function resolveCategory(m) {
 const viewerOptions = computed(() => ({
   preset: [litePreset, officePreset],
   rendererMode: 'replace',
-  theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+  theme: 'light',
   toolbar: {
+    theme: false,
     beforeDownload: async () => {
       await download()
       return false

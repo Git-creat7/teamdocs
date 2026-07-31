@@ -449,6 +449,7 @@ import { listTagsApi, listDocumentsByTagApi } from '@/api/tag'
 import { storeToRefs } from 'pinia'
 import { useUserStore } from '@/stores'
 import { useDocTags } from '@/composables/useDocTags'
+import { useDocumentNavigation } from '@/composables/useDocumentNavigation'
 import { tagStyle } from '@/utils/tagColors'
 import FolderPickerDialog from '@/components/FolderPickerDialog.vue'
 import MembersDrawer from '@/components/MembersDrawer.vue'
@@ -461,6 +462,7 @@ import { formatBytes, formatDateTime, formatRelativeTime, getFileExt, middleElli
 
 const route = useRoute()
 const router = useRouter()
+const { openDocument } = useDocumentNavigation()
 const { userInfo } = storeToRefs(useUserStore())
 
 // 移动端：隐藏大小/时间列，文件夹树移入列表上方横排
@@ -616,10 +618,12 @@ async function returnToFileTree() {
   await loadCurrentFolderContent()
 }
 
-function openDocDetail(doc, tab = 'preview') {
-  // 打开详情只保留 doc + tab，不继承 search/highlight/t，避免详情与搜索态纠缠
-  router.push({
-    query: { doc: doc.id, tab }
+function openDocDetail(doc, tab, forceWorkspace = false) {
+  openDocument({
+    spaceId: spaceId.value,
+    documentId: doc.id,
+    tab,
+    forceWorkspace
   })
 }
 
@@ -1018,7 +1022,9 @@ async function runSearch(keyword) {
     // 全局搜索带 highlight 跳入且命中结果：直接打开详情，省一次点击
     if (highlightDocId.value) {
       const hit = page.records.find((d) => d.id === highlightDocId.value)
-      if (hit && Number(route.query.doc) !== hit.id) openDocDetail(hit)
+      if (hit && Number(route.query.doc) !== hit.id) {
+        openDocDetail(hit, undefined, true)
+      }
     }
   } catch (err) {
     documents.value = []

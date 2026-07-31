@@ -1,7 +1,8 @@
 import { useUserStore } from './user'
 import { useSpacesStore } from './spaces'
+import { usePreferencesStore } from './preferences'
 
-export { useUserStore, useSpacesStore }
+export { useUserStore, useSpacesStore, usePreferencesStore }
 
 /**
  * 登出 / 换账号时的唯一清理出口。

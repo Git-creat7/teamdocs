@@ -31,15 +31,14 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { History } from 'lucide-vue-next'
 import { getRecentDocumentsApi } from '@/api/user'
 import EmptyState from '@/components/EmptyState.vue'
 import FileIcon from '@/components/FileIcon.vue'
-import { formatBytes, formatDateTime, getFileExt, getFileTypeColor, buildRecentDocRoute } from '@/utils/format'
+import { formatBytes, formatDateTime, getFileExt, getFileTypeColor } from '@/utils/format'
+import { useDocumentNavigation } from '@/composables/useDocumentNavigation'
 
-const router = useRouter()
+const { openDocument } = useDocumentNavigation()
 const loading = ref(true)
 const docs = ref([])
 
@@ -54,7 +53,10 @@ onMounted(async () => {
 })
 
 function openRecentDoc(doc) {
-  router.push(buildRecentDocRoute(doc, ElMessage.info))
+  openDocument({
+    spaceId: doc.spaceId,
+    documentId: doc.documentId
+  })
 }
 </script>
 

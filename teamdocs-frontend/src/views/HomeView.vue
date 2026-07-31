@@ -408,13 +408,15 @@ import { createSpaceApi, updateSpaceApi, deleteSpaceApi } from '@/api/space'
 import { listTagsApi } from '@/api/tag'
 import { storeToRefs } from 'pinia'
 import { useUserStore, useSpacesStore } from '@/stores'
-import { formatDateTime, formatRelativeTime, getFileExt, getFileTypeColor, buildRecentDocRoute } from '@/utils/format'
+import { formatDateTime, formatRelativeTime, getFileExt, getFileTypeColor } from '@/utils/format'
 import { tagStyle } from '@/utils/tagColors'
 import { spaceIconPalette } from '@/utils/spaceColors'
 import { avatarColor } from '@/utils/userColors'
 import { activityMeta, activityName, activityVerb, canOpenActivityDocument, truncateText } from '@/utils/activityText'
+import { useDocumentNavigation } from '@/composables/useDocumentNavigation'
 
 const router = useRouter()
+const { openDocument } = useDocumentNavigation()
 const spacesStore = useSpacesStore()
 const { spaces, loading: spacesLoading } = storeToRefs(spacesStore)
 const refreshSpaces = spacesStore.refresh
@@ -434,9 +436,9 @@ const resumeDoc = computed(() => recentDocs.value[0] || null)
 
 function openActivityDoc(act) {
   if (!canOpenActivityDocument(act) || !act.spaceId) return
-  router.push({
-    path: `/spaces/${act.spaceId}`,
-    query: { doc: act.resourceId, tab: 'preview' }
+  openDocument({
+    spaceId: act.spaceId,
+    documentId: act.resourceId
   })
 }
 
@@ -552,7 +554,10 @@ async function loadRecent() {
 }
 
 function openRecentDoc(doc) {
-  router.push(buildRecentDocRoute(doc, ElMessage.info))
+  openDocument({
+    spaceId: doc.spaceId,
+    documentId: doc.documentId
+  })
 }
 
 // 空间编辑/删除

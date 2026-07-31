@@ -78,7 +78,6 @@
 
 <script setup>
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { UsersRound } from 'lucide-vue-next'
 import { getActivitiesApi } from '@/api/activity'
@@ -88,8 +87,9 @@ import { formatRelativeTime } from '@/utils/format'
 import { avatarColor } from '@/utils/userColors'
 import { spaceIconPalette } from '@/utils/spaceColors'
 import { activityMeta, activityName, activityVerb, canOpenActivityDocument, truncateText } from '@/utils/activityText'
+import { useDocumentNavigation } from '@/composables/useDocumentNavigation'
 
-const router = useRouter()
+const { openDocument } = useDocumentNavigation()
 const spacesStore = useSpacesStore()
 const { spaces } = storeToRefs(spacesStore)
 
@@ -121,9 +121,9 @@ function switchSpace(spaceId) {
 
 function openActivityDoc(act) {
   if (!canOpenActivityDocument(act) || !act.spaceId) return
-  router.push({
-    path: `/spaces/${act.spaceId}`,
-    query: { doc: act.resourceId, tab: 'preview' }
+  openDocument({
+    spaceId: act.spaceId,
+    documentId: act.resourceId
   })
 }
 </script>

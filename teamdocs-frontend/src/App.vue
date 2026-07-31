@@ -32,13 +32,11 @@ html, body {
   --dur-slow: 320ms; /* 页面转场、区块入场 */
 }
 
-/* ===== 全局主题令牌 =====
- * 登录页/用户菜单选的主题写到 html[data-theme]，应用内表面色走这组变量。
- * night/cyberpunk 同时挂 html.dark 让 Element Plus 暗色变量生效。
- * 实体色 (标签色/文件类型徽章/角色徽章) 是数据语义色，不随主题走。
+/* ===== 全局浅色令牌 =====
+ * 实体色 (标签色/文件类型徽章/角色徽章) 是数据语义色。
  */
-:root,
-:root[data-theme='day'] {
+:root {
+  color-scheme: light;
   --app-bg: #f7f8fa;
   --app-panel: #ffffff;
   --app-panel-soft: #fbfbfc;
@@ -54,78 +52,6 @@ html, body {
   --app-accent-weak: #e8efff;
   --app-highlight: #fef9e7;
   --app-highlight-strong: #fdf3d0;
-}
-
-:root[data-theme='night'] {
-  --app-bg: #0b0f19;
-  --app-panel: #111827;
-  --app-panel-soft: #0d1322;
-  --app-border: #1f2937;
-  --app-border-soft: #1a2332;
-  --app-hover: #1f2937;
-  --app-hover-soft: #161e2e;
-  --app-text: #f9fafb;
-  --app-text-2: #e5e7eb;
-  --app-text-muted: #9ca3af;
-  --app-text-faint: #6b7280;
-  --app-accent: #60a5fa;
-  --app-accent-weak: rgba(96, 165, 250, 0.16);
-  --app-highlight: rgba(250, 204, 21, 0.14);
-  --app-highlight-strong: rgba(250, 204, 21, 0.22);
-}
-
-:root[data-theme='coffee'] {
-  --app-bg: #fffbeb;
-  --app-panel: #fffdf5;
-  --app-panel-soft: #fef9ec;
-  --app-border: #f0e2c0;
-  --app-border-soft: #f6ecd4;
-  --app-hover: #fef3c7;
-  --app-hover-soft: #fdf7e3;
-  --app-text: #78350f;
-  --app-text-2: #92400e;
-  --app-text-muted: #b45309;
-  --app-text-faint: #c9954f;
-  --app-accent: #b45309;
-  --app-accent-weak: #fde68a;
-  --app-highlight: #fef3c7;
-  --app-highlight-strong: #fde68a;
-}
-
-:root[data-theme='sakura'] {
-  --app-bg: #fdf2f8;
-  --app-panel: #fffafc;
-  --app-panel-soft: #fdf5f9;
-  --app-border: #f8dcea;
-  --app-border-soft: #fbe8f1;
-  --app-hover: #fce7f3;
-  --app-hover-soft: #fdf0f7;
-  --app-text: #831843;
-  --app-text-2: #9d174d;
-  --app-text-muted: #be185d;
-  --app-text-faint: #d67ba6;
-  --app-accent: #db2777;
-  --app-accent-weak: #fce7f3;
-  --app-highlight: #fef9e7;
-  --app-highlight-strong: #fdf3d0;
-}
-
-:root[data-theme='cyberpunk'] {
-  --app-bg: #0c1117;
-  --app-panel: #010409;
-  --app-panel-soft: #0a0f14;
-  --app-border: rgba(74, 222, 128, 0.28);
-  --app-border-soft: rgba(74, 222, 128, 0.16);
-  --app-hover: rgba(74, 222, 128, 0.1);
-  --app-hover-soft: rgba(74, 222, 128, 0.06);
-  --app-text: #4ade80;
-  --app-text-2: #86efac;
-  --app-text-muted: #22c55e;
-  --app-text-faint: #15803d;
-  --app-accent: #22d3ee;
-  --app-accent-weak: rgba(34, 211, 238, 0.14);
-  --app-highlight: rgba(34, 211, 238, 0.12);
-  --app-highlight-strong: rgba(34, 211, 238, 0.2);
 }
 
 /* 路由页面转场：旧页快速淡出，新页自下顺滑升入 */
