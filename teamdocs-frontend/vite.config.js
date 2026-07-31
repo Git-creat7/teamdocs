@@ -4,7 +4,15 @@ import path from 'path'
 import { fileViewerRenderers } from '@file-viewer/vite-plugin'
 
 export default defineConfig({
-  plugins: [vue(), fileViewerRenderers({ copyAssets: true })],
+  plugins: [
+    vue(),
+    fileViewerRenderers({
+      renderers: ['image', 'text', 'pdf', 'word', 'spreadsheet', 'presentation', 'ofd'],
+      inject: false,
+      copyAssets: true,
+      chunkStrategy: 'none'
+    })
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src')

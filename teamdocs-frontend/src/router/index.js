@@ -1,15 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import LandingView from '@/views/LandingView.vue'
-import LoginView from '@/views/LoginView.vue'
-import AppShell from '@/layouts/AppShell.vue'
-import HomeView from '@/views/HomeView.vue'
-import RecentView from '@/views/RecentView.vue'
-import ActivityView from '@/views/ActivityView.vue'
-import TrashView from '@/views/TrashView.vue'
-import TagManageView from '@/views/TagManageView.vue'
-import SettingsView from '@/views/SettingsView.vue'
-import SpaceWorkbenchView from '@/views/SpaceWorkbenchView.vue'
-import DocumentPreviewPage from '@/views/DocumentPreviewPage.vue'
+
+const LandingView = () => import('@/views/LandingView.vue')
+const LoginView = () => import('@/views/LoginView.vue')
+const AppShell = () => import('@/layouts/AppShell.vue')
+const HomeView = () => import('@/views/HomeView.vue')
+const RecentView = () => import('@/views/RecentView.vue')
+const ActivityView = () => import('@/views/ActivityView.vue')
+const TrashView = () => import('@/views/TrashView.vue')
+const TagManageView = () => import('@/views/TagManageView.vue')
+const SettingsView = () => import('@/views/SettingsView.vue')
+const SpaceWorkbenchView = () => import('@/views/SpaceWorkbenchView.vue')
+const DocumentPreviewPage = () => import('@/views/DocumentPreviewPage.vue')
 
 const routes = [
   // 官网落地页：登录墙外的产品门面，与下方 AppShell 同挂 '/'，
