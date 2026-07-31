@@ -36,7 +36,7 @@
     </div>
 
     <!-- 正常渲染 -->
-    <file-viewer
+    <FileViewer
       v-else-if="state === 'ready' && meta"
       ref="viewerRef"
       class="doc-preview__viewer"
@@ -50,8 +50,9 @@
 <script setup>
 import { ref, computed, onErrorCaptured, watch } from 'vue'
 import { Loading, Download, WarningFilled, CircleCloseFilled } from '@element-plus/icons-vue'
-import litePreset from '@file-viewer/preset-lite'
-import officePreset from '@file-viewer/preset-office'
+import { FileViewer } from '@file-viewer/vue3'
+import '@file-viewer/vue3/dist/file-viewer3.css'
+import { configuredFileViewerRenderers } from 'virtual:file-viewer-renderers'
 import { downloadDocumentApi, previewDocumentApi } from '@/api/document'
 import { formatBytes as formatFileSize } from '@/utils/format'
 
@@ -86,9 +87,10 @@ function resolveCategory(m) {
   return 'unsupported'
 }
 
-// preset-lite 负责 图片/文本/代码，preset-office 负责 PDF/Office
 const viewerOptions = computed(() => ({
-  preset: [litePreset, officePreset],
+  autoRenderers: false,
+  builtinRenderers: 'none',
+  renderers: configuredFileViewerRenderers,
   rendererMode: 'replace',
   theme: 'light',
   toolbar: {

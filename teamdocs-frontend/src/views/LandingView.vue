@@ -938,6 +938,8 @@ async function handleDemo() {
   .lp-trusted-label { max-width: none; }
   .lp-nav-inner { padding: 14px 20px; }
   .lp-logo { font-size: 26px; }
+  .lp-nav-login,
+  .lp-pill-btn { min-height: 44px; }
   .lp-feature-grid { grid-template-columns: 1fr; }
   .lp-craft-inner {
     grid-template-columns: 1fr;
@@ -946,5 +948,20 @@ async function handleDemo() {
   }
   .lp-features { padding: 64px 24px; }
   .lp-final { padding: 80px 24px; }
+}
+
+@media (max-width: 360px) {
+  .lp-nav-inner { padding-inline: 16px; }
+  .lp-logo { font-size: 24px; }
+  .lp-nav-actions {
+    flex-shrink: 0;
+    gap: 2px;
+  }
+  .lp-nav-login,
+  .lp-pill-btn {
+    white-space: nowrap;
+  }
+  .lp-nav-login { padding-inline: 10px; }
+  .lp-pill-btn { padding-inline: 14px; }
 }
 </style>

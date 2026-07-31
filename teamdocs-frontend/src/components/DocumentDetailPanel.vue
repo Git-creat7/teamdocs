@@ -172,17 +172,18 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Download, FolderInput, MessageSquare, Pencil, Tag, UserRound } from 'lucide-vue-next'
 import { View, FullScreen } from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
 import FileIcon from '@/components/FileIcon.vue'
-import DocumentPreview from '@/components/DocumentPreview.vue'
 import { listCommentsApi, addCommentApi, deleteCommentApi } from '@/api/comment'
 import { formatBytes, formatDateTime, getFileExt, getFileTypeColor } from '@/utils/format'
 import { tagStyle } from '@/utils/tagColors'
+
+const DocumentPreview = defineAsyncComponent(() => import('@/components/DocumentPreview.vue'))
 
 const props = defineProps({
   spaceId: { type: [Number, String], required: true },
