@@ -32,7 +32,7 @@ flowchart LR
     Backend --> MySQL[(MySQL 8)]
     Backend --> Redis[(Redis 7)]
     Backend --> MinIO[(MinIO)]
-    Init[minio-init] -->|创建公有桶和私有桶| MinIO
+    Init[minio-init] -->|创建桶并配置公有桶权限| MinIO
     MySQL -->|首次启动按 01-06 执行| SQL[SQL 初始化脚本]
 ```
 
@@ -66,7 +66,7 @@ Linux/macOS：
 cp .env.docker.example .env.docker
 ```
 
-至少替换 `.env.docker` 中的数据库、Redis、JWT 和 MinIO 密钥。JWT 密钥不得少于 32 字节。
+至少替换 `.env.docker` 中的数据库、Redis、JWT 和 MinIO 密钥。JWT 密钥不得少于 32 字节。`MINIO_CORS_ALLOWED_ORIGIN` 必须填写前端实际访问来源（协议、域名和端口），本地 Vite 默认是 `http://localhost:5173`。
 
 不要删除 `TEAMDOCS_DOCKER_ENV`，它用于阻止 Compose 误读原生启动使用的根目录 `.env`。如果密码含有 `$`，必须在 `.env.docker` 中用单引号包住，例如 `DB_PASSWORD='a$password'`，否则 Compose 会把 `$password` 当成变量引用。Docker 命令显式读取这个文件，不会误用原生启动后端所用的 `.env` 或其中的远程 Redis/MinIO 地址。
 
@@ -85,7 +85,7 @@ flowchart TD
     Infra --> Health{MySQL、Redis 健康检查}
     Infra --> MinioInit[minio-init 使用 mc 轮询 MinIO]
     Health --> SQL[按顺序创建 9 张表和全文索引]
-    MinioInit --> Buckets[创建 public/private 桶]
+    MinioInit --> Buckets[创建 public/private 桶并配置公有桶权限]
     SQL --> App[启动 Spring Boot 后端]
     Buckets --> App
     App --> AppHealth{Actuator 健康检查}
@@ -123,13 +123,14 @@ docker compose --env-file .env.docker -f docker-compose.dev.yml down -v
 - `JWT_SECRET`：JWT HMAC 密钥，至少 32 字节
 - `MINIO_API_PORT` / `MINIO_CONSOLE_PORT`：MinIO API 与控制台宿主机端口
 - `MINIO_PUBLIC_ENDPOINT`：必填，返回给客户端的文件访问地址，Docker 模板使用 `http://localhost:19000`
+- `MINIO_CORS_ALLOWED_ORIGIN`：必填，允许读取预签名资源的前端来源，必须是精确的 `scheme://host[:port]`
 - `MINIO_REGION`：MinIO 区域，默认 `us-east-1`，后端与服务端必须一致
 - `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`：MinIO 管理账号和密码
 - `MINIO_BUCKET_PUBLIC` / `MINIO_BUCKET_PRIVATE`：公有桶和私有桶名称
 
 `DB_HOST`、`DB_USERNAME`、`REDIS_HOST` 和 `MINIO_ENDPOINT` 主要用于不通过 Compose 直接启动后端。Compose 会把它们设置成容器网络内的服务地址，并使用 MySQL root 用户。
 
-Compose 内部使用 `http://minio:9000` 连接 MinIO，但下载链接必须使用客户端能访问的 `MINIO_PUBLIC_ENDPOINT`。部署到服务器时应把 `BIND_ADDRESS` 改为 `0.0.0.0`，把公开地址改成公网 IP 或域名，例如 `http://your-server:9000`，并开放对应端口。
+Compose 内部使用 `http://minio:9000` 连接 MinIO，但下载链接必须使用客户端能访问的 `MINIO_PUBLIC_ENDPOINT`。MinIO 服务通过 `MINIO_API_CORS_ALLOW_ORIGIN` 仅允许配置的前端来源跨域访问；修改来源后，执行 `docker compose --env-file .env.docker -f docker-compose.dev.yml up -d --force-recreate minio` 重新应用。部署到服务器时应把 `BIND_ADDRESS` 改为 `0.0.0.0`，把公开地址改成公网 IP 或域名，例如 `http://your-server:9000`，并开放对应端口。
 
 ## API 约定
 
@@ -270,6 +271,7 @@ sh ./mvnw spring-boot:run
 - **修改 SQL 后没有生效**：初始化脚本只在 MySQL 数据卷为空时执行。确认不需要旧数据后使用 `down -v` 重建。
 - **下载 URL 中出现 `minio:9000`**：检查后端是否设置了 `MINIO_PUBLIC_ENDPOINT`，并重新构建镜像。
 - **下载 URL 无法从浏览器访问**：公开地址必须是浏览器可达的 IP 或域名，且 MinIO API 端口已放行。
+- **在线预览提示跨域错误**：确认 `MINIO_CORS_ALLOWED_ORIGIN` 与浏览器地址栏中的前端来源完全一致，并强制重建 `minio` 容器。
 - **Backend 状态为 unhealthy**：访问 `/actuator/health`，并查看 Backend、MySQL 和 Redis 日志。
 - **接口 HTTP 200 但操作失败**：检查响应体的 `code` 和 `msg`，不要只看 HTTP 状态码。
 - **Docker 无法连接 daemon**：Windows/macOS 启动 Docker Desktop；Linux 启动 Docker 服务。
