@@ -62,21 +62,20 @@
       </div>
 
       <!-- 继续阅读：最近一次看的文档 -->
-      <div
+      <article
         v-if="!isEmpty && resumeDoc"
         class="resume-card anim-item"
         style="--delay: 1"
-        @click="openRecentDoc(resumeDoc)"
       >
         <FileIcon :ext="getFileExt(resumeDoc.name, resumeDoc.fileType)" :size="30" />
         <div class="resume-body">
           <span class="resume-name">{{ resumeDoc.name }}</span>
           <span class="resume-meta">上次看到 {{ formatDateTime(resumeDoc.lastViewedAt) }} · {{ resumeDoc.spaceName }}</span>
         </div>
-        <el-button type="primary" class="resume-btn" @click.stop="openRecentDoc(resumeDoc)">
+        <el-button type="primary" class="resume-btn" @click="openRecentDoc(resumeDoc)">
           继续阅读
         </el-button>
-      </div>
+      </article>
 
       <!-- 快捷动作入口：Notion 式粉彩底卡片 -->
       <div v-if="!isEmpty" class="stats-row anim-item" style="--delay: 2">
@@ -255,79 +254,93 @@
         </div>
 
         <div v-else class="space-grid">
-          <div
+          <article
             v-for="space in spaces"
             :key="space.id"
             class="space-card"
-            @click="router.push(`/spaces/${space.id}`)"
           >
-            <div class="space-card-head">
-              <div
-                class="space-icon-box"
-                :style="{ backgroundColor: spaceIconPalette(space.id).bg, color: spaceIconPalette(space.id).text }"
-              >
-                <el-icon :size="18"><FolderOpen /></el-icon>
+            <RouterLink
+              class="space-card-main"
+              :to="`/spaces/${space.id}`"
+              :aria-label="`打开空间：${space.name}`"
+            >
+              <div class="space-card-head">
+                <div
+                  class="space-icon-box"
+                  :style="{ backgroundColor: spaceIconPalette(space.id).bg, color: spaceIconPalette(space.id).text }"
+                >
+                  <el-icon :size="18"><FolderOpen /></el-icon>
+                </div>
+                <h3 class="space-card-name" :title="space.name">{{ space.name }}</h3>
+                <span
+                  v-if="space.myRole"
+                  :class="['role-chip', `role-${space.myRole.toLowerCase()}`]"
+                >
+                  {{ roleText(space.myRole) }}
+                </span>
               </div>
-              <h3 class="space-card-name" :title="space.name">{{ space.name }}</h3>
-              <span
-                v-if="space.myRole"
-                :class="['role-chip', `role-${space.myRole.toLowerCase()}`]"
-              >
-                {{ roleText(space.myRole) }}
-              </span>
-              <el-dropdown
-                trigger="click"
-                @command="(cmd) => handleSpaceCommand(cmd, space)"
-              >
-                <span class="space-more-btn" @click.stop>
-                  <el-icon><MoreHorizontal /></el-icon>
+              <p class="space-card-desc">{{ space.description || '暂无描述' }}</p>
+              <div v-if="(spaceTagsMap[space.id] || []).length" class="space-card-tags">
+                <span
+                  v-for="tag in spaceTagsMap[space.id].slice(0, 4)"
+                  :key="tag.id"
+                  class="space-tag-chip"
+                  :style="tagStyle(tag.name)"
+                >
+                  {{ tag.name }}
                 </span>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="edit">
-                      <el-icon><Pencil /></el-icon>编辑空间
-                    </el-dropdown-item>
-                    <el-dropdown-item command="delete" divided class="danger-item">
-                      <el-icon><Trash2 /></el-icon>删除空间
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-            <p class="space-card-desc">{{ space.description || '暂无描述' }}</p>
-            <div v-if="(spaceTagsMap[space.id] || []).length" class="space-card-tags">
-              <span
-                v-for="tag in spaceTagsMap[space.id].slice(0, 4)"
-                :key="tag.id"
-                class="space-tag-chip"
-                :style="tagStyle(tag.name)"
+                <span v-if="spaceTagsMap[space.id].length > 4" class="space-tag-more">
+                  +{{ spaceTagsMap[space.id].length - 4 }}
+                </span>
+              </div>
+              <div class="space-card-foot">
+                <span class="space-card-date">创建于 {{ formatDate(space.createdAt) }}</span>
+                <span class="space-card-members">
+                  <span v-if="space.docCount" class="foot-stat">
+                    <el-icon :size="13"><FileText /></el-icon>
+                    {{ space.docCount }}
+                  </span>
+                  <span v-if="space.memberCount" class="foot-stat">
+                    <el-icon :size="13"><User /></el-icon>
+                    {{ space.memberCount }}
+                  </span>
+                </span>
+              </div>
+            </RouterLink>
+            <el-dropdown
+              class="space-card-actions"
+              trigger="click"
+              @command="(cmd) => handleSpaceCommand(cmd, space)"
+            >
+              <button
+                type="button"
+                class="space-more-btn"
+                :aria-label="`更多操作：${space.name}`"
               >
-                {{ tag.name }}
-              </span>
-              <span v-if="spaceTagsMap[space.id].length > 4" class="space-tag-more">
-                +{{ spaceTagsMap[space.id].length - 4 }}
-              </span>
-            </div>
-            <div class="space-card-foot">
-              <span class="space-card-date">创建于 {{ formatDate(space.createdAt) }}</span>
-              <span class="space-card-members">
-                <span v-if="space.docCount" class="foot-stat">
-                  <el-icon :size="13"><FileText /></el-icon>
-                  {{ space.docCount }}
-                </span>
-                <span v-if="space.memberCount" class="foot-stat">
-                  <el-icon :size="13"><User /></el-icon>
-                  {{ space.memberCount }}
-                </span>
-              </span>
-            </div>
-          </div>
+                <el-icon><MoreHorizontal /></el-icon>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="edit">
+                    <el-icon><Pencil /></el-icon>编辑空间
+                  </el-dropdown-item>
+                  <el-dropdown-item command="delete" divided class="danger-item">
+                    <el-icon><Trash2 /></el-icon>删除空间
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </article>
 
           <!-- 新建空间虚线卡片 -->
-          <div class="space-card-dashed" @click="editVisible = true; editingSpace = null; resetForm()">
+          <button
+            type="button"
+            class="space-card-dashed"
+            @click="editVisible = true; editingSpace = null; resetForm()"
+          >
             <el-icon :size="20"><Plus /></el-icon>
             <span>创建新空间</span>
-          </div>
+          </button>
         </div>
       </section>
     </div>
@@ -814,7 +827,6 @@ function formatDate(dateStr) {
   border-radius: 14px;
   padding: 1rem 1.25rem;
   margin-bottom: 1.25rem;
-  cursor: pointer;
   transition: transform var(--dur-fast) var(--ease-standard),
               box-shadow var(--dur-fast) var(--ease-standard),
               border-color var(--dur-fast) var(--ease-standard);
@@ -1277,8 +1289,6 @@ function formatDate(dateStr) {
   background: var(--app-panel);
   border: 1px solid var(--app-border);
   border-radius: 12px;
-  padding: 1.2rem 1.3rem;
-  cursor: pointer;
   transition: transform var(--dur-fast) var(--ease-standard),
               box-shadow var(--dur-fast) var(--ease-standard),
               border-color var(--dur-fast) var(--ease-standard);
@@ -1286,6 +1296,7 @@ function formatDate(dateStr) {
   flex-direction: column;
   min-height: 140px;
   box-sizing: border-box;
+  position: relative;
 }
 
 .space-card:hover {
@@ -1295,8 +1306,27 @@ function formatDate(dateStr) {
 }
 
 .space-card.is-skeleton {
+  padding: 1.2rem 1.3rem;
   cursor: default;
   transform: none;
+}
+
+.space-card-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 1.2rem 1.3rem;
+  border-radius: 11px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.space-card-main:focus-visible,
+.space-more-btn:focus-visible,
+.space-card-dashed:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
 }
 
 .space-card-head {
@@ -1305,6 +1335,7 @@ function formatDate(dateStr) {
   gap: 10px;
   margin-bottom: 0.7rem;
   min-width: 0;
+  padding-right: 34px;
 }
 
 .space-icon-box {
@@ -1331,13 +1362,25 @@ function formatDate(dateStr) {
   min-width: 0;
 }
 
+.space-card-actions {
+  position: absolute;
+  top: calc(1.2rem + 4px);
+  right: 1.3rem;
+}
+
 .space-more-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
   cursor: pointer;
   color: var(--app-text-faint);
   padding: 4px 6px;
   border-radius: 4px;
   transition: all 0.15s;
-  outline: none;
+  font: inherit;
   flex-shrink: 0;
 }
 
@@ -1430,7 +1473,10 @@ function formatDate(dateStr) {
 }
 
 .space-card-dashed {
+  width: 100%;
+  appearance: none;
   border: 1.5px dashed var(--app-border);
+  background: transparent;
   border-radius: 12px;
   min-height: 140px;
   display: flex;
@@ -1441,6 +1487,7 @@ function formatDate(dateStr) {
   color: var(--app-text-muted);
   font-size: 0.9rem;
   font-weight: 500;
+  font-family: inherit;
   transition: all 0.15s ease;
   box-sizing: border-box;
 }

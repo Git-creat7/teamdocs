@@ -4,12 +4,13 @@
     <div
       v-if="isMobile && mobileSidebarOpen"
       class="sidebar-mask"
-      @click="mobileSidebarOpen = false"
+      @click="closeMobileSidebar"
     ></div>
 
     <!-- ===== 左侧侧栏 (桌面常驻可折叠 / 移动端抽屉) ===== -->
     <aside
       id="app-sidebar"
+      ref="sidebarRef"
       :inert="isMobile && !mobileSidebarOpen"
       :aria-hidden="isMobile && !mobileSidebarOpen ? 'true' : undefined"
       :class="['shell-sidebar', {
@@ -18,6 +19,7 @@
         'mobile-open': mobileSidebarOpen
       }]"
       :style="!isMobile && !effectiveCollapsed ? { width: `${sidebarWidth}px` } : undefined"
+      @keydown="handleMobileSidebarKeydown"
     >
       <!-- Logo 区：品牌名 + 副标题 -->
       <RouterLink class="sidebar-brand" to="/home" aria-label="TeamDocs 首页">
@@ -247,13 +249,14 @@
       <header class="shell-topbar">
         <button
           v-if="isMobile"
+          ref="hamburgerButtonRef"
           type="button"
           class="hamburger-btn"
           title="打开菜单"
           aria-label="打开菜单"
           aria-controls="app-sidebar"
           :aria-expanded="mobileSidebarOpen"
-          @click="mobileSidebarOpen = true"
+          @click="openMobileSidebar"
         >
           <Menu :size="20" />
         </button>
@@ -384,7 +387,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -544,6 +547,17 @@ const mq = window.matchMedia('(max-width: 768px)')
 const isMobile = ref(mq.matches)
 mq.addEventListener('change', (e) => { isMobile.value = e.matches })
 const mobileSidebarOpen = ref(false)
+const sidebarRef = ref(null)
+const hamburgerButtonRef = ref(null)
+let mobileSidebarTrigger = null
+const SIDEBAR_FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])'
+].join(',')
 const detailSidebarExpanded = ref(false)
 const hasDocumentDetail = computed(() =>
   route.name === 'SpaceWorkbench' && Number(route.query.doc) > 0
@@ -558,9 +572,73 @@ const effectiveCollapsed = computed(() =>
   (collapsed.value || automaticDetailCollapse.value) && !isMobile.value
 )
 
+function getSidebarFocusableElements() {
+  if (!sidebarRef.value) return []
+  return [...sidebarRef.value.querySelectorAll(SIDEBAR_FOCUSABLE_SELECTOR)]
+    .filter((element) => element.getClientRects().length > 0)
+}
+
+async function openMobileSidebar(event) {
+  if (!isMobile.value || mobileSidebarOpen.value) return
+
+  mobileSidebarTrigger = event?.currentTarget instanceof HTMLElement
+    ? event.currentTarget
+    : document.activeElement
+  mobileSidebarOpen.value = true
+  await nextTick()
+
+  if (mobileSidebarOpen.value) getSidebarFocusableElements()[0]?.focus()
+}
+
+async function closeMobileSidebar() {
+  if (!mobileSidebarOpen.value) return
+
+  mobileSidebarOpen.value = false
+  await nextTick()
+  if (mobileSidebarOpen.value) return
+
+  const savedTrigger = mobileSidebarTrigger
+  mobileSidebarTrigger = null
+  const returnTarget = savedTrigger?.isConnected
+    ? savedTrigger
+    : hamburgerButtonRef.value
+  returnTarget?.focus()
+}
+
+function handleMobileSidebarKeydown(event) {
+  if (!isMobile.value || !mobileSidebarOpen.value) return
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    closeMobileSidebar()
+    return
+  }
+  if (event.key !== 'Tab') return
+
+  const focusableElements = getSidebarFocusableElements()
+  if (focusableElements.length === 0) {
+    event.preventDefault()
+    return
+  }
+
+  const firstElement = focusableElements[0]
+  const lastElement = focusableElements[focusableElements.length - 1]
+  const activeElement = document.activeElement
+  const focusIsOutside = !sidebarRef.value?.contains(activeElement)
+
+  if (event.shiftKey && (activeElement === firstElement || focusIsOutside)) {
+    event.preventDefault()
+    lastElement.focus()
+  } else if (!event.shiftKey && (activeElement === lastElement || focusIsOutside)) {
+    event.preventDefault()
+    firstElement.focus()
+  }
+}
+
 function toggleSidebar() {
   if (isMobile.value) {
-    mobileSidebarOpen.value = false
+    closeMobileSidebar()
     return
   }
   if (automaticDetailCollapse.value && !collapsed.value) {
@@ -575,7 +653,7 @@ watch([effectiveCollapsed, isMobile], ([isCollapsed, mobile]) => {
 })
 
 watch(() => route.fullPath, () => {
-  mobileSidebarOpen.value = false
+  closeMobileSidebar()
 })
 
 watch(
