@@ -220,13 +220,17 @@
                       @click="openActivityDoc(act)"
                     >{{ truncateText(activityName(act), 30) }}</button>
                     <span
-                      v-else-if="activityMeta(act).style === 'doc' || activityMeta(act).style === 'strong'"
+                      v-else-if="activityMeta(act).style === 'strong'"
                       class="activity-strong"
                     >{{ truncateText(activityName(act), 30) }}</span>
                     <span
-                      v-else-if="activityMeta(act).style === 'quote'"
+                      v-else-if="shouldWrapActivityName(act) || activityMeta(act).style === 'quote'"
                       class="activity-quote"
                     >“{{ truncateText(activityName(act), 42) }}”</span>
+                    <span
+                      v-else
+                      class="activity-plain"
+                    >{{ truncateText(activityName(act), 30) }}</span>
                     <template v-if="activityMeta(act).suffix">{{ activityMeta(act).suffix }}</template>
                   </template>
                   <template v-if="act.spaceName"> · {{ act.spaceName }}</template>
@@ -428,7 +432,7 @@ import { formatDateTime, formatRelativeTime, getFileExt, getFileTypeColor } from
 import { tagStyle } from '@/utils/tagColors'
 import { spaceIconPalette } from '@/utils/spaceColors'
 import { avatarColor } from '@/utils/userColors'
-import { activityMeta, activityName, activityVerb, canOpenActivityDocument, truncateText } from '@/utils/activityText'
+import { activityMeta, activityName, activityVerb, canOpenActivityDocument, shouldWrapActivityName, truncateText } from '@/utils/activityText'
 import { useDocumentNavigation } from '@/composables/useDocumentNavigation'
 
 const router = useRouter()

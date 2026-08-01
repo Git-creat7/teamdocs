@@ -60,6 +60,14 @@ export function canOpenActivityDocument(act) {
     && !NON_OPENABLE_DOCUMENT_OPERATIONS.has(act.operationName)
 }
 
+// 文档不可点击（已删除/无 ID）时用引号包住名字，替代加粗
+// '添加评论' 的短动词自带引号（在“），排除避免出现 ““X””
+export function shouldWrapActivityName(act) {
+  if (activityMeta(act).style !== 'doc') return false
+  if (canOpenActivityDocument(act)) return false
+  return act.operationName !== '添加评论'
+}
+
 export function truncateText(s, max = 40) {
   const str = String(s || '')
   return str.length > max ? str.slice(0, max) + '…' : str
