@@ -8,7 +8,9 @@ import asia.creat.common.exception.BusinessException;
 import asia.creat.dto.CreateFolderDTO;
 import asia.creat.dto.MoveFolderDTO;
 import asia.creat.dto.RenameFolderDTO;
-import asia.creat.entity.*;
+import asia.creat.entity.Document;
+import asia.creat.entity.Folder;
+import asia.creat.entity.SpaceMember;
 import asia.creat.helper.ResourcePermissionHelper;
 import asia.creat.mapper.DocumentMapper;
 import asia.creat.mapper.FolderMapper;
@@ -17,23 +19,23 @@ import asia.creat.security.SpaceContext;
 import asia.creat.service.FolderService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Queue;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class FolderServiceImpl implements FolderService {
     private final FolderMapper folderMapper;
     private final DocumentMapper documentMapper;
     private final ResourcePermissionHelper permissionHelper;
-
-    public FolderServiceImpl(FolderMapper folderMapper, DocumentMapper documentMapper,ResourcePermissionHelper permissionHelper) {
-        this.folderMapper = folderMapper;
-        this.documentMapper = documentMapper;
-        this.permissionHelper = permissionHelper;
-    }
 
     @Override
     @OperationLog(value = "创建文件夹", resourceType = "FOLDER", resourceName = "#dto.name")
@@ -42,7 +44,7 @@ public class FolderServiceImpl implements FolderService {
 
         //防止空指针异常，默认父目录id为0（根目录）
         Long parentId = dto.getParentId() == null ? 0L : dto.getParentId();
-        if(parentId != 0){
+        if (parentId != 0){
             checkParentSpaceId(parentId, spaceId);
         }
 
@@ -57,7 +59,7 @@ public class FolderServiceImpl implements FolderService {
 
     @Override
     @RequireSpaceRole
-    public List<Folder> getSubFolder(@SpaceId Long spaceId, Long parentId,LoginUser loginUser) {
+    public List<Folder> getSubFolder(@SpaceId Long spaceId, Long parentId, LoginUser loginUser) {
 
         LambdaQueryWrapper<Folder> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Folder::getSpaceId, spaceId)
@@ -75,7 +77,7 @@ public class FolderServiceImpl implements FolderService {
         SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, folder.getCreatedBy(), loginUser.getUserId());
 
-        log.info("重命名文件夹：{} 将 {} 重命名为 {}", loginUser.getUsername(), folder.getName(),dto.getNewName());
+        log.info("重命名文件夹：{} 将 {} 重命名为 {}", loginUser.getUsername(), folder.getName(), dto.getNewName());
         folder.setName(dto.getNewName());
         folderMapper.updateById(folder);
     }
@@ -105,7 +107,7 @@ public class FolderServiceImpl implements FolderService {
     @OperationLog(value = "移动文件夹", resourceType = "FOLDER")
     @RequireSpaceRole
     //移动时不要把目标文件夹 ID 当作 resourceId，日志记录的是“被移动的文件夹”
-    public void moveFolder(@SpaceId Long spaceId,@OperationTarget Long folderId, MoveFolderDTO dto, LoginUser loginUser) {
+    public void moveFolder(@SpaceId Long spaceId, @OperationTarget Long folderId, MoveFolderDTO dto, LoginUser loginUser) {
 
         Folder folder = getFolder(folderId, spaceId);
 
@@ -116,13 +118,13 @@ public class FolderServiceImpl implements FolderService {
             checkParentSpaceId(dto.getTargetParentId(), spaceId);
         }
 
-        if(Objects.equals(dto.getTargetParentId(), folderId)){
+        if (Objects.equals(dto.getTargetParentId(), folderId)){
             throw new BusinessException("不能将文件夹移动到自己下面");
         }
 
         List<Long> allIds= collectAllSubFolderIds(spaceId, folderId);
 
-        if(allIds.contains(dto.getTargetParentId())){
+        if (allIds.contains(dto.getTargetParentId())){
             throw new BusinessException("不能将文件夹移动到自己的子目录下");
         }
 
@@ -138,7 +140,7 @@ public class FolderServiceImpl implements FolderService {
     private void checkParentSpaceId(Long parentId, Long spaceId) {
 
         Folder parentFolder = folderMapper.selectById(parentId);
-        if(parentFolder == null){
+        if (parentFolder == null){
             throw new BusinessException("父目录不存在");
         }
         if (!parentFolder.getSpaceId().equals(spaceId)) {

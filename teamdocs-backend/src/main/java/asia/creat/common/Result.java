@@ -3,7 +3,7 @@ package asia.creat.common;
 import lombok.Data;
 
 /*
-*  后端统一返回结果
+* 后端统一返回结果
 * */
 @Data
 public class Result{
@@ -16,7 +16,7 @@ public class Result{
 
     public static Result success() {
         Result res = new Result();
-        res.code =  1;
+        res.code = 1;
         res.msg = "success";
         return res;
     }
@@ -24,7 +24,7 @@ public class Result{
     public static Result success(Object data) {
         Result res = new Result();
         res.data = data;
-        res.code =  1;
+        res.code = 1;
         res.msg = "success";
         return res;
     }
@@ -35,7 +35,5 @@ public class Result{
         res.code = 0;
         return res;
     }
-
-
 
 }

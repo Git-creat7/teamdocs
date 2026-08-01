@@ -11,7 +11,7 @@ import java.util.List;
 public interface FolderService {
     void createFolder(Long spaceId, CreateFolderDTO createFolderDTO, LoginUser loginUser);
 
-    List<Folder> getSubFolder(Long spaceId, Long parentId,LoginUser loginUser);
+    List<Folder> getSubFolder(Long spaceId, Long parentId, LoginUser loginUser);
 
     void renameFolder(Long spaceId, Long folderId, RenameFolderDTO dto, LoginUser loginUser);
 

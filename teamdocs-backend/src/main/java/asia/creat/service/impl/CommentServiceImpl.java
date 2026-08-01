@@ -4,8 +4,8 @@ import asia.creat.anno.OperationLog;
 import asia.creat.anno.OperationTarget;
 import asia.creat.anno.RequireSpaceRole;
 import asia.creat.anno.SpaceId;
-import asia.creat.common.PageResult;
 import asia.creat.common.exception.BusinessException;
+import asia.creat.common.PageResult;
 import asia.creat.dto.AddCommentDTO;
 import asia.creat.dto.PageQuery;
 import asia.creat.entity.Comment;
@@ -16,26 +16,22 @@ import asia.creat.mapper.CommentMapper;
 import asia.creat.mapper.DocumentMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
+import asia.creat.service.CommentService;
 import asia.creat.vo.CommentVO;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 @Service
-public class CommentServiceImpl implements asia.creat.service.CommentService {
+@RequiredArgsConstructor
+public class CommentServiceImpl implements CommentService {
     private final CommentMapper commentMapper;
     private final DocumentMapper documentMapper;
     private final ResourcePermissionHelper permissionHelper;
 
-    public CommentServiceImpl(CommentMapper commentMapper,DocumentMapper documentMapper, ResourcePermissionHelper permissionHelper) {
-        this.commentMapper = commentMapper;
-        this.documentMapper = documentMapper;
-        this.permissionHelper = permissionHelper;
-    }
-
-
     @Override
     @OperationLog(value = "添加评论", resourceType = "DOCUMENT")
     @RequireSpaceRole
-    public void addComment(@SpaceId Long spaceId,@OperationTarget Long documentId, AddCommentDTO dto, LoginUser loginUser) {
+    public void addComment(@SpaceId Long spaceId, @OperationTarget Long documentId, AddCommentDTO dto, LoginUser loginUser) {
         checkDocument(spaceId, documentId);
         if (dto.getReplyToId() != null) {
             /*
@@ -72,7 +68,7 @@ public class CommentServiceImpl implements asia.creat.service.CommentService {
     @Override
     @OperationLog(value = "删除评论", resourceType = "DOCUMENT")
     @RequireSpaceRole
-    public void deleteComment(@SpaceId Long spaceId,@OperationTarget Long documentId, Long commentId, LoginUser loginUser) {
+    public void deleteComment(@SpaceId Long spaceId, @OperationTarget Long documentId, Long commentId, LoginUser loginUser) {
         checkDocument(spaceId, documentId);
         Comment comment = commentMapper.selectById(commentId);
         if (comment == null || !comment.getDocumentId().equals(documentId)) {
@@ -85,10 +81,9 @@ public class CommentServiceImpl implements asia.creat.service.CommentService {
         commentMapper.updateById(comment);
     }
 
-
     private void checkDocument(Long spaceId, Long documentId){
         Document doc = documentMapper.selectById(documentId);
-        if(doc == null || !doc.getSpaceId().equals(spaceId)){
+        if (doc == null || !doc.getSpaceId().equals(spaceId)){
             throw new BusinessException("文档不存在或不属于当前空间");
         }
     }

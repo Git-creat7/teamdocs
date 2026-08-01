@@ -24,6 +24,4 @@ public class RedisConstants {
     public static final Long MAX_RANDOM_TTL_SECONDS = 300L;
     public static final Long MAX_RECENT_DOCUMENTS = 20L;
 
-
-
 }

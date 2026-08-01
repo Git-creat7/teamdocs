@@ -10,30 +10,28 @@ import asia.creat.service.RateLimitService;
 import asia.creat.service.RecentDocumentService;
 import asia.creat.service.TokenRevocationService;
 import asia.creat.service.UserService;
-import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import static asia.creat.utils.RedisConstants.*;
+import static asia.creat.utils.RedisConstants.*;
 
+import jakarta.servlet.http.HttpServletRequest;
 
+import static asia.creat.utils.RedisConstants.*;
 import static asia.creat.utils.RedisConstants.*;
 
 @RestController
 @RequestMapping("/user")
+@RequiredArgsConstructor
 public class UserController {
     private final UserService userService;
     private final RateLimitService rateLimitService;
     private final RecentDocumentService recentDocumentService;
     private final TokenRevocationService tokenRevocationService;
-
-    public UserController(UserService userService, RateLimitService rateLimitService, RecentDocumentService recentDocumentService, TokenRevocationService tokenRevocationService) {
-        this.userService = userService;
-        this.rateLimitService = rateLimitService;
-        this.recentDocumentService = recentDocumentService;
-        this.tokenRevocationService = tokenRevocationService;
-    }
 
     @PostMapping("/register")
     public Result register(@RequestBody @Validated UserRegisterDTO dto, HttpServletRequest request){
@@ -41,7 +39,7 @@ public class UserController {
         if (rateLimitService.isRateLimited(REGISTER_LIMIT_PREFIX + ip, REGISTER_LIMIT_WINDOW, MAX_REGISTER_ATTEMPTS)) {
             return Result.error("请求过于频繁");
         }
-        userService.register(dto.getUsername(),dto.getPassword());
+        userService.register(dto.getUsername(), dto.getPassword());
         return Result.success();
     }
 
@@ -49,10 +47,10 @@ public class UserController {
     public Result login(@RequestBody @Validated UserLoginDTO dto, HttpServletRequest request){
         String ip = request.getRemoteAddr();
 
-        if (rateLimitService.isRateLimited(LOGIN_LIMIT_PREFIX +ip,LOGIN_LIMIT_WINDOW,MAX_LOGIN_ATTEMPTS)) {
+        if (rateLimitService.isRateLimited(LOGIN_LIMIT_PREFIX +ip, LOGIN_LIMIT_WINDOW, MAX_LOGIN_ATTEMPTS)) {
             return Result.error("请求过于频繁");
         }
-        return Result.success(userService.login(dto.getUsername(),dto.getPassword()));
+        return Result.success(userService.login(dto.getUsername(), dto.getPassword()));
     }
 
     @GetMapping("/info")

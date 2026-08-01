@@ -1,7 +1,8 @@
 package asia.creat.dto;
 
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+
+import jakarta.validation.constraints.NotNull;
 
 @Data
 public class MoveFolderDTO {

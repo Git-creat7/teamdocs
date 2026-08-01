@@ -35,7 +35,7 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
 
     @Override
     public void upload(MultipartFile file, BucketType bucket, String objectKey) {
-        try{
+        try {
              minioClient.putObject(
                 PutObjectArgs.builder()
                     .bucket(resolveBucketName(bucket))
@@ -44,7 +44,7 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
                     .contentType(file.getContentType())
                     .build()
             );
-        }catch(Exception e){
+        }catch (Exception e){
             log.error("文件上传失败: objectKey={}, error={}", objectKey, e.getMessage());
             throw new BusinessException("文件上传失败", e);
         }
@@ -68,7 +68,7 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
     @Override
     public String getAccessUrl(BucketType bucket, String objectKey, Map<String, String> queryParams) {
         String url = null;
-        if(bucket == BucketType.PUBLIC) {
+        if (bucket == BucketType.PUBLIC) {
             // 公共桶拼接URL
             url = String.format("%s/%s/%s",
                     minioProperties.getPublicEndpoint(),
@@ -76,7 +76,7 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
                     objectKey);
             log.debug("生成公共访问URL: {}", url);
 
-        }else{
+        }else {
             // 私有桶生成预签名URL
             try {
                 var builder = GetPresignedObjectUrlArgs.builder()
@@ -85,11 +85,11 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
                         .object(objectKey)
                         .expiry(1, java.util.concurrent.TimeUnit.HOURS);
 
-                if(queryParams != null && !queryParams.isEmpty()) {
+                if (queryParams != null && !queryParams.isEmpty()) {
                     builder.extraQueryParams(queryParams);
                 }
 
-                url  = minioPublicClient.getPresignedObjectUrl(builder.build());
+                url = minioPublicClient.getPresignedObjectUrl(builder.build());
                 log.debug("生成私有访问URL: {}", url);
 
             } catch (Exception e) {

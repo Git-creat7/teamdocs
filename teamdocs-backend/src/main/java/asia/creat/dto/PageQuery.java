@@ -1,9 +1,10 @@
 package asia.creat.dto;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import lombok.Data;
+
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import lombok.Data;
 
 @Data
 public class PageQuery {

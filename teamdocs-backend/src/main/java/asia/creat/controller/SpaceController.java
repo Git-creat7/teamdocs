@@ -9,6 +9,7 @@ import asia.creat.entity.Space;
 import asia.creat.security.LoginUser;
 import asia.creat.service.SpaceService;
 import asia.creat.vo.SpaceMemberVO;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -17,12 +18,9 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/space")
+@RequiredArgsConstructor
 public class SpaceController {
     private final SpaceService spaceService;
-
-    public SpaceController(SpaceService spaceService) {
-        this.spaceService = spaceService;
-    }
 
     /*
     * 创建空间
@@ -30,7 +28,7 @@ public class SpaceController {
     @PostMapping("")
     public Result createSpace(@RequestBody @Validated CreateSpaceDTO dto,
                               @AuthenticationPrincipal LoginUser loginUser) {
-        spaceService.createSpace(dto,loginUser);
+        spaceService.createSpace(dto, loginUser);
         return Result.success();
     }
     /*
@@ -46,7 +44,7 @@ public class SpaceController {
     @GetMapping("/{id}")
     public Result getSpace(@PathVariable("id") Long spaceId,
                            @AuthenticationPrincipal LoginUser loginUser) {
-        Space space = spaceService.getSpaceById(spaceId,loginUser);
+        Space space = spaceService.getSpaceById(spaceId, loginUser);
         return Result.success(space);
     }
     /*

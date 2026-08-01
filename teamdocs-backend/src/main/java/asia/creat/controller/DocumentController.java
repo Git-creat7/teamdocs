@@ -7,6 +7,7 @@ import asia.creat.dto.RenameDocumentDTO;
 import asia.creat.dto.RestoreDocumentDTO;
 import asia.creat.security.LoginUser;
 import asia.creat.service.DocumentService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -14,12 +15,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/spaces/{spaceId}/documents")
+@RequiredArgsConstructor
 public class DocumentController {
     private final DocumentService documentService;
-
-    public DocumentController(DocumentService documentService) {
-        this.documentService = documentService;
-    }
 
     /*
      * 上传文档

@@ -5,8 +5,8 @@ import asia.creat.anno.OperationTarget;
 import asia.creat.anno.RequireSpaceRole;
 import asia.creat.anno.SpaceId;
 import asia.creat.common.BucketType;
-import asia.creat.common.PageResult;
 import asia.creat.common.exception.BusinessException;
+import asia.creat.common.PageResult;
 import asia.creat.dto.MoveDocumentDTO;
 import asia.creat.dto.PageQuery;
 import asia.creat.dto.RenameDocumentDTO;
@@ -31,6 +31,7 @@ import asia.creat.vo.FolderPathItemVO;
 import asia.creat.vo.RestoreDocumentVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +47,7 @@ import java.util.UUID;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class DocumentServiceImpl implements DocumentService {
     private final FileStorageService fileStorageService;
     private final DocumentMapper documentMapper;
@@ -54,16 +56,6 @@ public class DocumentServiceImpl implements DocumentService {
     private final RecentDocumentService recentDocumentService;
     private final DocumentTagMapper documentTagMapper;
     private final TagMapper tagMapper;
-
-    public DocumentServiceImpl(DocumentMapper documentMapper, FileStorageService fileStorageService, ResourcePermissionHelper permissionHelper, FolderMapper folderMapper, RecentDocumentService recentDocumentService, DocumentTagMapper documentTagMapper, TagMapper tagMapper) {
-        this.documentMapper = documentMapper;
-        this.fileStorageService = fileStorageService;
-        this.permissionHelper = permissionHelper;
-        this.folderMapper = folderMapper;
-        this.recentDocumentService = recentDocumentService;
-        this.documentTagMapper = documentTagMapper;
-        this.tagMapper = tagMapper;
-    }
 
     @Override
     @OperationLog(
@@ -76,7 +68,7 @@ public class DocumentServiceImpl implements DocumentService {
     public Long upload(@SpaceId Long spaceId, Long folderId, MultipartFile file, LoginUser loginUser) {
 
         String originalName = file.getOriginalFilename();
-        if(originalName == null) {
+        if (originalName == null) {
             throw new BusinessException("文件名不能为空");
         }
         folderId = requireFolderInSpace(spaceId, folderId);
@@ -115,7 +107,7 @@ public class DocumentServiceImpl implements DocumentService {
             throw e;
         }
 
-        log.debug("用户 {} 上传了文件 {} 到空间 {} 的文件夹 {}",loginUser.getUserId(), originalName, spaceId, folderId);
+        log.debug("用户 {} 上传了文件 {} 到空间 {} 的文件夹 {}", loginUser.getUserId(), originalName, spaceId, folderId);
         return doc.getId();
     }
 
@@ -156,7 +148,7 @@ public class DocumentServiceImpl implements DocumentService {
         Document doc = checkDocument(documentId, spaceId);
 
         SpaceMember member = SpaceContext.getSpaceMember();
-        permissionHelper.checkOwnerOrCreator(member,doc.getUploadBy(),loginUser.getUserId());
+        permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
         documentMapper.deleteById(documentId);
 
@@ -166,7 +158,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @OperationLog(value = "移动文档", resourceType = "DOCUMENT")
     @RequireSpaceRole
-    public void moveDocument(@SpaceId Long spaceId,@OperationTarget Long documentId, MoveDocumentDTO dto, LoginUser loginUser) {
+    public void moveDocument(@SpaceId Long spaceId, @OperationTarget Long documentId, MoveDocumentDTO dto, LoginUser loginUser) {
 
         Document doc = checkDocument(documentId, spaceId);
 
@@ -255,7 +247,6 @@ public class DocumentServiceImpl implements DocumentService {
         return vo;
     }
 
-
     @Override
     @RequireSpaceRole
     public PageResult<Document> listTrashedDocuments(@SpaceId Long spaceId, PageQuery pageQuery, LoginUser loginUser) {
@@ -267,7 +258,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @OperationLog(value = "恢复文档", resourceType = "DOCUMENT")
     @RequireSpaceRole
-    public RestoreDocumentVO restoreDocument(@SpaceId Long spaceId,@OperationTarget Long documentId, Long targetFolderId, LoginUser loginUser) {
+    public RestoreDocumentVO restoreDocument(@SpaceId Long spaceId, @OperationTarget Long documentId, Long targetFolderId, LoginUser loginUser) {
 
         Document doc = documentMapper.selectDeletedDocument(documentId);
 
@@ -298,7 +289,6 @@ public class DocumentServiceImpl implements DocumentService {
                 throw new BusinessException("目标文件夹不存在");
             }
         }
-
 
         documentMapper.updateDeleted(documentId, targetFolderId);
         return new RestoreDocumentVO(targetFolderId, originalFolderDeleted);
@@ -340,7 +330,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @RequireSpaceRole
     public PageResult<Document> searchDocuments(@SpaceId Long spaceId, String keyword, PageQuery pageQuery, LoginUser loginUser) {
-        if(keyword == null || keyword.trim().isEmpty()) {
+        if (keyword == null || keyword.trim().isEmpty()) {
             throw new BusinessException("搜索关键字不能为空");
         }
         var page = pageQuery.<Document>toPage();
@@ -348,7 +338,6 @@ public class DocumentServiceImpl implements DocumentService {
         page.setOptimizeCountSql(false);
         return PageResult.from(documentMapper.searchDocuments(page, spaceId, keyword.trim()));
     }
-
 
     /*
      * 检查文档

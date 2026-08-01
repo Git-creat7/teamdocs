@@ -11,9 +11,10 @@ import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
-import org.aspectj.lang.ProceedingJoinPoint;
+import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.stereotype.Component;
 
@@ -21,10 +22,10 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 
-
 @Slf4j
 @Component
 @Aspect
+@RequiredArgsConstructor
 public class SpaceRoleAspect {
     /*
     * 该切面用于处理与空间角色相关的权限控制
@@ -32,11 +33,6 @@ public class SpaceRoleAspect {
     */
     private final SpaceMemberMapper spaceMemberMapper;
     private final SpaceMapper spaceMapper;
-
-    public SpaceRoleAspect(SpaceMemberMapper spaceMemberMapper, SpaceMapper spaceMapper) {
-        this.spaceMemberMapper = spaceMemberMapper;
-        this.spaceMapper = spaceMapper;
-    }
 
     //环绕通知，拦截所有使用了@RequireSpaceRole注解的方法
     @Around("@annotation(asia.creat.anno.RequireSpaceRole)")

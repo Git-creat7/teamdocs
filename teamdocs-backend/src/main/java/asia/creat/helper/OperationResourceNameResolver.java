@@ -7,27 +7,23 @@ import asia.creat.mapper.FolderMapper;
 import asia.creat.mapper.TagMapper;
 import cn.hutool.core.util.StrUtil;
 import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class OperationResourceNameResolver {
     private final DocumentMapper documentMapper;
     private final FolderMapper folderMapper;
     private final TagMapper tagMapper;
-
-    public OperationResourceNameResolver(DocumentMapper documentMapper, FolderMapper folderMapper, TagMapper tagMapper) {
-        this.documentMapper = documentMapper;
-        this.folderMapper = folderMapper;
-        this.tagMapper = tagMapper;
-    }
 
     public String resolve(String resourceType, Long resourceId, Long spaceId) {
         if (StrUtil.isBlank(resourceType) || resourceId == null || spaceId == null) {
             return null;
         }
 
-        try{
+        try {
 
             switch (resourceType) {
                 case "DOCUMENT" -> {
@@ -53,7 +49,7 @@ public class OperationResourceNameResolver {
 
         }catch (Exception e) {
             log.warn("资源名称解析失败 resourceType: {}, resourceId: {}, spaceId: {}",
-                    resourceType,resourceId,spaceId, e);
+                    resourceType, resourceId, spaceId, e);
         }
 
         return null;

@@ -7,7 +7,7 @@ import java.lang.annotation.Target;
 
 /*
 *
-*  @OperationLog(value = "操作名称", resourceType = "资源类型")
+* @OperationLog(value = "操作名称", resourceType = "资源类型")
 *
 * 只能标注在方法上
 * 运行时保留
