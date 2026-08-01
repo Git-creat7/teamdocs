@@ -56,6 +56,7 @@ export function canOpenActivityDocument(act) {
   return activityMeta(act).style === 'doc'
     && act?.resourceType === 'DOCUMENT'
     && Number(act?.resourceId) > 0
+    && !!act?.documentName
     && !NON_OPENABLE_DOCUMENT_OPERATIONS.has(act.operationName)
 }
 
