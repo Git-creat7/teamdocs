@@ -27,11 +27,23 @@ TeamDocs 是一个面向小型团队的文档协作平台，提供空间与成�
 - Redis Cache Aside 空间缓存、Lua 登录限流、ZSet 最近浏览
 - 前端飞书风格工作区：标签管理、最近浏览、活动流与键盘可达性
 
-## 技术栈
+## 后端
 
-**后端**：Spring Boot 3.5、Spring Security + JWT、MyBatis-Plus、MySQL 8、Redis 7（Lua）、MinIO、Spring AOP、Docker Compose
+- Spring Boot 3.5
+- Spring Security + JWT
+- MyBatis-Plus
+- MySQL 8
+- Redis 7（Lua）
+- MinIO
+- Spring AOP
+- Docker Compose
 
-**前端**：Vue 3 + Vite 6 + Pinia + Vue Router、Element Plus、@file-viewer 渲染器
+## 前端
+
+- Vue 3 + Vite 6
+- Pinia + Vue Router
+- Element Plus
+- @file-viewer 渲染器
 
 技术细节与使用指引见 [后端 README](teamdocs-backend/README.md) 与 [前端 README](teamdocs-frontend/README.md)。
 
