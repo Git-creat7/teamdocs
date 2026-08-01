@@ -12,10 +12,7 @@
             u.avatar,
             ol.operation_name,
             ol.resource_type,
-            CASE
-                WHEN ol.resource_type = 'DOCUMENT' THEN d.id
-                ELSE ol.resource_id
-            END AS resource_id,
+            ol.resource_id,
             ol.space_id,
             s.name AS space_name,
             d.name AS document_name,
@@ -29,6 +26,7 @@
             AND ol.resource_id = d.id
             AND d.deleted = 0
         WHERE ol.success = 1
+          AND NOT (ol.resource_type = 'DOCUMENT' AND ol.resource_id IS NULL)
           AND ol.space_id IN (
               SELECT sm.space_id FROM space_member sm WHERE sm.user_id = #{userId}
           )
