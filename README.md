@@ -87,7 +87,6 @@ MySQL、Redis、MinIO 就绪后，把 `.env.example` 配置到根目录 `.env`�
 |---|---|
 | [teamdocs-backend/README.md](teamdocs-backend/README.md) | 本地开发、Docker 部署、环境变量、API 约定与路由、预览接口、冒烟测试、排错 |
 | [teamdocs-frontend/README.md](teamdocs-frontend/README.md) | 前端启动/构建、在线预览说明、目录结构、排错 |
-| [docs/frontend/DECISIONS.md](docs/frontend/DECISIONS.md) | 前端接口契约与实现决策 |
 | [PROGRESS.md](PROGRESS.md) | 开发进度与踩坑记录（每周更新） |
 
 ## 常见问题
