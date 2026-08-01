@@ -846,6 +846,12 @@ async function loadSidebarRecent() {
 
 watch(() => route.path, loadSidebarRecent)
 
+// 文档被删除/恢复/彻底删除后（SpaceWorkbenchView/TrashView 派发），刷新侧栏最近文档
+// 侧栏常驻，路由不变时不会触发上面的 path watch，必须由事件驱动刷新
+function handleRecentDocsChanged() {
+  loadSidebarRecent()
+}
+
 function openSidebarRecentDoc(doc) {
   openDocument({ spaceId: doc.spaceId, documentId: doc.documentId })
 }
@@ -854,10 +860,12 @@ onMounted(() => {
   refreshUser()
   refreshSpaces()
   loadSidebarRecent()
+  window.addEventListener('teamdocs:recent-docs-changed', handleRecentDocsChanged)
 })
 
 onUnmounted(() => {
   stopSidebarResize(false)
+  window.removeEventListener('teamdocs:recent-docs-changed', handleRecentDocsChanged)
 })
 </script>
 

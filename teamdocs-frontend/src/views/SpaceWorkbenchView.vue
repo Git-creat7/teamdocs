@@ -1,5 +1,18 @@
 <template>
-  <div class="wb-root">
+  <div
+    class="wb-root"
+    @dragenter.prevent="onDragEnter"
+    @dragover.prevent
+    @dragleave.prevent="onDragLeave"
+    @drop.prevent="onDrop"
+  >
+    <!-- 拖拽上传遮罩 -->
+    <div v-if="dragActive" class="drag-overlay" aria-hidden="true">
+      <div class="drag-overlay__box">
+        <el-icon :size="36"><CloudUpload /></el-icon>
+        <p>松开鼠标，上传到当前文件夹</p>
+      </div>
+    </div>
     <!-- ===== 工作台头部：空间信息 + 操作 (对标：名称+徽章一行，描述下行，操作带文字) ===== -->
     <div class="wb-header anim-item" style="--delay: 0">
       <div class="wb-title-group">
@@ -331,6 +344,7 @@
             @rename="handleDocRename"
             @tags="handleItemCommand('tags', $event)"
             @move="handleItemCommand('move', $event)"
+            @delete="handleDocDelete"
           />
         </div>
       </section>
@@ -1270,6 +1284,63 @@ function triggerUpload() {
 // 与后端 multipart 单文件上限 (100MB) 对齐的前端预检
 const MAX_UPLOAD_SIZE = 100 * 1024 * 1024
 
+// ===== 拖拽上传：整个工作台可接收文件，上传到当前文件夹 =====
+const dragActive = ref(false)
+let dragDepth = 0
+
+function hasFiles(event) {
+  return Array.from(event.dataTransfer?.types || []).includes('Files')
+}
+
+function onDragEnter(event) {
+  if (!hasFiles(event)) return
+  dragDepth += 1
+  dragActive.value = true
+}
+
+function onDragLeave(event) {
+  if (!hasFiles(event)) return
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (dragDepth === 0) dragActive.value = false
+}
+
+function onDrop(event) {
+  dragDepth = 0
+  dragActive.value = false
+  const files = Array.from(event.dataTransfer?.files || [])
+  if (files.length > 0) uploadFiles(files)
+}
+
+async function uploadFiles(files) {
+  const oversized = files.filter((f) => f.size > MAX_UPLOAD_SIZE)
+  const valid = files.filter((f) => f.size <= MAX_UPLOAD_SIZE)
+  if (oversized.length > 0) {
+    ElMessage.error(`${oversized.length} 个文件超过 100MB 上限，已跳过`)
+  }
+  if (valid.length === 0) return
+
+  uploading.value = true
+  let okCount = 0
+  try {
+    for (const file of valid) {
+      try {
+        await uploadDocumentApi(spaceId.value, currentFolderId.value, file)
+        okCount += 1
+      } catch (err) {
+        // 拦截器已提示单个文件失败
+      }
+    }
+  } finally {
+    uploading.value = false
+  }
+  if (okCount > 0) {
+    ElMessage.success(`上传成功 ${okCount} 个文档`)
+    if (viewMode.value === 'folder') {
+      await loadCurrentFolderContent()
+    }
+  }
+}
+
 async function handleFileSelected(event) {
   const file = event.target.files?.[0]
   if (!file) return
@@ -1502,6 +1573,7 @@ function handleDocDelete(doc) {
     try {
       await deleteDocumentApi(spaceId.value, doc.id)
       ElMessage.success('文档已删除，可在回收站找回')
+      window.dispatchEvent(new CustomEvent('teamdocs:recent-docs-changed'))
       if (detailDoc.value && detailDoc.value.id === doc.id) {
         closeDetail()
       }
@@ -1559,6 +1631,39 @@ function formatDate(dateStr) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+}
+
+/* 拖拽上传遮罩 */
+.drag-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  background: rgba(37, 99, 235, 0.06);
+  border: 2px dashed var(--app-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.drag-overlay__box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 44px;
+  border-radius: 14px;
+  background: var(--app-panel);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+  color: var(--app-accent);
+  font-weight: 600;
+}
+
+.drag-overlay__box p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--app-text);
 }
 
 /* ============ 分栏布局 (Master-Detail) ============ */
