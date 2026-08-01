@@ -16,9 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class ActivityController {
     private final OperationLogService operationLogService;
 
-    /*
-     * 我所在空间的最近操作动态 (团队动态流)
-     * */
     @GetMapping("")
     public Result listRecentActivities(@RequestParam(value = "spaceId", required = false) Long spaceId,
                                        @RequestParam(value = "limit", required = false) Integer limit,

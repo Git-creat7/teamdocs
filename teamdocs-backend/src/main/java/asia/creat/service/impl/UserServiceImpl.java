@@ -58,7 +58,6 @@ public class UserServiceImpl implements UserService {
         }
         User user = new User();
         user.setUsername(username);
-        //加密
         user.setPassword(passwordEncoder.encode(password));
         userMapper.insert(user);
     }

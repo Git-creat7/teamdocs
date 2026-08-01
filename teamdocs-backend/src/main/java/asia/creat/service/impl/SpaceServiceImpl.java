@@ -107,13 +107,6 @@ public class SpaceServiceImpl implements SpaceService {
         return space;
     }
 
-    /*@Override
-    public Space getSpaceById(Long spaceId, LoginUser loginUser) {
-        Space space = checkSpaceOrThrow(spaceId);
-        checkIsMember(spaceId, loginUser.getUserId());
-        return space;
-    }*/
-
     @Override
     @RequireSpaceRole(OWNER)
     @OperationLog(value = "删除空间", resourceType = "SPACE")
@@ -156,7 +149,10 @@ public class SpaceServiceImpl implements SpaceService {
         if (count > 0){
             throw new BusinessException("用户已经是该空间的成员");
         }
-        SpaceMember m = new SpaceMember(null, spaceId, user.getId(), dto.getRole(), null);
+        SpaceMember m = new SpaceMember();
+        m.setSpaceId(spaceId);
+        m.setUserId(user.getId());
+        m.setRole(dto.getRole());
         spaceMemberMapper.insert(m);
     }
 
@@ -214,9 +210,6 @@ public class SpaceServiceImpl implements SpaceService {
         log.info("修改了空间 {} 中用户 {} 的角色为 {}", spaceId, targetUserId, dto.getRole());
     }
 
-    /*
-    * 检查空间是否为空
-    * */
     private Space checkSpaceOrThrow(Long spaceId) {
         LambdaQueryWrapper<Space> lqw = new LambdaQueryWrapper<>();
         lqw.eq(Space::getId, spaceId);
@@ -227,10 +220,7 @@ public class SpaceServiceImpl implements SpaceService {
         return space;
     }
 
-    /*
-    * 校验是否为空间成员
-    * */
-    private void checkIsMember(Long spaceId, Long userId){
+    private void checkIsMember(Long spaceId, Long userId) {
         LambdaQueryWrapper<SpaceMember> lqwUserId = new LambdaQueryWrapper<>();
         lqwUserId.eq(SpaceMember::getSpaceId, spaceId)
                 .eq(SpaceMember::getUserId, userId);

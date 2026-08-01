@@ -19,9 +19,6 @@ import org.springframework.web.multipart.MultipartFile;
 public class DocumentController {
     private final DocumentService documentService;
 
-    /*
-     * 上传文档
-     * */
     @PostMapping("/upload")
     public Result uploadDocument(@PathVariable Long spaceId,
                                  @RequestParam(defaultValue = "0") Long folderId,
@@ -31,9 +28,6 @@ public class DocumentController {
         return Result.success();
     }
 
-    /*
-     * 获取文件夹下的文档列表
-     * */
     @GetMapping("")
     public Result listByFolder(@PathVariable Long spaceId,
                                @RequestParam(defaultValue = "0") Long folderId,
@@ -42,9 +36,6 @@ public class DocumentController {
         return Result.success(documentService.listByFolder(spaceId, folderId, pageQuery, loginUser));
     }
 
-    /*
-     * 删除文档
-     * */
     @DeleteMapping("/{documentId}")
     public Result deleteDocument(@PathVariable Long spaceId,
                                  @PathVariable Long documentId,
@@ -53,9 +44,6 @@ public class DocumentController {
         return Result.success();
     }
 
-    /*
-     * 重命名文档
-     * */
     @PutMapping("/{documentId}/rename")
     public Result renameDocument(@PathVariable Long spaceId,
                                  @PathVariable Long documentId,
@@ -65,9 +53,6 @@ public class DocumentController {
         return Result.success();
     }
 
-    /*
-     * 移动文档
-     * */
     @PutMapping("/{documentId}/move")
     public Result moveDocument(@PathVariable Long spaceId,
                                @PathVariable Long documentId,
@@ -77,9 +62,6 @@ public class DocumentController {
         return Result.success();
     }
 
-    /*
-     * 文档详情
-     * */
     @GetMapping("/{documentId}")
     public Result getDocumentDetail(@PathVariable Long spaceId,
                                     @PathVariable Long documentId,
@@ -87,9 +69,6 @@ public class DocumentController {
         return Result.success(documentService.getDocumentDetail(spaceId, documentId, loginUser));
     }
 
-    /*
-     * 下载文档
-     * */
     @GetMapping("/{documentId}/download")
     public Result downloadDocument(@PathVariable Long spaceId,
                                    @PathVariable Long documentId,
@@ -98,9 +77,6 @@ public class DocumentController {
         return Result.success(url);
     }
 
-    /*
-     * 在线预览文档
-     * */
     @GetMapping("/{documentId}/preview")
     public Result previewDocument(@PathVariable Long spaceId,
                                   @PathVariable Long documentId,
@@ -108,9 +84,6 @@ public class DocumentController {
         return Result.success(documentService.previewDocument(spaceId, documentId, loginUser));
     }
 
-    /*
-     * 回收站：查表
-     * */
     @GetMapping("trash")
     public Result listTrashedDocuments(@PathVariable Long spaceId,
                                        @Validated @ModelAttribute PageQuery pageQuery,
@@ -118,9 +91,6 @@ public class DocumentController {
         return Result.success(documentService.listTrashedDocuments(spaceId, pageQuery, loginUser));
     }
 
-    /*
-     * 回收站:恢复文件
-     * */
     @PutMapping("/{documentId}/restore")
     public Result restoreDocument(@PathVariable Long spaceId,
                                   @PathVariable Long documentId,
@@ -131,9 +101,6 @@ public class DocumentController {
         return Result.success(documentService.restoreDocument(spaceId, documentId, targetFolderId, loginUser));
     }
 
-    /*
-     * 回收站:彻底删除
-     * */
     @DeleteMapping("/{documentId}/purge")
     public Result purgeDocument(@PathVariable Long spaceId,
                                 @PathVariable Long documentId,
@@ -142,9 +109,6 @@ public class DocumentController {
         return Result.success();
     }
 
-    /*
-     * 通过name + description + tag模糊搜索到文档
-     * */
     @GetMapping("/search")
     public Result searchDocuments(@PathVariable Long spaceId,
                                   @RequestParam String keyword,

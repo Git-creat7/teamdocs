@@ -20,9 +20,6 @@ public class TagController {
 
     private final TagService tagService;
 
-    /*
-    * 创建标签
-    * */
     @PostMapping("/tags")
     public Result createTag(@PathVariable Long spaceId,
                             @RequestBody @Validated CreateTagDTO dto,
@@ -31,9 +28,6 @@ public class TagController {
         return Result.success();
     }
 
-    /*
-    * 获取标签列表
-    * */
     @GetMapping("/tags")
     public Result getTags(@PathVariable Long spaceId,
                           @AuthenticationPrincipal LoginUser loginUser){
@@ -41,9 +35,6 @@ public class TagController {
         return Result.success(list);
     }
 
-    /*
-    * 删除标签
-    * */
     @DeleteMapping("/tags/{tagId}")
     public Result deleteTag(@PathVariable Long spaceId,
                             @PathVariable Long tagId,
@@ -51,9 +42,7 @@ public class TagController {
         tagService.deleteTag(spaceId, tagId, loginUser);
         return Result.success();
     }
-    /*
-    * 重命名标签
-    * */
+
     @PutMapping("/tags/{tagId}")
     public Result renameTag(@PathVariable Long spaceId,
                             @PathVariable Long tagId,
@@ -63,9 +52,6 @@ public class TagController {
         return Result.success();
     }
 
-    /*
-    * 打标签
-    * */
     @PostMapping("/documents/{documentId}/tags/{tagId}")
     public Result addTagToDocument(@PathVariable Long spaceId,
                                    @PathVariable Long documentId,
@@ -75,9 +61,6 @@ public class TagController {
         return Result.success();
     }
 
-    /*
-    * 摘标签
-    * */
     @DeleteMapping("/documents/{documentId}/tags/{tagId}")
     public Result removeTagFromDocument(@PathVariable Long spaceId,
                                         @PathVariable Long documentId,
@@ -87,9 +70,6 @@ public class TagController {
         return Result.success();
     }
 
-    /*
-    * 查单文档已打的标签
-    * */
     @GetMapping("/documents/{documentId}/tags")
     public Result listTagsByDocument(@PathVariable Long spaceId,
                                      @PathVariable Long documentId,
@@ -97,9 +77,6 @@ public class TagController {
         return Result.success(tagService.listTagsByDocument(spaceId, documentId, loginUser));
     }
 
-    /*
-    * 批量查多文档标签：documentIds 逗号分隔，返回 { docId: Tag[] }
-    * */
     @GetMapping("/documents/tags")
     public Result listTagsByDocuments(@PathVariable Long spaceId,
                                       @RequestParam List<Long> documentIds,

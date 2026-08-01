@@ -16,9 +16,6 @@ import org.springframework.web.bind.annotation.*;
 public class CommentController {
     private final CommentService commentService;
 
-    /*
-     * 新评论
-     * */
     @PostMapping("")
     public Result addComment(@PathVariable Long spaceId,
                              @PathVariable Long documentId,
@@ -28,9 +25,6 @@ public class CommentController {
         return Result.success();
     }
 
-    /*
-     * 获取评论
-     * */
     @GetMapping("")
     public Result listComments(@PathVariable Long spaceId,
                                @PathVariable Long documentId,
@@ -39,9 +33,6 @@ public class CommentController {
         return Result.success(commentService.listComments(spaceId, documentId, pageQuery, loginUser));
     }
 
-    /*
-     * 删除评论
-     * */
     @DeleteMapping("/{commentId}")
     public Result deleteComment(@PathVariable Long spaceId,
                                 @PathVariable Long documentId,

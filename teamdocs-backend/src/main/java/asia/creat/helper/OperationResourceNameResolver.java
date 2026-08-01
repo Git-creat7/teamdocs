@@ -47,7 +47,7 @@ public class OperationResourceNameResolver {
                 }
             }
 
-        }catch (Exception e) {
+        } catch (Exception e) {
             log.warn("资源名称解析失败 resourceType: {}, resourceId: {}, spaceId: {}",
                     resourceType, resourceId, spaceId, e);
         }

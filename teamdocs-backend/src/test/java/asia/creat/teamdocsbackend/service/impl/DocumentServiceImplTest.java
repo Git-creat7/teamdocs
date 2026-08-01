@@ -74,8 +74,8 @@ class DocumentServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new DocumentServiceImpl(
-                documentMapper,
                 fileStorageService,
+                documentMapper,
                 permissionHelper,
                 folderMapper,
                 recentDocumentService,

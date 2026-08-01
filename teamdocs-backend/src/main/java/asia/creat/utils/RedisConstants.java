@@ -1,10 +1,7 @@
 package asia.creat.utils;
 
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 
-@Component
 public class RedisConstants {
     public static final String CACHE_SPACE_PREFIX = "teamdocs:space:";
     public static final String LOGIN_LIMIT_PREFIX = "teamdocs:rate:login:";

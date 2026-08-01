@@ -339,9 +339,6 @@ public class DocumentServiceImpl implements DocumentService {
         return PageResult.from(documentMapper.searchDocuments(page, spaceId, keyword.trim()));
     }
 
-    /*
-     * 检查文档
-     * */
     private Document checkDocument(Long documentId, Long spaceId) {
 
         Document doc = documentMapper.selectById(documentId);

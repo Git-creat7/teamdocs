@@ -22,34 +22,25 @@ import java.util.List;
 public class SpaceController {
     private final SpaceService spaceService;
 
-    /*
-    * 创建空间
-    * */
     @PostMapping("")
     public Result createSpace(@RequestBody @Validated CreateSpaceDTO dto,
                               @AuthenticationPrincipal LoginUser loginUser) {
         spaceService.createSpace(dto, loginUser);
         return Result.success();
     }
-    /*
-    * 查看我的空间
-    * */
+
     @GetMapping("/list")
     public Result listMySpaces(@AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(spaceService.listMySpaces(loginUser));
     }
-    /*
-    * 查单个空间
-    * */
+
     @GetMapping("/{id}")
     public Result getSpace(@PathVariable("id") Long spaceId,
                            @AuthenticationPrincipal LoginUser loginUser) {
         Space space = spaceService.getSpaceById(spaceId, loginUser);
         return Result.success(space);
     }
-    /*
-    * 删除空间（软删除）
-    * */
+
     @DeleteMapping("/{id}")
     public Result deleteSpace(@PathVariable("id") Long spaceId,
                               @AuthenticationPrincipal LoginUser loginUser) {
@@ -57,20 +48,14 @@ public class SpaceController {
         return Result.success();
     }
 
-    /*
-    * 更新空间信息
-    * */
     @PutMapping("/{id}")
     public Result updateSpace(@PathVariable("id") Long spaceId,
                               @RequestBody @Validated UpdateSpaceDTO dto,
                               @AuthenticationPrincipal LoginUser loginUser) {
         spaceService.updateSpace(spaceId, dto, loginUser);
         return Result.success();
-     }
+    }
 
-     /*
-     * 添加成员
-     * */
     @PostMapping("/{id}/members")
     public Result addMember(@PathVariable("id") Long spaceId,
                             @RequestBody @Validated AddMemberDTO dto,
@@ -78,28 +63,22 @@ public class SpaceController {
         spaceService.addMember(spaceId, dto, loginUser);
         return Result.success();
     }
-    /*
-    * 查看空间成员列表
-    * */
+
     @GetMapping("/{id}/members")
     public Result listMembers(@PathVariable("id") Long spaceId,
                               @AuthenticationPrincipal LoginUser loginUser) {
         List<SpaceMemberVO> members = spaceService.listMembers(spaceId, loginUser);
         return Result.success(members);
     }
-    /*
-    * 移除成员
-    * */
+
     @DeleteMapping("/{id}/members/{userId}")
     public Result removeMember(@PathVariable("id") Long spaceId,
                                @PathVariable("userId") Long targetUserId,
                                @AuthenticationPrincipal LoginUser loginUser) {
         spaceService.removeMember(spaceId, targetUserId, loginUser);
         return Result.success();
-     }
-     /*
-     * 修改成员身份
-     * */
+    }
+
     @PutMapping("/{id}/members/{userId}")
     public Result updateMemberRole(@PathVariable("id") Long spaceId,
                                    @PathVariable("userId") Long targetUserId,

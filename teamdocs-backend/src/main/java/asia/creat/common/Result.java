@@ -2,11 +2,8 @@ package asia.creat.common;
 
 import lombok.Data;
 
-/*
-* 后端统一返回结果
-* */
 @Data
-public class Result{
+public class Result {
     private int code;
     private String msg;
     private Object data;

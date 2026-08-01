@@ -19,10 +19,7 @@ import java.util.Set;
 public class CacheClient {
     private final StringRedisTemplate stringRedisTemplate;
 
-    /*
-    * 用于设置对象
-    * */
-    public void set(String key, Object value, Duration duration){
+    public void set(String key, Object value, Duration duration) {
         try {
             stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(value), duration);
         } catch (Exception e) {
@@ -30,10 +27,7 @@ public class CacheClient {
         }
     }
 
-    /*
-    * 用于设置空值
-    * */
-    public void setString(String key, String value, Duration duration){
+    public void setString(String key, String value, Duration duration) {
         try {
             stringRedisTemplate.opsForValue().set(key, value, duration);
         } catch (Exception e) {
@@ -41,10 +35,7 @@ public class CacheClient {
         }
     }
 
-    /*
-    * 用于读取缓存
-    * */
-    public String get(String key){
+    public String get(String key) {
         try {
             return stringRedisTemplate.opsForValue().get(key);
         } catch (Exception e) {
@@ -53,10 +44,7 @@ public class CacheClient {
         }
     }
 
-    /*
-    * 用于删除键
-    * */
-    public void delete(String key){
+    public void delete(String key) {
         try {
             stringRedisTemplate.delete(key);
         } catch (Exception e) {
@@ -64,10 +52,7 @@ public class CacheClient {
         }
     }
 
-    /*
-    * 向 ZSet 添加元素并刷新 TTL
-    * */
-    public void addZSet(String key, String member, double score, Duration timeout){
+    public void addZSet(String key, String member, double score, Duration timeout) {
         try {
             stringRedisTemplate.opsForZSet().add(key, member, score);
 
@@ -78,11 +63,7 @@ public class CacheClient {
         }
     }
 
-    /*
-    * 从 ZSet 中获取指定范围的元素及其分数（逆序）
-    * ZREVRANGE key start stop WITHSCORES
-    * */
-    public Set<TypedTuple<String>> getZSetReverseRangeWithScores(String key, long start, long end){
+    public Set<TypedTuple<String>> getZSetReverseRangeWithScores(String key, long start, long end) {
         try {
             Set<TypedTuple<String>> res = stringRedisTemplate.opsForZSet().reverseRangeWithScores(key, start, end);
             return res != null ? res : Collections.emptySet();
@@ -91,9 +72,6 @@ public class CacheClient {
             return Collections.emptySet();
         }
     }
-    /*
-    * 从 ZSet 中移除指定元素
-    * */
     public void removeZSetMembers(String key, String... members) {
         if (!StringUtils.hasText(key) || members == null || members.length == 0) {
             return;
@@ -107,9 +85,6 @@ public class CacheClient {
         }
     }
 
-    /*
-    * 按排名区间批量移除 ZSet 元素（对应 ZREMRANGEBYRANK key start stop）
-    * */
     public Long removeZSetRangeByRank(String key, long start, long end) {
         try {
             Long removedCount = stringRedisTemplate.opsForZSet().removeRange(key, start, end);
