@@ -661,8 +661,21 @@ function syncDocDetailFromId(docId) {
   getDocumentDetailApi(spaceId.value, docId)
     .then((detail) => {
       if (!detail || detailDoc.value?.id !== docId) return
-      detailDoc.value = { ...(existing || detailDoc.value), ...detail }
-      setFromDetail(docId, detail.tags)
+      const openDetail = () => {
+        detailDoc.value = { ...(existing || detailDoc.value), ...detail }
+        setFromDetail(docId, detail.tags)
+      }
+      // 目录态下从动态/最近文档点进来：详情立即弹出，后台把目录定位到文档所在文件夹，
+      // 避免"先跳目录再跳详情"的两步感；目录已正确时不做任何导航
+      if (viewMode.value === 'folder') {
+        const folderId = Number(detail.folderId ?? 0)
+        openDetail()
+        if (folderId !== Number(currentFolderId.value)) {
+          navigateToFolder({ id: folderId, name: '' }, 'force', { expandTree: false, keepDetail: true })
+        }
+      } else {
+        openDetail()
+      }
     })
     .catch(() => {
       if (Number(route.query.doc) !== docId) return
@@ -1150,12 +1163,21 @@ function syncTreeSelection(folderId) {
   })
 }
 
-async function navigateToFolder(folder, fromSource = 'table', { expandTree = true } = {}) {
+async function navigateToFolder(folder, fromSource = 'table', { expandTree = true, keepDetail = false } = {}) {
   if (!folder) return
 
-  // 处于筛选态或详情态时，任何目录导航先统一回到目录视图并强制刷新
+  // 处于筛选态或详情态时，任何目录导航先统一回到目录视图并强制刷新；
+  // keepDetail 时保留详情面板与 query（如从动态定位目录），只清视图状态
   if (viewMode.value !== 'folder' || detailDoc.value) {
-    resetViewState()
+    if (keepDetail) {
+      viewMode.value = 'folder'
+      activeKeyword.value = ''
+      selectedTagId.value = null
+      activeTagName.value = ''
+      highlightDocId.value = null
+    } else {
+      resetViewState()
+    }
     fromSource = 'force'
   }
 
