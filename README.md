@@ -1,5 +1,22 @@
 # TeamDocs
 
+<div align="center">
+
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F?logo=spring&logoColor=white)](https://github.com/spring-projects/spring-boot)
+[![Spring Security](https://img.shields.io/badge/Spring%20Security-6DB33F?logo=springsecurity&logoColor=white)](https://github.com/spring-projects/spring-security)
+[![Spring AOP](https://img.shields.io/badge/Spring%20AOP-6DB33F?logo=spring&logoColor=white)](https://github.com/spring-projects/spring-framework)
+
+[![MyBatis-Plus](https://img.shields.io/badge/MyBatis--Plus-073042?logo=mybatis&logoColor=white)](https://github.com/baomidou/mybatis-plus)
+[![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white)](https://github.com/mysql/mysql-server)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)](https://github.com/redis/redis)
+[![MinIO](https://img.shields.io/badge/MinIO-C72E49)](https://github.com/minio/minio)
+
+[![JWT](https://img.shields.io/badge/JWT-000000)](https://github.com/jwtk/jjwt)
+[![Knife4j](https://img.shields.io/badge/Knife4j-00A6FB)](https://github.com/xiaoymin/knife4j)
+[![Docker Compose](https://img.shields.io/badge/Docker%20Compose-2496ED?logo=docker&logoColor=white)](https://github.com/docker/compose)
+
+</div>
+
 TeamDocs 是一个面向小型团队的文档协作平台，提供空间与成员权限、文件夹和文档管理、标签检索、评论、操作日志、Redis 缓存与限流，以及基于 file-viewer 的文档在线预览。
 
 当前仓库包含完整交付的后端（Spring Boot）与前端（Vue 3）。微服务、Elasticsearch、Yjs 和 RAG/Agent 不在本阶段范围内。
@@ -19,24 +36,20 @@ TeamDocs 是一个面向小型团队的文档协作平台，提供空间与成�
 
 ## 技术栈
 
-**后端**：Spring Boot 3.5、Spring Security + JWT、MyBatis-Plus、MySQL 8、Redis 7（Lua）、MinIO、Spring AOP、Docker Compose
-
-**前端**：Vue 3 + Vite 6 + Pinia + Vue Router、Element Plus、@file-viewer 渲染器
+Spring Boot 3.5、Spring Security + JWT、MyBatis-Plus、MySQL 8、Redis 7（Lua）、MinIO、Spring AOP、Docker Compose
 
 ## 架构
 
 ```mermaid
 flowchart LR
-    Browser[Vue 3 前端<br/>localhost:5173] -->|/api 代理| Backend[TeamDocs Backend]
-    Backend --> MySQL[(MySQL 8)]
+    Backend[TeamDocs Backend] --> MySQL[(MySQL 8)]
     Backend --> Redis[(Redis 7)]
     Backend --> MinIO[(MinIO)]
-    Browser -->|inline 预签名 URL 直接加载| MinIO
     Init[minio-init] -->|创建桶并配置公有桶权限| MinIO
     MySQL -->|首次启动按 01-06 执行| SQL[SQL 初始化脚本]
 ```
 
-请求先经过 JWT Filter，再进入 Controller、Service 和 Mapper。空间内业务由 `@RequireSpaceRole` 切面校验成员角色；MySQL 保存业务元数据，Redis 保存缓存、限流窗口、Token 撤销名单和最近浏览，MinIO 保存文件本体。预览场景下浏览器直连 MinIO 预签名地址，后端不代理文件流。
+请求先经过 JWT Filter，再进入 Controller、Service 和 Mapper。空间内业务由 `@RequireSpaceRole` 切面校验成员角色；MySQL 保存业务元数据，Redis 保存缓存、限流窗口、Token 撤销名单和最近浏览，MinIO 保存文件本体。预览与下载由 MinIO 预签名 URL 提供，后端不代理文件流。
 
 ## 快速启动
 
