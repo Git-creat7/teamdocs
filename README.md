@@ -1,8 +1,8 @@
 # TeamDocs
 
-TeamDocs 是一个面向小型团队的文档管理后端，提供空间与成员权限、文件夹和文档管理、标签检索、评论、操作日志、Redis 缓存与限流等能力。
+TeamDocs 是一个面向小型团队的文档协作平台，提供空间与成员权限、文件夹和文档管理、标签检索、评论、操作日志、Redis 缓存与限流，以及基于 file-viewer 的文档在线预览。
 
-当前仓库的可交付范围是后端服务及其基础设施。前端、微服务、Elasticsearch、Yjs 和 RAG/Agent 不在本阶段部署范围内。
+当前仓库包含完整交付的后端（Spring Boot）与前端（Vue 3）。微服务、Elasticsearch、Yjs 和 RAG/Agent 不在本阶段范围内。
 
 ## 核心能力
 
@@ -10,12 +10,16 @@ TeamDocs 是一个面向小型团队的文档管理后端，提供空间与成�
 - OWNER / ADMIN / MEMBER 三级空间权限，使用 Spring AOP 统一校验
 - 文档上传、下载、移动、重命名、软删除、回收站与彻底删除
 - MinIO 私有桶存储和一小时有效的预签名下载 URL
+- 文档在线预览：`inline` 预签名 URL + file-viewer 渲染图片、PDF、Word、表格、演示文稿与 OFD
 - 标签关联、MySQL FULLTEXT + ngram 元数据搜索
 - 扁平评论与回复关系，删除后保留占位
 - AOP 操作日志，日志写入失败不影响主业务
 - Redis Cache Aside 空间缓存、Lua 登录限流、ZSet 最近浏览
+- 前端飞书风格工作区：文档预览、标签管理、最近浏览、活动流与键盘可达性
 
 ## 技术栈
+
+### 后端
 
 - Web：Spring Boot 3.5、Spring MVC、Validation
 - 认证与权限：Spring Security、JWT、Spring AOP
@@ -23,6 +27,12 @@ TeamDocs 是一个面向小型团队的文档管理后端，提供空间与成�
 - 缓存：Spring Data Redis、Redis 7、Lua
 - 文件存储：MinIO
 - 测试与部署：JUnit 5、Mockito、Docker Compose
+
+### 前端
+
+- Vue 3 + Vite 6 + Pinia + Vue Router
+- Element Plus + lucide-vue-next
+- @file-viewer 系列渲染器（图片/文本/PDF/Word/表格/演示文稿/OFD）
 
 ## 架构
 
@@ -160,7 +170,7 @@ Authorization: Bearer <token>
 - 最近浏览：`GET /user/recent-documents`
 - 空间与成员：`/space`、`/space/{id}/members`
 - 文件夹：`/spaces/{spaceId}/folders`
-- 文档：`/spaces/{spaceId}/documents`
+- 文档：`/spaces/{spaceId}/documents`，预览：`/spaces/{spaceId}/documents/{documentId}/preview`
 - 标签：`/spaces/{spaceId}/tags` 及文档标签关联接口
 - 评论：`/spaces/{spaceId}/documents/{documentId}/comments`
 
