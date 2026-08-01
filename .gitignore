@@ -75,3 +75,6 @@ pnpm-debug.log*
 
 # Playwright MCP browser artifacts
 .playwright-mcp/
+
+# Frontend decision docs (local only, never committed)
+docs/frontend/
