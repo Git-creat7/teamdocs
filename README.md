@@ -2,13 +2,17 @@
 
 <div align="center">
 
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F?logo=spring&logoColor=white)](https://github.com/spring-projects/spring-boot) [![Spring Security](https://img.shields.io/badge/Spring%20Security-6DB33F?logo=springsecurity&logoColor=white)](https://github.com/spring-projects/spring-security) [![Spring AOP](https://img.shields.io/badge/Spring%20AOP-6DB33F?logo=spring&logoColor=white)](https://github.com/spring-projects/spring-framework) [![MyBatis-Plus](https://img.shields.io/badge/MyBatis--Plus-073042?logo=mybatis&logoColor=white)](https://github.com/baomidou/mybatis-plus) [![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white)](https://github.com/mysql/mysql-server) [![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)](https://github.com/redis/redis) [![MinIO](https://img.shields.io/badge/MinIO-C72E49)](https://github.com/minio/minio) [![JWT](https://img.shields.io/badge/JWT-000000)](https://github.com/jwtk/jjwt) [![Knife4j](https://img.shields.io/badge/Knife4j-00A6FB)](https://github.com/xiaoymin/knife4j) [![Docker Compose](https://img.shields.io/badge/Docker%20Compose-2496ED?logo=docker&logoColor=white)](https://github.com/docker/compose)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F?logo=spring&logoColor=white)](https://github.com/spring-projects/spring-boot) [![Spring Security](https://img.shields.io/badge/Spring%20Security-6DB33F?logo=springsecurity&logoColor=white)](https://github.com/spring-projects/spring-security) [![Spring AOP](https://img.shields.io/badge/Spring%20AOP-6DB33F?logo=spring&logoColor=white)](https://github.com/spring-projects/spring-framework) [![MyBatis-Plus](https://img.shields.io/badge/MyBatis--Plus-073042?logo=mybatis&logoColor=white)](https://github.com/baomidou/mybatis-plus) [![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white)](https://github.com/mysql/mysql-server)
+
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)](https://github.com/redis/redis) [![MinIO](https://img.shields.io/badge/MinIO-C72E49)](https://github.com/minio/minio) [![JWT](https://img.shields.io/badge/JWT-000000)](https://github.com/jwtk/jjwt) [![Knife4j](https://img.shields.io/badge/Knife4j-00A6FB)](https://github.com/xiaoymin/knife4j) [![Docker Compose](https://img.shields.io/badge/Docker%20Compose-2496ED?logo=docker&logoColor=white)](https://github.com/docker/compose)
+
+[![前端文档](https://img.shields.io/badge/前端文档-Vue%203-4FC08D?logo=vuedotjs&logoColor=white)](teamdocs-frontend/README.md)
 
 </div>
 
 TeamDocs 是一个面向小型团队的文档协作平台，提供空间与成员权限、文件夹和文档管理、标签检索、评论、操作日志、Redis 缓存与限流，以及基于 file-viewer 的文档在线预览。
 
-当前仓库包含完整交付的后端（Spring Boot）与前端（Vue 3）。微服务、Elasticsearch、Yjs 和 RAG/Agent 不在本阶段范围内。
+当前仓库包含完整交付的后端（Spring Boot）与前端（Vue 3）。
 
 ## 核心能力
 
@@ -25,7 +29,11 @@ TeamDocs 是一个面向小型团队的文档协作平台，提供空间与成�
 
 ## 技术栈
 
-Spring Boot 3.5、Spring Security + JWT、MyBatis-Plus、MySQL 8、Redis 7（Lua）、MinIO、Spring AOP、Docker Compose
+**后端**：Spring Boot 3.5、Spring Security + JWT、MyBatis-Plus、MySQL 8、Redis 7（Lua）、MinIO、Spring AOP、Docker Compose
+
+**前端**：Vue 3 + Vite 6 + Pinia + Vue Router、Element Plus、@file-viewer 渲染器
+
+技术细节与使用指引见 [后端 README](teamdocs-backend/README.md) 与 [前端 README](teamdocs-frontend/README.md)。
 
 ## 架构
 
