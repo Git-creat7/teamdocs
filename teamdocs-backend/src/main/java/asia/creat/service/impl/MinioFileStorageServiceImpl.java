@@ -8,16 +8,15 @@ import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
+import io.minio.http.Method;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
-/*
- * Minio存储相关，可更换
- * */
 @Service
 @Slf4j
 public class MinioFileStorageServiceImpl implements FileStorageService {
@@ -36,15 +35,15 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
     @Override
     public void upload(MultipartFile file, BucketType bucket, String objectKey) {
         try {
-             minioClient.putObject(
-                PutObjectArgs.builder()
-                    .bucket(resolveBucketName(bucket))
-                    .object(objectKey)
-                    .stream(file.getInputStream(), file.getSize(), -1)
-                    .contentType(file.getContentType())
-                    .build()
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(resolveBucketName(bucket))
+                            .object(objectKey)
+                            .stream(file.getInputStream(), file.getSize(), -1)
+                            .contentType(file.getContentType())
+                            .build()
             );
-        }catch (Exception e){
+        } catch (Exception e) {
             log.error("文件上传失败: objectKey={}, error={}", objectKey, e.getMessage());
             throw new BusinessException("文件上传失败", e);
         }
@@ -67,46 +66,40 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
 
     @Override
     public String getAccessUrl(BucketType bucket, String objectKey, Map<String, String> queryParams) {
-        String url = null;
         if (bucket == BucketType.PUBLIC) {
-            // 公共桶拼接URL
-            url = String.format("%s/%s/%s",
+            // 公共桶拼接 URL
+            String url = String.format("%s/%s/%s",
                     minioProperties.getPublicEndpoint(),
                     resolveBucketName(bucket),
                     objectKey);
             log.debug("生成公共访问URL: {}", url);
-
-        }else {
-            // 私有桶生成预签名URL
-            try {
-                var builder = GetPresignedObjectUrlArgs.builder()
-                        .method(io.minio.http.Method.GET)
-                        .bucket(resolveBucketName(bucket))
-                        .object(objectKey)
-                        .expiry(1, java.util.concurrent.TimeUnit.HOURS);
-
-                if (queryParams != null && !queryParams.isEmpty()) {
-                    builder.extraQueryParams(queryParams);
-                }
-
-                url = minioPublicClient.getPresignedObjectUrl(builder.build());
-                log.debug("生成私有访问URL: {}", url);
-
-            } catch (Exception e) {
-                log.error("生成访问URL失败: objectKey={}, error={}", objectKey, e.getMessage());
-                throw new BusinessException("生成访问URL失败", e);
-            }
+            return url;
         }
-        return url;
+
+        // 私有桶生成预签名 URL
+        try {
+            var builder = GetPresignedObjectUrlArgs.builder()
+                    .method(Method.GET)
+                    .bucket(resolveBucketName(bucket))
+                    .object(objectKey)
+                    .expiry(1, TimeUnit.HOURS);
+
+            if (queryParams != null && !queryParams.isEmpty()) {
+                builder.extraQueryParams(queryParams);
+            }
+
+            String url = minioPublicClient.getPresignedObjectUrl(builder.build());
+            log.debug("生成私有访问URL: {}", url);
+            return url;
+        } catch (Exception e) {
+            log.error("生成访问URL失败: objectKey={}, error={}", objectKey, e.getMessage());
+            throw new BusinessException("生成访问URL失败", e);
+        }
     }
 
-    /*
-    * 根据BucketType枚举值返回对应的桶名称。
-    * */
     private String resolveBucketName(BucketType bucket) {
-        log.debug("解析桶名称: bucketType={}", bucket);
         return bucket == BucketType.PUBLIC
-            ? minioProperties.getBucketPublic()
-            : minioProperties.getBucketPrivate();
+                ? minioProperties.getBucketPublic()
+                : minioProperties.getBucketPrivate();
     }
 }

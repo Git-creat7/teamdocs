@@ -7,7 +7,6 @@ import asia.creat.dto.RenameFolderDTO;
 import asia.creat.security.LoginUser;
 import asia.creat.service.FolderService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -18,9 +17,6 @@ import org.springframework.web.bind.annotation.*;
 public class FolderController {
     private final FolderService folderService;
 
-    /*
-    * 创建文件夹
-    * */
     @PostMapping("/folders")
     public Result createFolder(@PathVariable Long spaceId,
                                @RequestBody @Validated CreateFolderDTO dto,
@@ -29,20 +25,13 @@ public class FolderController {
         return Result.success();
     }
 
-    /*
-    * 查子文件夹列表
-    * */
     @GetMapping("/folders")
     public Result getSubFolders(@PathVariable Long spaceId,
                                 @RequestParam(required = false, defaultValue = "0") Long parentId,
-                                @AuthenticationPrincipal LoginUser loginUser)
-    {
+                                @AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(folderService.getSubFolder(spaceId, parentId, loginUser));
     }
 
-    /*
-    * 重命名文件夹
-    * */
     @PutMapping("/folders/{folderId}")
     public Result renameFolder(@PathVariable Long spaceId,
                                @PathVariable Long folderId,
@@ -52,9 +41,6 @@ public class FolderController {
         return Result.success();
     }
 
-    /*
-    * 删除文件夹
-    * */
     @DeleteMapping("/folders/{folderId}")
     public Result deleteFolder(@PathVariable Long spaceId,
                                @PathVariable Long folderId,
@@ -63,16 +49,13 @@ public class FolderController {
         return Result.success();
     }
 
-    /*
-    * 移动文件夹
-    * */
     @PutMapping("/folders/{folderId}/move")
     public Result moveFolder(@PathVariable Long spaceId,
                              @PathVariable Long folderId,
                              @RequestBody @Validated MoveFolderDTO dto,
                              @AuthenticationPrincipal LoginUser loginUser) {
-            folderService.moveFolder(spaceId, folderId, dto, loginUser);
-            return Result.success();
+        folderService.moveFolder(spaceId, folderId, dto, loginUser);
+        return Result.success();
     }
 
 }

@@ -37,7 +37,6 @@ public class RateLimitServiceImpl implements RateLimitService {
         } catch (Exception e) {
             log.warn("Redis 异常", e);
         }
-        if (attempts!=null && attempts > maxAttempts) return true;
-        return false;
+        return attempts != null && attempts > maxAttempts;
     }
 }

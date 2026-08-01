@@ -134,9 +134,6 @@ public class FolderServiceImpl implements FolderService {
         log.info("{} 将 {} 移动到了 「{}」", loginUser.getUsername(), folder.getName(), dto.getTargetParentId() == 0 ? "根目录" : "文件夹ID " + dto.getTargetParentId());
     }
 
-    /*
-    * 校验空间id，校验folder是否存在
-    * */
     private void checkParentSpaceId(Long parentId, Long spaceId) {
 
         Folder parentFolder = folderMapper.selectById(parentId);
@@ -148,9 +145,6 @@ public class FolderServiceImpl implements FolderService {
         }
     }
 
-    /*
-    * 广度优先删除文件
-    * */
     private List<Long> collectAllSubFolderIds(Long spaceId, Long folderId) {
 
         List<Long> allIds = new ArrayList<>();
@@ -171,9 +165,6 @@ public class FolderServiceImpl implements FolderService {
         return allIds;
     }
 
-    /*
-    * 检查文件夹
-    * */
     private Folder getFolder(Long folderId, Long spaceId) {
 
         Folder folder = folderMapper.selectById(folderId);

@@ -45,7 +45,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
         String requestURI = request.getRequestURI();
 
-        // 从Authorization请求头提取JWT token（格式：Bearer <token>）
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (authHeader == null) {
             filterChain.doFilter(request, response);
@@ -64,7 +63,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = authHeader.substring(7);
 
         try {
-            // 验证token签名并解析载荷，提取用户ID和用户名
             Claims claims = jwtUtils.parseToken(token);
             String tokenId = claims.getId();
             if (tokenId == null || tokenId.isBlank()) {
@@ -82,15 +80,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 throw new BadCredentialsException("JWT has been invalidated");
             }
 
-            // 创建LoginUser对象，用于后续权限判断
             LoginUser loginUser = new LoginUser(userId, username);
 
-            // 将认证信息放入SecurityContext，Spring Security后续会使用此信息
             UsernamePasswordAuthenticationToken auth =
                     new UsernamePasswordAuthenticationToken(loginUser, null, Collections.emptyList());
             SecurityContextHolder.getContext().setAuthentication(auth);
         } catch (Exception e) {
-            // token验证失败（过期、签名错误等）返回401
             SecurityContextHolder.clearContext();
             log.warn("Token验证失败: {}", e.getMessage());
             authenticationEntryPoint.commence(

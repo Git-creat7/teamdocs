@@ -10,9 +10,6 @@ import java.util.List;
 
 @Mapper
 public interface TagMapper extends BaseMapper<Tag> {
-    /*
-     * 查单文档已打的标签
-     * */
     List<Tag> selectTagsByDocumentId(@Param("documentId") Long documentId);
 
     /*
