@@ -130,8 +130,7 @@ public class DocumentController {
                                   @AuthenticationPrincipal LoginUser loginUser) {
         // 未指定目标时优先恢复原目录，原目录不存在则由 Service 回退到根目录。
         Long targetFolderId = dto != null ? dto.getTargetFolderId() : null;
-        documentService.restoreDocument(spaceId, documentId, targetFolderId, loginUser);
-        return Result.success();
+        return Result.success(documentService.restoreDocument(spaceId, documentId, targetFolderId, loginUser));
     }
 
     /*

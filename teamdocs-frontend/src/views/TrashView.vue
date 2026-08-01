@@ -125,8 +125,11 @@ async function loadMore() {
 
 async function handleRestore(doc) {
   try {
-    await restoreDocumentApi(activeSpaceId.value, doc.id)
+    const res = await restoreDocumentApi(activeSpaceId.value, doc.id)
     ElMessage.success(`"${doc.name}" 已恢复`)
+    if (res?.originalFolderDeleted) {
+      ElMessage.info('原文件夹已删除，文档已恢复到根目录')
+    }
     window.dispatchEvent(new CustomEvent('teamdocs:recent-docs-changed'))
     await loadTrash()
   } catch (err) {

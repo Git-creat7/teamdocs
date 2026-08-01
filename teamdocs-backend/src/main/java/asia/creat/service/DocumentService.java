@@ -8,6 +8,7 @@ import asia.creat.entity.Document;
 import asia.creat.security.LoginUser;
 import asia.creat.vo.DocumentDetailVO;
 import asia.creat.vo.DocumentPreviewVO;
+import asia.creat.vo.RestoreDocumentVO;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface DocumentService {
@@ -29,7 +30,7 @@ public interface DocumentService {
 
     PageResult<Document> listTrashedDocuments(Long spaceId, PageQuery pageQuery, LoginUser loginUser);
 
-    void restoreDocument(Long spaceId, Long documentId, Long targetFolderId, LoginUser loginUser);
+    RestoreDocumentVO restoreDocument(Long spaceId, Long documentId, Long targetFolderId, LoginUser loginUser);
 
     void purgeDocument(Long spaceId, Long documentId, LoginUser loginUser);
 
