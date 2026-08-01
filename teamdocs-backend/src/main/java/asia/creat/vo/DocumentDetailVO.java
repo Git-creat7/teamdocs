@@ -19,4 +19,5 @@ public class DocumentDetailVO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<Tag> tags;
+    private List<FolderPathItemVO> folderPath;
 }

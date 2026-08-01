@@ -27,6 +27,7 @@ import asia.creat.service.FileStorageService;
 import asia.creat.service.RecentDocumentService;
 import asia.creat.vo.DocumentDetailVO;
 import asia.creat.vo.DocumentPreviewVO;
+import asia.creat.vo.FolderPathItemVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -37,6 +38,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -192,9 +194,27 @@ public class DocumentServiceImpl implements DocumentService {
         DocumentDetailVO vo = new DocumentDetailVO();
         BeanUtils.copyProperties(doc, vo);
         vo.setTags(tags);
+        vo.setFolderPath(buildFolderPath(doc.getFolderId()));
 
         recentDocumentService.recordRecentDocument(loginUser.getUserId(), documentId);
         return vo;
+    }
+
+    // 从文件夹沿 parentId 上溯到根，拼出 [父级...自身] 路径链；
+    // 文件夹被物理删除时 selectById 返回 null，直接截断
+    private List<FolderPathItemVO> buildFolderPath(Long folderId) {
+        List<FolderPathItemVO> path = new ArrayList<>();
+        Long pid = folderId;
+        while (pid != null && pid != 0) {
+            Folder folder = folderMapper.selectById(pid);
+            if (folder == null) break;
+            FolderPathItemVO item = new FolderPathItemVO();
+            item.setId(folder.getId());
+            item.setName(folder.getName());
+            path.add(0, item);
+            pid = folder.getParentId();
+        }
+        return path;
     }
 
     @Override
