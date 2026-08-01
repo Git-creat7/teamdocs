@@ -671,7 +671,11 @@ function syncDocDetailFromId(docId) {
         const folderId = Number(detail.folderId ?? 0)
         openDetail()
         if (folderId !== Number(currentFolderId.value)) {
-          navigateToFolder({ id: folderId, name: '' }, 'force', { expandTree: false, keepDetail: true })
+          // 后端返回的完整路径链（树懒加载时前端拼不出深层路径，直接用它的）
+          const breadcrumb = detail.folderPath?.length
+            ? [{ id: 0, name: spaceInfo.value?.name || '根目录' }, ...detail.folderPath.map((p) => ({ id: p.id, name: p.name }))]
+            : null
+          navigateToFolder({ id: folderId, name: '' }, 'force', { expandTree: false, keepDetail: true, breadcrumb })
         }
       } else {
         openDetail()
@@ -1163,7 +1167,7 @@ function syncTreeSelection(folderId) {
   })
 }
 
-async function navigateToFolder(folder, fromSource = 'table', { expandTree = true, keepDetail = false } = {}) {
+async function navigateToFolder(folder, fromSource = 'table', { expandTree = true, keepDetail = false, breadcrumb = null } = {}) {
   if (!folder) return
 
   // 处于筛选态或详情态时，任何目录导航先统一回到目录视图并强制刷新；
@@ -1199,7 +1203,9 @@ async function navigateToFolder(folder, fromSource = 'table', { expandTree = tru
   }
 
   const existIndex = breadcrumbStack.value.findIndex((item) => item.id === folder.id)
-  if (existIndex !== -1) {
+  if (breadcrumb) {
+    breadcrumbStack.value = breadcrumb
+  } else if (existIndex !== -1) {
     breadcrumbStack.value = breadcrumbStack.value.slice(0, existIndex + 1)
   } else if (fromSource === 'table') {
     breadcrumbStack.value.push({ id: folder.id, name: folder.name })
