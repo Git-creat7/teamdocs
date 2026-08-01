@@ -28,6 +28,7 @@ import asia.creat.service.RecentDocumentService;
 import asia.creat.vo.DocumentDetailVO;
 import asia.creat.vo.DocumentPreviewVO;
 import asia.creat.vo.FolderPathItemVO;
+import asia.creat.vo.RestoreDocumentVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -266,7 +267,7 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @OperationLog(value = "恢复文档", resourceType = "DOCUMENT")
     @RequireSpaceRole
-    public void restoreDocument(@SpaceId Long spaceId,@OperationTarget Long documentId, Long targetFolderId, LoginUser loginUser) {
+    public RestoreDocumentVO restoreDocument(@SpaceId Long spaceId,@OperationTarget Long documentId, Long targetFolderId, LoginUser loginUser) {
 
         Document doc = documentMapper.selectDeletedDocument(documentId);
 
@@ -281,11 +282,13 @@ public class DocumentServiceImpl implements DocumentService {
         SpaceMember member = SpaceContext.getSpaceMember();
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
+        boolean originalFolderDeleted = false;
         if (targetFolderId == null) {
             targetFolderId = doc.getFolderId();
             if (targetFolderId != 0) {
                 Folder originalFolder = folderMapper.selectById(targetFolderId);
                 if (originalFolder == null || !originalFolder.getSpaceId().equals(spaceId)) {
+                    originalFolderDeleted = true;
                     targetFolderId = 0L;
                 }
             }
@@ -298,6 +301,7 @@ public class DocumentServiceImpl implements DocumentService {
 
 
         documentMapper.updateDeleted(documentId, targetFolderId);
+        return new RestoreDocumentVO(targetFolderId, originalFolderDeleted);
     }
 
     @Override
