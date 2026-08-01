@@ -6,9 +6,9 @@
 
 ## 当前位置
 
-**周次**：项目收尾
-**模块**：文档在线预览（后端完成，前端待接入）
-**状态**：新增预览专用接口与 `inline` 预签名 URL，下载仍保持 `attachment`；80 测试全绿
+**周次**：项目完结（2026-08-01）
+**模块**：整体交付
+**状态**：在线预览前端接入验证通过、Docker 部署与生产环境（MinIO 域名反代）验证通过、README 面向简历展示更新完毕。项目完结，进入维护与简历阶段。
 
 ---
 
@@ -27,13 +27,16 @@
 - [x] 收尾测试：移除外部 Redis 伪测试，补 JWT Filter、空间权限、评论权限、文档生命周期和分页单测
 - [x] 数据卫生：删除标签和彻底删除文档时同步清理 `document_tag`，数据库操作由事务保护
 - [x] 在线预览后端：新增 `GET /spaces/{spaceId}/documents/{documentId}/preview`，返回文档元数据与 `inline` MinIO 预签名 URL
+- [x] 在线预览前端：接入 file-viewer，预览/下载/水印验证通过
+- [x] 团队动态收尾：活动流展示修复与体验优化（文档目录定位、删除文档动态）
+- [x] 部署验证：Docker Compose 与生产环境（MinIO 域名反代）全链路验证通过
+- [x] 简历展示：README 重构为后端导向（技术栈 badges、架构图、启动与部署文档）
 
 ---
 
 ## 进行中
 
-- [ ] 在线预览前端：接入 file-viewer，并验证 MinIO CORS 与实际文件预览
-- [ ] 项目收尾：全量 API 回归 + 最终简历项目描述
+（无，项目已完结）
 
 ---
 
@@ -46,7 +49,7 @@
 - [x] 修复 `anyRequest().permitAll()`，仅登录、注册和健康检查允许匿名访问
 - [x] 增加 `jti`、`iat` 和 Redis Token 撤销名单，支持注销当前 Token
 - [x] 为高数据量列表增加 `current/size` 分页、稳定排序和联合索引
-- [ ] 全量 API 回归并整理最终简历项目描述
+- [x] 全量 API 回归并整理最终简历项目描述
 - [x] 标签批量接口：`GET /spaces/{id}/documents/tags?documentIds=...`，前端 `loadTagsForDocs` 从 N 个请求收成 1 个批量请求
 - [x] `/space/list` 聚合 VO：一次 JOIN 带出 myRole/memberCount/docCount，消掉首页每空间 2 请求的 N+1
 
