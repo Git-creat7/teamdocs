@@ -5,11 +5,8 @@ import asia.creat.security.RestAuthenticationEntryPoint;
 import asia.creat.service.TokenRevocationService;
 import asia.creat.utils.JWTUtils;
 import io.jsonwebtoken.Claims;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -19,23 +16,20 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.util.Collections;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JWTUtils jwtUtils;
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final TokenRevocationService tokenRevocationService;
-
-    public JwtAuthenticationFilter(JWTUtils jwtUtils,
-                                   RestAuthenticationEntryPoint authenticationEntryPoint,
-                                   TokenRevocationService tokenRevocationService) {
-        this.jwtUtils = jwtUtils;
-        this.authenticationEntryPoint = authenticationEntryPoint;
-        this.tokenRevocationService = tokenRevocationService;
-    }
 
     @Override
     protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
@@ -69,7 +63,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String token = authHeader.substring(7);
 
-        try{
+        try {
             // 验证token签名并解析载荷，提取用户ID和用户名
             Claims claims = jwtUtils.parseToken(token);
             String tokenId = claims.getId();
@@ -93,7 +87,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             // 将认证信息放入SecurityContext，Spring Security后续会使用此信息
             UsernamePasswordAuthenticationToken auth =
-                    new UsernamePasswordAuthenticationToken(loginUser,null, Collections.emptyList());
+                    new UsernamePasswordAuthenticationToken(loginUser, null, Collections.emptyList());
             SecurityContextHolder.getContext().setAuthentication(auth);
         } catch (Exception e) {
             // token验证失败（过期、签名错误等）返回401
@@ -115,6 +109,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         log.info("用户 {} 访问了 {}", userInfo, requestURI);
-        filterChain.doFilter(request,response);
+        filterChain.doFilter(request, response);
     }
 }

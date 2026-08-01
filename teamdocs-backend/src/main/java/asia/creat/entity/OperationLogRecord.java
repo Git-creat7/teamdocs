@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 @TableName("operation_log")
 public class OperationLogRecord {
     @TableId(type = IdType.AUTO)
-    private Long  id;
+    private Long id;
     private Long userId;
     private Long spaceId;
     private String operationName;

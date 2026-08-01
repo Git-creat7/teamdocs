@@ -5,18 +5,16 @@ import asia.creat.dto.AddCommentDTO;
 import asia.creat.dto.PageQuery;
 import asia.creat.security.LoginUser;
 import asia.creat.service.CommentService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/spaces/{spaceId}/documents/{documentId}/comments")
+@RequiredArgsConstructor
 public class CommentController {
     private final CommentService commentService;
-
-    public CommentController(CommentService commentService) {
-        this.commentService = commentService;
-    }
 
     /*
      * 新评论

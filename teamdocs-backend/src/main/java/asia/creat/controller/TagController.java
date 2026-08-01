@@ -6,6 +6,7 @@ import asia.creat.dto.PageQuery;
 import asia.creat.entity.Tag;
 import asia.creat.security.LoginUser;
 import asia.creat.service.TagService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -14,13 +15,10 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/spaces/{spaceId}")
+@RequiredArgsConstructor
 public class TagController {
 
     private final TagService tagService;
-
-    public TagController(TagService tagService) {
-        this.tagService = tagService;
-    }
 
     /*
     * 创建标签
@@ -29,7 +27,7 @@ public class TagController {
     public Result createTag(@PathVariable Long spaceId,
                             @RequestBody @Validated CreateTagDTO dto,
                             @AuthenticationPrincipal LoginUser loginUser) {
-        tagService.createTag(spaceId, dto,loginUser);
+        tagService.createTag(spaceId, dto, loginUser);
         return Result.success();
     }
 
@@ -39,7 +37,7 @@ public class TagController {
     @GetMapping("/tags")
     public Result getTags(@PathVariable Long spaceId,
                           @AuthenticationPrincipal LoginUser loginUser){
-        List<Tag> list = tagService.getTags(spaceId,loginUser);
+        List<Tag> list = tagService.getTags(spaceId, loginUser);
         return Result.success(list);
     }
 
@@ -88,8 +86,6 @@ public class TagController {
         tagService.removeTagFromDocument(spaceId, documentId, tagId, loginUser);
         return Result.success();
     }
-
-
 
     /*
     * 查单文档已打的标签

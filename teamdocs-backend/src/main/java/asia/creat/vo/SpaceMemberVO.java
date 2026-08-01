@@ -1,7 +1,6 @@
 package asia.creat.vo;
 
 import asia.creat.entity.SpaceRole;
-
 import lombok.Data;
 
 import java.time.LocalDateTime;

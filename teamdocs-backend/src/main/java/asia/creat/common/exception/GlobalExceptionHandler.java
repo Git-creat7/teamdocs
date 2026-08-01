@@ -2,9 +2,9 @@ package asia.creat.common.exception;
 
 import asia.creat.common.Result;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 
 import java.util.stream.Collectors;
 
@@ -24,7 +24,6 @@ public class GlobalExceptionHandler {
         log.error("发生业务异常: ", e);
         return Result.error("业务异常：" + e.getMessage());
     }
-
 
     //参数为空提示
     @ExceptionHandler(MethodArgumentNotValidException.class)

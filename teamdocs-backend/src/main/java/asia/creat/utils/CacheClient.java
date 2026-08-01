@@ -2,6 +2,7 @@ package asia.creat.utils;
 
 import cn.hutool.json.JSONUtil;
 import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
 import org.springframework.stereotype.Component;
@@ -14,12 +15,9 @@ import java.util.Set;
 
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class CacheClient {
     private final StringRedisTemplate stringRedisTemplate;
-
-    public CacheClient(StringRedisTemplate stringRedisTemplate) {
-        this.stringRedisTemplate = stringRedisTemplate;
-    }
 
     /*
     * 用于设置对象
@@ -28,7 +26,7 @@ public class CacheClient {
         try {
             stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(value), duration);
         } catch (Exception e) {
-            log.warn("写入 Redis 缓存失败,key={}",key,e);
+            log.warn("写入 Redis 缓存失败, key={}", key, e);
         }
     }
 
@@ -39,7 +37,7 @@ public class CacheClient {
         try {
             stringRedisTemplate.opsForValue().set(key, value, duration);
         } catch (Exception e) {
-            log.warn("写入 Redis 缓存失败,key={}",key,e);
+            log.warn("写入 Redis 缓存失败, key={}", key, e);
         }
     }
 
@@ -50,7 +48,7 @@ public class CacheClient {
         try {
             return stringRedisTemplate.opsForValue().get(key);
         } catch (Exception e) {
-            log.warn("读取 Redis 缓存失败,key={}",key,e);
+            log.warn("读取 Redis 缓存失败, key={}", key, e);
             return null;
         }
     }
@@ -59,10 +57,10 @@ public class CacheClient {
     * 用于删除键
     * */
     public void delete(String key){
-        try{
+        try {
             stringRedisTemplate.delete(key);
         } catch (Exception e) {
-            log.warn("删除 Redis 缓存失败,key={}",key,e);
+            log.warn("删除 Redis 缓存失败, key={}", key, e);
         }
     }
 
@@ -73,23 +71,23 @@ public class CacheClient {
         try {
             stringRedisTemplate.opsForZSet().add(key, member, score);
 
-            stringRedisTemplate.expire(key,timeout);
+            stringRedisTemplate.expire(key, timeout);
 
         } catch (Exception e) {
-            log.warn("添加 ZSet 失败,key: {},member: {}",key,member,e);
+            log.warn("添加 ZSet 失败, key: {}, member: {}", key, member, e);
         }
     }
 
     /*
     * 从 ZSet 中获取指定范围的元素及其分数（逆序）
-    *    ZREVRANGE key start stop WITHSCORES
+    * ZREVRANGE key start stop WITHSCORES
     * */
     public Set<TypedTuple<String>> getZSetReverseRangeWithScores(String key, long start, long end){
         try {
             Set<TypedTuple<String>> res = stringRedisTemplate.opsForZSet().reverseRangeWithScores(key, start, end);
             return res != null ? res : Collections.emptySet();
         } catch (Exception e) {
-            log.warn("获取 ZSet 逆序范围失败,key: {},start: {},end: {}",key,start,end,e);
+            log.warn("获取 ZSet 逆序范围失败, key: {}, start: {}, end: {}", key, start, end, e);
             return Collections.emptySet();
         }
     }
@@ -122,15 +120,3 @@ public class CacheClient {
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-

@@ -13,4 +13,3 @@ public interface OperationLogMapper extends BaseMapper<OperationLogRecord> {
 
     List<ActivityVO> selectRecentActivities(@Param("userId") Long userId, @Param("spaceId") Long spaceId, @Param("limit") Integer limit);
 }
-

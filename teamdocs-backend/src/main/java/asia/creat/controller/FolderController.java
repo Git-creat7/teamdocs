@@ -6,6 +6,7 @@ import asia.creat.dto.MoveFolderDTO;
 import asia.creat.dto.RenameFolderDTO;
 import asia.creat.security.LoginUser;
 import asia.creat.service.FolderService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
@@ -13,12 +14,9 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/spaces/{spaceId}")
+@RequiredArgsConstructor
 public class FolderController {
     private final FolderService folderService;
-
-    public FolderController(FolderService folderService) {
-        this.folderService = folderService;
-    }
 
     /*
     * 创建文件夹
@@ -39,7 +37,7 @@ public class FolderController {
                                 @RequestParam(required = false, defaultValue = "0") Long parentId,
                                 @AuthenticationPrincipal LoginUser loginUser)
     {
-        return Result.success(folderService.getSubFolder(spaceId, parentId,loginUser));
+        return Result.success(folderService.getSubFolder(spaceId, parentId, loginUser));
     }
 
     /*

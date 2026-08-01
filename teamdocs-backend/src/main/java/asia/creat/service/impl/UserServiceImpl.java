@@ -17,6 +17,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -30,6 +31,7 @@ import java.util.UUID;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
     private static final long MAX_AVATAR_SIZE = 2 * 1024 * 1024;
     private static final Set<String> ALLOWED_AVATAR_TYPES = Set.of(
@@ -46,18 +48,6 @@ public class UserServiceImpl implements UserService {
     private final FileStorageService fileStorageService;
     private final MinioProperties minioProperties;
 
-    public UserServiceImpl(JWTUtils jwtUtils, UserMapper userMapper, PasswordEncoder passwordEncoder,
-                           TokenRevocationService tokenRevocationService,
-                           FileStorageService fileStorageService,
-                           MinioProperties minioProperties) {
-        this.jwtUtils = jwtUtils;
-        this.userMapper = userMapper;
-        this.passwordEncoder = passwordEncoder;
-        this.tokenRevocationService = tokenRevocationService;
-        this.fileStorageService = fileStorageService;
-        this.minioProperties = minioProperties;
-    }
-
     @Override
     public void register(String username, String password) {
         LambdaQueryWrapper<User> lqw = new LambdaQueryWrapper<>();
@@ -73,17 +63,16 @@ public class UserServiceImpl implements UserService {
         userMapper.insert(user);
     }
 
-
     @Override
     public LoginResultVO login(String username, String password) {
         LambdaQueryWrapper<User> lqw = new LambdaQueryWrapper<>();
         lqw.eq(User::getUsername, username);
         User user = userMapper.selectOne(lqw);
-        if(user == null || !passwordEncoder.matches(password, user.getPassword())){
+        if (user == null || !passwordEncoder.matches(password, user.getPassword())){
             throw new BusinessException("用户名或密码错误");
         }
 
-        if(user.getStatus() != null && user.getStatus() != 1){
+        if (user.getStatus() != null && user.getStatus() != 1){
             throw new BusinessException("用户已被禁用");
         }
 

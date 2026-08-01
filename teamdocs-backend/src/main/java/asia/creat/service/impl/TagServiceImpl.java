@@ -4,11 +4,15 @@ import asia.creat.anno.OperationLog;
 import asia.creat.anno.OperationTarget;
 import asia.creat.anno.RequireSpaceRole;
 import asia.creat.anno.SpaceId;
-import asia.creat.common.PageResult;
 import asia.creat.common.exception.BusinessException;
+import asia.creat.common.PageResult;
 import asia.creat.dto.CreateTagDTO;
 import asia.creat.dto.PageQuery;
-import asia.creat.entity.*;
+import asia.creat.entity.Document;
+import asia.creat.entity.DocumentTag;
+import asia.creat.entity.SpaceMember;
+import asia.creat.entity.SpaceRole;
+import asia.creat.entity.Tag;
 import asia.creat.helper.ResourcePermissionHelper;
 import asia.creat.mapper.DocumentMapper;
 import asia.creat.mapper.DocumentTagMapper;
@@ -18,6 +22,7 @@ import asia.creat.security.SpaceContext;
 import asia.creat.service.TagService;
 import asia.creat.vo.DocumentTagRelVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,19 +32,13 @@ import java.util.List;
 import java.util.Map;
 
 @Service
+@RequiredArgsConstructor
 public class TagServiceImpl implements TagService {
 
     private final TagMapper tagMapper;
     private final DocumentMapper documentMapper;
     private final ResourcePermissionHelper permissionHelper;
     private final DocumentTagMapper documentTagMapper;
-
-    public TagServiceImpl(TagMapper tagMapper, DocumentMapper documentMapper, ResourcePermissionHelper permissionHelper, DocumentTagMapper documentTagMapper) {
-        this.tagMapper = tagMapper;
-        this.documentMapper = documentMapper;
-        this.permissionHelper = permissionHelper;
-        this.documentTagMapper = documentTagMapper;
-    }
 
     @Override
     @OperationLog(value = "创建标签", resourceType = "TAG", resourceName = "#dto.name")
@@ -85,7 +84,7 @@ public class TagServiceImpl implements TagService {
     @Override
     @OperationLog(value = "为文件添加标签", resourceType = "DOCUMENT")
     @RequireSpaceRole
-    public void addTagToDocument(@SpaceId Long spaceId,@OperationTarget Long documentId, Long tagId, LoginUser loginUser) {
+    public void addTagToDocument(@SpaceId Long spaceId, @OperationTarget Long documentId, Long tagId, LoginUser loginUser) {
 
         Document doc = checkDocument(spaceId, documentId);
         checkTag(spaceId, tagId);
@@ -100,11 +99,11 @@ public class TagServiceImpl implements TagService {
     }
 
     @Override
-    @OperationLog(value = "重命名标签", resourceType = "TAG",resourceName = "#newName")
+    @OperationLog(value = "重命名标签", resourceType = "TAG", resourceName = "#newName")
     @RequireSpaceRole({SpaceRole.OWNER, SpaceRole.ADMIN})
     public void renameTag(@SpaceId Long spaceId, @OperationTarget Long tagId, String newName, LoginUser loginUser) {
 
-        Tag tag  = checkTag(spaceId, tagId);
+        Tag tag = checkTag(spaceId, tagId);
 
         tag.setName(newName);
         tagMapper.updateById(tag);
@@ -202,6 +201,5 @@ public class TagServiceImpl implements TagService {
 
         return tag;
     }
-
 
 }

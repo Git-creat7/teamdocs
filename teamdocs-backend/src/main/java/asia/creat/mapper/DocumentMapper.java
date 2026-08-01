@@ -29,7 +29,6 @@ public interface DocumentMapper extends BaseMapper<Document> {
 
     void updateDeleted(Long documentId, Long FolderId);
 
-
     /*
      * 通过Tag获取文档列表
      * */

@@ -7,11 +7,17 @@ import io.jsonwebtoken.Claims;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import static asia.creat.utils.RedisConstants.TOKEN_REVOKED_PREFIX;
+import static asia.creat.utils.RedisConstants.TOKEN_REVOKED_PREFIX;
+import static asia.creat.utils.RedisConstants.TOKEN_USER_INVALID_BEFORE_PREFIX;
+import static asia.creat.utils.RedisConstants.TOKEN_USER_INVALID_BEFORE_PREFIX;
 
 import java.time.Duration;
 import java.util.Date;
 
 import static asia.creat.utils.RedisConstants.TOKEN_REVOKED_PREFIX;
+import static asia.creat.utils.RedisConstants.TOKEN_REVOKED_PREFIX;
+import static asia.creat.utils.RedisConstants.TOKEN_USER_INVALID_BEFORE_PREFIX;
 import static asia.creat.utils.RedisConstants.TOKEN_USER_INVALID_BEFORE_PREFIX;
 
 @Service

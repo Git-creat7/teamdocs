@@ -7,15 +7,15 @@ import asia.creat.entity.OperationLogRecord;
 import asia.creat.helper.OperationResourceNameResolver;
 import asia.creat.security.LoginUser;
 import asia.creat.service.OperationLogService;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
-import org.aspectj.lang.ProceedingJoinPoint;
+import lombok.RequiredArgsConstructor;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.DefaultParameterNameDiscoverer;
 import org.springframework.core.ParameterNameDiscoverer;
-import org.springframework.core.annotation.Order;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
@@ -23,16 +23,15 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-
+import jakarta.servlet.http.HttpServletRequest;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
-
-
 
 @Component
 @Aspect
 @Slf4j
 @Order(1) //设置切面执行顺序
+@RequiredArgsConstructor
 public class OperationLogAspect {
     /*
     * 该切面用于记录操作日志
@@ -43,11 +42,6 @@ public class OperationLogAspect {
 
     private final ExpressionParser spelParser = new SpelExpressionParser();
     private final ParameterNameDiscoverer parameterNameDiscoverer = new DefaultParameterNameDiscoverer();
-
-    public OperationLogAspect(OperationLogService operationLogService,OperationResourceNameResolver operationResourceNameResolver) {
-        this.operationLogService = operationLogService;
-        this.operationResourceNameResolver = operationResourceNameResolver;
-    }
 
     private String evalResourceName(String expression, Method method, Object[] args) {
         if (expression == null || expression.isBlank()) {
@@ -85,7 +79,6 @@ public class OperationLogAspect {
         String resourceType = operationLog.resourceType();
         String resourceName = evalResourceName(operationLog.resourceName(), method, pjp.getArgs());
 
-
         //遍历参数
         Object[] args = pjp.getArgs();
         Annotation[][] parameterAnnotations = method.getParameterAnnotations();
@@ -95,17 +88,15 @@ public class OperationLogAspect {
         String requestMethod = null;
         String requestUri = null;
 
-
-
-        for(int i = 0; i < args.length; i++){
-            if(args[i] instanceof LoginUser) {
+        for (int i = 0; i < args.length; i++){
+            if (args[i] instanceof LoginUser) {
                 userId = ((LoginUser) args[i]).getUserId();
             }
 
-            for(Annotation annotation : parameterAnnotations[i]){
-                if(annotation instanceof SpaceId && args[i] instanceof Long) {
+            for (Annotation annotation : parameterAnnotations[i]){
+                if (annotation instanceof SpaceId && args[i] instanceof Long) {
                     spaceId = (Long) args[i];
-                } else if(annotation instanceof OperationTarget && args[i] instanceof Long) {
+                } else if (annotation instanceof OperationTarget && args[i] instanceof Long) {
                     resourceId = (Long) args[i];
                 }
             }
@@ -113,9 +104,8 @@ public class OperationLogAspect {
 
         //解析资源名称
         if (resourceName == null || resourceName.isBlank()) {
-            resourceName = operationResourceNameResolver    .resolve(resourceType, resourceId, spaceId);
+            resourceName = operationResourceNameResolver.resolve(resourceType, resourceId, spaceId);
         }
-
 
         //获取请求方法和请求URI
         var requestAttributes = RequestContextHolder.getRequestAttributes();
@@ -128,14 +118,12 @@ public class OperationLogAspect {
         String methodName = pjp.getTarget().getClass()
                 .getSimpleName() + "." + method.getName();
 
-
-
         //计时
         long startTime = System.currentTimeMillis();
         int success = 1;
         String errorMessage = null;
 
-        try{
+        try {
             Object result = pjp.proceed();
             if (resourceId == null
                     && operationLog.resourceIdFromResult()
@@ -149,7 +137,7 @@ public class OperationLogAspect {
             log.error("操作日志: 操作名称={}, 资源类型={}, 方法执行异常: {}", operationName, resourceType, errorMessage);
             throw throwable;
         }finally {
-            if(userId == null) {
+            if (userId == null) {
                 log.warn("操作日志: 操作名称={}, 资源类型={}, 未找到登录用户", operationName, resourceType);
             }else {
 
@@ -186,7 +174,6 @@ public class OperationLogAspect {
                 }
             }
         }
-
 
     }
 }
