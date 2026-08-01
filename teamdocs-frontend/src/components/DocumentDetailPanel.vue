@@ -45,6 +45,10 @@
             <el-icon><FolderInput /></el-icon>
             移动到
           </el-button>
+          <el-button size="small" type="danger" plain class="doc-action-btn" @click="$emit('delete', doc)">
+            <el-icon><Trash2 /></el-icon>
+            删除
+          </el-button>
         </div>
       </div>
     </div>
@@ -175,7 +179,7 @@
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Download, FolderInput, MessageSquare, Pencil, Tag, UserRound } from 'lucide-vue-next'
+import { ArrowLeft, Download, FolderInput, MessageSquare, Pencil, Tag, Trash2, UserRound } from 'lucide-vue-next'
 import { View, FullScreen } from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
 import FileIcon from '@/components/FileIcon.vue'
@@ -195,7 +199,7 @@ const props = defineProps({
   showBackButton: { type: Boolean, default: true }
 })
 
-const emit = defineEmits(['close', 'download', 'rename', 'tags', 'move', 'update:activeTab'])
+const emit = defineEmits(['close', 'download', 'rename', 'tags', 'move', 'delete', 'update:activeTab'])
 
 const router = useRouter()
 const PAGE_SIZE = 100

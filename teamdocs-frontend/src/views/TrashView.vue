@@ -127,6 +127,7 @@ async function handleRestore(doc) {
   try {
     await restoreDocumentApi(activeSpaceId.value, doc.id)
     ElMessage.success(`"${doc.name}" 已恢复`)
+    window.dispatchEvent(new CustomEvent('teamdocs:recent-docs-changed'))
     await loadTrash()
   } catch (err) {
     // 拦截器处理
@@ -142,6 +143,7 @@ function handlePurge(doc) {
     try {
       await purgeDocumentApi(activeSpaceId.value, doc.id)
       ElMessage.success('文件已彻底删除')
+      window.dispatchEvent(new CustomEvent('teamdocs:recent-docs-changed'))
       await loadTrash()
     } catch (err) {
       // 拦截器处理
