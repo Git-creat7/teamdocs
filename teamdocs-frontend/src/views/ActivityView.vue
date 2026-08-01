@@ -56,13 +56,17 @@
                   @click.prevent="openActivityDoc(act)"
                 >{{ truncateText(activityName(act), 40) }}</a>
                 <span
-                  v-else-if="activityMeta(act).style === 'doc' || activityMeta(act).style === 'strong'"
+                  v-else-if="activityMeta(act).style === 'strong'"
                   class="row-strong"
                 >{{ truncateText(activityName(act), 40) }}</span>
                 <span
-                  v-else-if="activityMeta(act).style === 'quote'"
+                  v-else-if="shouldWrapActivityName(act) || activityMeta(act).style === 'quote'"
                   class="row-quote"
                 >“{{ truncateText(activityName(act), 60) }}”</span>
+                <span
+                  v-else
+                  class="row-plain"
+                >{{ truncateText(activityName(act), 40) }}</span>
                 <template v-if="activityMeta(act).suffix">{{ activityMeta(act).suffix }}</template>
               </template>
             </p>
@@ -86,7 +90,7 @@ import { useSpacesStore } from '@/stores'
 import { formatRelativeTime } from '@/utils/format'
 import { avatarColor } from '@/utils/userColors'
 import { spaceIconPalette } from '@/utils/spaceColors'
-import { activityMeta, activityName, activityVerb, canOpenActivityDocument, truncateText } from '@/utils/activityText'
+import { activityMeta, activityName, activityVerb, canOpenActivityDocument, shouldWrapActivityName, truncateText } from '@/utils/activityText'
 import { useDocumentNavigation } from '@/composables/useDocumentNavigation'
 
 const { openDocument } = useDocumentNavigation()
