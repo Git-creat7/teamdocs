@@ -67,3 +67,11 @@ pnpm-debug.log*
 /.env
 /.env.docker
 .gstack/
+
+# Personal frp/nginx deployment configs (server-side, never committed)
+/frpc.toml
+/frp-stream.conf
+/nginx-minio-19000.conf
+
+# Playwright MCP browser artifacts
+.playwright-mcp/
