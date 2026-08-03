@@ -1,99 +1,142 @@
 # TeamDocs
 
-<div align="center">
+> 面向小型团队的文档协作平台。个人全栈项目，后端为重点，围绕认证授权、缓存与限流、对象存储和可测试的业务设计展开。
 
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F?logo=spring&logoColor=white)](https://github.com/spring-projects/spring-boot) [![Spring Security](https://img.shields.io/badge/Spring%20Security-6DB33F?logo=springsecurity&logoColor=white)](https://github.com/spring-projects/spring-security) [![Spring AOP](https://img.shields.io/badge/Spring%20AOP-6DB33F?logo=spring&logoColor=white)](https://github.com/spring-projects/spring-framework) [![MyBatis-Plus](https://img.shields.io/badge/MyBatis--Plus-073042?logo=mybatis&logoColor=white)](https://github.com/baomidou/mybatis-plus) [![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white)](https://github.com/mysql/mysql-server)
+- **后端**：Java 17 / Spring Boot 3.5 / Spring Security / MyBatis-Plus
+- **前端**：Vue 3 / Vite 6 / Element Plus
+- **基础设施**：MySQL 8 / Redis 7 / MinIO / Docker Compose
 
-[![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)](https://github.com/redis/redis) [![MinIO](https://img.shields.io/badge/MinIO-C72E49)](https://github.com/minio/minio) [![JWT](https://img.shields.io/badge/JWT-000000)](https://github.com/jwtk/jjwt) [![Knife4j](https://img.shields.io/badge/Knife4j-00A6FB)](https://github.com/xiaoymin/knife4j) [![Docker Compose](https://img.shields.io/badge/Docker%20Compose-2496ED?logo=docker&logoColor=white)](https://github.com/docker/compose)
+<p align="center">
+  <img src="docs/images/Snipaste_2026-08-03_20-01-46.png" alt="TeamDocs 工作台" width="100%" />
+</p>
 
-[![前端文档](https://img.shields.io/badge/前端文档-Vue%203-4FC08D?logo=vuedotjs&logoColor=white)](teamdocs-frontend/README.md)
+<p align="center"><sub>TeamDocs 工作台：空间、最近浏览与团队动态集中展示。</sub></p>
 
-</div>
+## 项目概览
 
-TeamDocs 是一个面向小型团队的文档协作平台，提供空间与成员权限、文件夹和文档管理、标签检索、评论、操作日志、Redis 缓存与限流，以及基于 file-viewer 的文档在线预览。
+TeamDocs 覆盖从用户登录到团队文档管理的完整业务链路：用户可以创建空间、管理成员和角色，在文件夹中上传与整理文档，并通过标签、全文搜索、评论和活动流完成协作。
 
-当前仓库包含完整交付的后端（Spring Boot）与前端（Vue 3）。
+这个项目不只实现 CRUD，还重点处理了几个后端工程问题：
 
-## 核心能力
+- JWT 无状态认证下，如何支持当前 Token 注销和修改密码后旧 Token 失效
+- 多个业务模块共用空间权限时，如何避免在 Service 中重复编写角色校验
+- 文件存储在 MinIO 时，如何区分在线预览与下载，并处理浏览器可达地址和 CORS
+- Redis 出现异常时，如何让缓存、限流和最近浏览尽量不影响核心业务
+- 操作日志写入失败时，如何保留主业务结果
 
-- JWT 无 Session 认证，密码使用 BCrypt 加密，Redis 撤销名单支持当前 Token 注销
-- OWNER / ADMIN / MEMBER 三级空间权限，使用 Spring AOP 统一校验
-- 文档上传、下载、移动、重命名、软删除、回收站与彻底删除
-- MinIO 私有桶存储和一小时有效的预签名 URL，下载走 `attachment`、在线预览走 `inline`
-- 文档在线预览：file-viewer 渲染图片、PDF、Word、表格、演示文稿与 OFD
-- 标签关联、MySQL FULLTEXT + ngram 元数据搜索
-- 扁平评论与回复关系，删除后保留占位
-- AOP 操作日志，日志写入失败不影响主业务；活动流聚合展示
-- Redis Cache Aside 空间缓存、Lua 登录限流、ZSet 最近浏览
-- 前端飞书风格工作区：标签管理、最近浏览、活动流与键盘可达性
+## 工程亮点
 
-## 后端
+| 场景 | 设计与实现 | 验证重点 |
+|---|---|---|
+| 认证与 Token 失效 | Spring Security + JWT + BCrypt；Redis 保存 Token 撤销记录和用户失效时间水位 | JWT 解析、白名单、异常响应、单 Token 注销、用户全部 Token 失效 |
+| 空间角色权限 | OWNER / ADMIN / MEMBER 三级角色；使用 `@RequireSpaceRole`、`@SpaceId` 和 AOP 统一完成成员与角色校验 | 非成员访问、角色边界、注解参数、`SpaceContext` 清理 |
+| 文档存储与预览 | MinIO 私有桶保存文件；后端签发限时 URL，预览使用 `inline`，下载使用 `attachment` | 文件归属、预签名地址、公开端点、文件名编码和跨域访问 |
+| Redis 能力 | Cache Aside 空间缓存、Lua 登录限流、ZSet 最近浏览；Redis 读写异常时降级 | 缓存命中/失效、限流窗口、Redis 故障隔离、最近浏览排序 |
+| 审计与活动流 | 自定义注解 + AOP 记录资源、URI、耗时和执行结果；日志保存失败不覆盖主业务结果 | 成功/失败日志、资源定位、异常隔离 |
 
-- Spring Boot 3.5
-- Spring Security + JWT
-- MyBatis-Plus
-- MySQL 8
-- Redis 7（Lua）
-- MinIO
-- Spring AOP
-- Docker Compose
-
-## 前端
-
-- Vue 3 + Vite 6
-- Pinia + Vue Router
-- Element Plus
-- @file-viewer 渲染器
-
-技术细节与使用指引见 [后端 README](teamdocs-backend/README.md) 与 [前端 README](teamdocs-frontend/README.md)。
-
-## 架构
+## 系统结构
 
 ```mermaid
 flowchart LR
-    Backend[TeamDocs Backend] --> MySQL[(MySQL 8)]
-    Backend --> Redis[(Redis 7)]
-    Backend --> MinIO[(MinIO)]
-    Init[minio-init] -->|创建桶并配置公有桶权限| MinIO
-    MySQL -->|首次启动按 01-06 执行| SQL[SQL 初始化脚本]
+    Browser[Vue 3 Web] -->|REST / Bearer Token| Security[Spring Security<br/>JWT Filter]
+    Security --> Controller[Controller]
+    Controller --> Aspect[AOP<br/>空间权限 / 操作日志]
+    Aspect --> Service[Service]
+    Service --> MySQL[(MySQL 8<br/>业务元数据)]
+    Service --> Redis[(Redis 7<br/>缓存 / 限流 / Token / 最近浏览)]
+    Service --> MinIO[(MinIO<br/>文件对象)]
+    Browser -. 预签名 URL .-> MinIO
 ```
 
-请求先经过 JWT Filter，再进入 Controller、Service 和 Mapper。空间内业务由 `@RequireSpaceRole` 切面校验成员角色；MySQL 保存业务元数据，Redis 保存缓存、限流窗口、Token 撤销名单和最近浏览，MinIO 保存文件本体。预览与下载由 MinIO 预签名 URL 提供，后端不代理文件流。
+请求首先经过 JWT Filter 完成身份认证，再由空间权限切面处理业务授权。Service 负责业务规则和事务边界；MySQL 保存结构化数据，Redis 承担可降级的辅助能力，MinIO 保存文件本体。浏览器通过预签名 URL 直接访问文件，后端不代理大文件流。
+
+## 功能范围
+
+- 用户注册、登录、退出登录、个人信息与密码修改
+- 空间创建、成员管理和 OWNER / ADMIN / MEMBER 权限控制
+- 文件夹与文档的上传、下载、移动、重命名、软删除和回收站
+- 标签管理、按标签筛选、MySQL FULLTEXT + ngram 元数据搜索
+- 评论与回复、操作日志、团队活动流、最近浏览
+- 图片、文本、PDF、Word、表格、演示文稿和 OFD 在线预览
+
+## 质量与验证
+
+当前后端包含 **16 个测试类、83 个 JUnit 测试用例**，主要覆盖：
+
+- 用户注册登录、密码修改和 Token 撤销
+- JWT Filter、统一 401 响应和空间角色切面
+- 文档生命周期、评论权限、分页模型和标签业务
+- Redis 缓存故障隔离、Lua 限流与最近浏览
+- 操作日志成功、失败和异常隔离
+
+服务器端 Docker 冒烟验收覆盖了健康检查、注册登录、空间创建、文件上传、预览 CORS、下载响应头、最近文档以及退出登录后的 Token 失效。
+
+### JMeter 并发限流验证
+
+使用 JMeter 在 1 秒内发起 20 次并发登录请求，验证 Redis Lua 固定窗口限流。结果为前 10 次登录进入正常认证流程，后 10 次被限流规则拒绝，符合当前阈值配置。
+
+| 线程数 | Ramp-up | 每线程循环 | 正常处理 | 触发限流 |
+|---:|---:|---:|---:|---:|
+| 20 | 1 秒 | 1 | 10 | 10 |
+
+<p align="center">
+  <img src="docs/images/Snipaste_2026-08-03_19-31-02.png" alt="JMeter 登录限流测试结果总览" width="100%" />
+</p>
+
+<p align="center">
+  <img src="docs/images/Snipaste_2026-08-03_19-36-31.png" alt="JMeter 登录限流响应详情" width="100%" />
+</p>
+
+本地验证命令：
+
+```powershell
+cd teamdocs-backend
+.\mvnw.cmd test
+
+cd ..\teamdocs-frontend
+npm ci
+npm run build
+```
 
 ## 快速启动
 
-### 方式一：Docker 起后端全家桶 + 本地前端（推荐开发）
+前置条件：Docker 与 Docker Compose v2、Node.js 20+。
 
-```shell
-# 1. 准备后端环境变量（至少替换数据库/Redis/JWT/MinIO 密钥）
+```powershell
+# 1. 创建 Docker 环境文件，并替换其中的示例密钥
 Copy-Item .env.docker.example .env.docker
-# 2. 启动 MySQL + Redis + MinIO + 后端（API: http://localhost:18080）
+
+# 2. 将 .env.docker 中的 BACKEND_PORT 改为 8080，
+#    以匹配当前 Vite 开发代理，然后启动后端依赖与 API
 docker compose --env-file .env.docker -f docker-compose.dev.yml up -d --build
+
 # 3. 启动前端
 cd teamdocs-frontend
-npm install
+npm ci
 npm run dev
 ```
 
-访问 `http://localhost:5173`。详细步骤与排错见 [后端 README](teamdocs-backend/README.md) 与 [前端 README](teamdocs-frontend/README.md)。
+- Web：`http://localhost:5173`
+- API：`http://localhost:8080`
+- MinIO Console：`http://localhost:19001`
 
-### 方式二：本地原生启动后端
+更完整的环境变量、接口和故障排查说明见 [后端文档](teamdocs-backend/README.md) 与 [前端文档](teamdocs-frontend/README.md)。
 
-MySQL、Redis、MinIO 就绪后，把 `.env.example` 配置到根目录 `.env`，再 `cd teamdocs-backend && .\mvnw.cmd spring-boot:run`（默认 8080，前端代理默认指向它）。
+## 目录结构
 
-## 文档索引
+```text
+TeamDocs/
+├── teamdocs-backend/    Spring Boot API、领域服务与测试
+├── teamdocs-frontend/   Vue 3 Web 客户端
+├── sql/                 数据库初始化与全文索引脚本
+├── docker-compose.dev.yml
+└── README.md
+```
 
-| 文档 | 内容 |
-|---|---|
-| [teamdocs-backend/README.md](teamdocs-backend/README.md) | 本地开发、Docker 部署、环境变量、API 约定与路由、预览接口、冒烟测试、排错 |
-| [teamdocs-frontend/README.md](teamdocs-frontend/README.md) | 前端启动/构建、在线预览说明、目录结构、排错 |
-| [PROGRESS.md](PROGRESS.md) | 开发进度与踩坑记录（每周更新） |
+## 设计边界
 
-## 常见问题
-
-- **在线预览提示跨域错误**：确认 `.env.docker` 的 `MINIO_CORS_ALLOWED_ORIGIN` 与浏览器地址栏中的前端来源完全一致，并 `--force-recreate minio` 强制重建容器
-- **下载 URL 无法从浏览器访问**：公开地址必须是浏览器可达的 IP 或域名，且 MinIO API 端口已放行
-- **下载 URL 中出现 `minio:9000`**：检查后端是否设置了 `MINIO_PUBLIC_ENDPOINT`，并重新构建镜像
-- **接口 HTTP 200 但操作失败**：检查响应体的 `code` 和 `msg`，不要只看 HTTP 状态码
-
-更完整的排错清单见 [后端 README](teamdocs-backend/README.md) 的常见问题。
+- 当前定位是团队文档管理与异步协作，不包含多人实时协同编辑
+- 搜索使用 MySQL ngram 全文索引，不提供语义检索
+- JWT 已支持主动失效，但暂未实现 Access Token / Refresh Token 双 Token 体系
+- 自动化测试以 Java 后端为主，前端目前依赖构建检查和人工回归
+- 当前未接入 GitHub Actions，公开构建状态将在 CI 完成后补充
