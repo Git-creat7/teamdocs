@@ -64,8 +64,6 @@ router.beforeEach((to, from, next) => {
 
   if (requiresAuth && !token) {
     next('/login')
-  } else if (to.path === '/login' && token) {
-    next('/home')
   } else {
     next()
   }

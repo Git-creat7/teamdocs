@@ -68,18 +68,19 @@
           {{ demoLoading ? '正在进入演示…' : '一键体验演示' }}
         </button>
         <button type="button" class="lp-cta-book" @click="router.push('/login')">
-          <span class="lp-book-avatar">
-            <User :size="18" :stroke-width="2.2" />
-          </span>
-          <span class="lp-book-text">
-            <span class="lp-book-primary">登录 / 注册</span>
-            <span class="lp-book-secondary">
-              <span class="lp-green-dot"></span>
-              创建你的团队空间
-            </span>
-          </span>
+          登录 / 注册
         </button>
       </div>
+
+      <button
+        type="button"
+        class="lp-scroll-cue"
+        aria-label="向下浏览"
+        title="向下浏览"
+        @click="scrollToContent"
+      >
+        <ChevronDown :size="22" :stroke-width="2" />
+      </button>
 
       <!-- 底部渐白过渡 -->
       <div class="lp-fade-bottom" aria-hidden="true"></div>
@@ -129,16 +130,16 @@
       </div>
     </section>
 
-    <!-- ===== 工程亮点 ===== -->
+    <!-- ===== 功能闭环 ===== -->
     <section class="lp-craft">
       <div class="lp-craft-inner">
         <div class="lp-craft-text reveal">
           <h2 class="lp-section-title">
-            不止能用，<br />更<span class="lp-serif">经得起追问</span>。
+            从整理到协作，<br />都在<span class="lp-serif">一个工作台</span>完成。
           </h2>
           <p class="lp-section-sub">
-            每个技术决策都有取舍记录：为什么选 MySQL 全文索引而不是
-            Elasticsearch，为什么缓存只做空间详情，注解式权限切面怎么防越权。
+            团队可在独立空间中管理成员，按目录与标签整理文档，在线预览常见格式，
+            并通过搜索、评论、动态和最近浏览持续协作。
           </p>
           <ul class="lp-craft-list">
             <li v-for="item in craftItems" :key="item">
@@ -146,13 +147,6 @@
               {{ item }}
             </li>
           </ul>
-        </div>
-
-        <div class="lp-craft-stats reveal" style="transition-delay: 120ms">
-          <div v-for="s in stats" :key="s.label" class="lp-stat">
-            <span class="lp-stat-value">{{ s.value }}</span>
-            <span class="lp-stat-label">{{ s.label }}</span>
-          </div>
         </div>
       </div>
     </section>
@@ -181,10 +175,10 @@ import { onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  User,
   Check,
+  ChevronDown,
   LayoutGrid,
-  FolderTree,
+  FileSearch,
   Tags,
   Search,
   MessageSquare,
@@ -199,7 +193,7 @@ const tickerItems = ['空间协作', '文档管理', '标签分类', '全文搜�
 
 const features = [
   { icon: LayoutGrid, title: '空间隔离', desc: '每个团队独立空间，Owner / Admin / Member 三级角色，注解式切面统一鉴权。' },
-  { icon: FolderTree, title: '文件夹层级', desc: '无限层级目录树，移动防环校验，删除级联进回收站可随时恢复。' },
+  { icon: FileSearch, title: '在线预览', desc: '图片、文本、PDF、Word、表格、演示文稿与 OFD 均可直接在线查看。' },
   { icon: Tags, title: '标签分类', desc: '空间内多对多打标，按标签一键筛选，同名标签全站同色。' },
   { icon: Search, title: '全文搜索', desc: 'MySQL FULLTEXT + ngram 中文分词，文档名与标签一次命中。' },
   { icon: MessageSquare, title: '评论协作', desc: '文档级评论与回复，删除保留占位不断上下文。' },
@@ -207,18 +201,11 @@ const features = [
 ]
 
 const craftItems = [
-  '68 个单元测试覆盖权限、分页与生命周期',
-  'Redis 缓存与 Lua 原子限流',
-  'MinIO 公私双桶与预签名 URL',
-  'AOP 操作日志独立事务失败隔离',
-  'Docker Compose 一键启动全栈'
-]
-
-const stats = [
-  { value: '40+', label: 'REST 接口' },
-  { value: '68', label: '单元测试' },
-  { value: '10+', label: '核心模块' },
-  { value: '1', label: '命令启动' }
+  '空间成员与 Owner / Admin / Member 角色管理',
+  '文档上传、在线预览、下载、移动与重命名',
+  '文档名、描述与标签检索',
+  '评论回复、团队动态与最近浏览',
+  '已删除文档可恢复或彻底删除'
 ]
 
 // 技术栈文字 logo：各用不同字体拟合“客户 logo 墙”的质感
@@ -229,9 +216,7 @@ const techLogos = [
   { name: 'MinIO', family: 'Inter, system-ui, sans-serif', weight: 600 },
   { name: 'Vue 3', family: 'system-ui, sans-serif', weight: 700 },
   { name: 'Pinia', family: 'Georgia, serif', weight: 600 },
-  { name: 'MyBatis Plus', family: 'Inter, system-ui, sans-serif', weight: 700 },
-  { name: 'Docker', family: 'system-ui, sans-serif', weight: 800 },
-  { name: 'Spring Security', family: 'Inter, system-ui, sans-serif', weight: 600 }
+  { name: 'MyBatis Plus', family: 'Inter, system-ui, sans-serif', weight: 700 }
 ]
 
 // 同心弧线：宽 60px 起每条 +10px，错峰 0.25s
@@ -249,6 +234,10 @@ function topLineStyle(i) {
     width: `${120 + i * 32}px`,
     animationDelay: `${i * 0.25}s`
   }
+}
+
+function scrollToContent() {
+  document.querySelector('.lp-trusted')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 // 滚动进入视口时揭示 (.reveal -> .is-visible)，一次性触发后停止观察
@@ -391,6 +380,7 @@ async function handleDemo() {
 /* ===== Hero ===== */
 .lp-hero {
   position: relative;
+  box-sizing: border-box;
   min-height: min(680px, calc(100vh - 140px));
   padding: 120px 36px 90px;
   display: flex;
@@ -569,15 +559,19 @@ async function handleDemo() {
 }
 
 .lp-cta-book {
-  display: flex;
+  height: 56px;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 24px 8px 8px;
+  justify-content: center;
+  padding: 0 28px;
   background: #ffffff;
   border: 4px solid rgb(248, 248, 248);
   border-radius: 999px;
   cursor: pointer;
   font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -586,45 +580,33 @@ async function handleDemo() {
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
 }
 
-.lp-book-avatar {
+.lp-scroll-cue {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  z-index: 3;
   width: 40px;
   height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transform: translateX(-50%);
+  transition: color 0.15s ease, transform 0.15s ease;
 }
 
-.lp-book-text {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-}
-
-.lp-book-primary {
-  font-size: 14px;
-  font-weight: 600;
+.lp-scroll-cue:hover {
   color: var(--text);
+  transform: translate(-50%, 2px);
 }
 
-.lp-book-secondary {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  font-weight: 500;
-  color: rgb(152, 152, 152);
-}
-
-.lp-green-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--green);
+.lp-scroll-cue:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 /* 底部渐白 */
@@ -642,6 +624,7 @@ async function handleDemo() {
 .lp-trusted {
   max-width: 1200px;
   margin: 0 auto;
+  scroll-margin-top: 96px;
   padding: 36px;
   display: flex;
   align-items: center;
@@ -769,7 +752,7 @@ async function handleDemo() {
   color: var(--muted);
 }
 
-/* ===== 工程亮点 ===== */
+/* ===== 功能闭环 ===== */
 .lp-craft {
   border-top: 1px solid var(--border-soft);
   border-bottom: 1px solid var(--border-soft);
@@ -777,13 +760,9 @@ async function handleDemo() {
 }
 
 .lp-craft-inner {
-  max-width: 1200px;
+  max-width: 900px;
   margin: 0 auto;
   padding: 90px 36px;
-  display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 64px;
-  align-items: center;
 }
 
 .lp-craft-text .lp-section-title,
@@ -815,37 +794,6 @@ async function handleDemo() {
 .lp-craft-check {
   color: var(--green);
   flex-shrink: 0;
-}
-
-.lp-craft-stats {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 18px;
-}
-
-.lp-stat {
-  border: 1px solid var(--border-soft);
-  border-radius: 18px;
-  background: #fff;
-  padding: 30px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.lp-stat-value {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-size: 42px;
-  font-weight: 600;
-  letter-spacing: -0.05em;
-  line-height: 1;
-}
-
-.lp-stat-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--muted);
 }
 
 /* ===== 底部大 CTA ===== */
@@ -907,6 +855,81 @@ async function handleDemo() {
 }
 
 /* ===== 响应式 ===== */
+@media (min-width: 1500px) and (min-height: 800px) {
+  .lp-nav-inner {
+    max-width: 1500px;
+    padding: 24px 45px;
+  }
+
+  .lp-logo { font-size: 38px; }
+  .lp-nav-actions { gap: 8px; }
+  .lp-nav-login {
+    font-size: 18px;
+    padding: 12px 20px;
+  }
+  .lp-pill-btn {
+    font-size: 18px;
+    padding: 12px 25px;
+  }
+
+  .lp-hero {
+    min-height: min(850px, calc(100vh - 64px));
+    padding: 150px 45px 112px;
+  }
+
+  .lp-ticker {
+    max-width: 625px;
+    height: 45px;
+    margin-bottom: 35px;
+  }
+  .lp-ticker-track { gap: 10px; }
+  .lp-ticker-item {
+    font-size: 16px;
+    padding: 8px 18px;
+  }
+
+  .lp-title {
+    max-width: 850px;
+    margin-bottom: 28px;
+    font-size: 80px;
+  }
+  .lp-subtitle {
+    max-width: 650px;
+    margin-bottom: 42px;
+    font-size: 20px;
+  }
+  .lp-cta-row { gap: 20px; }
+  .lp-cta-primary,
+  .lp-cta-book {
+    height: 70px;
+    font-size: 18px;
+  }
+  .lp-cta-primary { padding: 22px 38px; }
+  .lp-cta-book { padding-inline: 35px; }
+  .lp-scroll-cue {
+    bottom: 30px;
+    width: 50px;
+    height: 50px;
+  }
+  .lp-scroll-cue svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .lp-trusted {
+    max-width: 1500px;
+    margin: -32px auto 0;
+    padding: 45px;
+    gap: 50px;
+  }
+  .lp-trusted-label {
+    max-width: 225px;
+    font-size: 18px;
+  }
+  .lp-trusted-track { gap: 60px; }
+  .lp-tech-logo { font-size: 20px; }
+}
+
 @media (max-width: 1200px) {
   .lp-hero { padding: 140px 32px 100px; }
   .lp-nav-inner { padding: 19px 32px; }
@@ -942,8 +965,6 @@ async function handleDemo() {
   .lp-pill-btn { min-height: 44px; }
   .lp-feature-grid { grid-template-columns: 1fr; }
   .lp-craft-inner {
-    grid-template-columns: 1fr;
-    gap: 40px;
     padding: 64px 24px;
   }
   .lp-features { padding: 64px 24px; }
