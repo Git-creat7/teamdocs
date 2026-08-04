@@ -101,6 +101,7 @@ services:
     build:
       context: ./teamdocs-backend
       dockerfile: Dockerfile
+      network: ${BUILD_NETWORK:-default}
       args:
         MAVEN_MIRROR_URL: ${MAVEN_MIRROR_URL:-https://repo.maven.apache.org/maven2}
     image: teamdocs-backend:${IMAGE_TAG:-latest}
@@ -144,6 +145,7 @@ services:
     build:
       context: ./teamdocs-frontend
       dockerfile: Dockerfile
+      network: ${BUILD_NETWORK:-default}
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     image: teamdocs-frontend:${IMAGE_TAG:-latest}
