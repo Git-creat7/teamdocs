@@ -131,6 +131,18 @@ npm run dev
 
 更完整的环境变量、接口和故障排查说明见 [后端文档](teamdocs-backend/README.md) 与 [前端文档](teamdocs-frontend/README.md)。
 
+### 生产部署与更新
+
+生产环境使用 `docker-compose.prod.yml` 构建前后端镜像，并通过 Nginx 提供 SPA 路由回退与 `/api` 反向代理。首次部署时复制 `.env.prod.example`，填写密钥并创建其中声明的三个持久化卷；这些卷被标记为 external，更新或删除应用容器不会删除业务数据。
+
+后续更新执行：
+
+```bash
+./scripts/deploy.sh
+```
+
+脚本会以 fast-forward 方式拉取仓库，按 Git 提交号重新构建前后端，并等待所有服务通过健康检查。MySQL、Redis 与 MinIO 镜像应固定版本并单独安排升级；生产环境不要使用 `docker compose down -v`。
+
 ## 目录结构
 
 ```text
