@@ -1,0 +1,169 @@
+name: teamdocs
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  mysql:
+    image: ${MYSQL_IMAGE:?MYSQL_IMAGE is required}
+    command:
+      - --ngram-token-size=2
+      - --innodb-ft-enable-stopword=OFF
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_DATABASE: ${DB_NAME:?DB_NAME is required}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/initUser.sql:/docker-entrypoint-initdb.d/01-user.sql:ro
+      - ./sql/initSpace.sql:/docker-entrypoint-initdb.d/02-space.sql:ro
+      - ./sql/initDocument.sql:/docker-entrypoint-initdb.d/03-document.sql:ro
+      - ./sql/initComment.sql:/docker-entrypoint-initdb.d/04-comment.sql:ro
+      - ./sql/initOperationLog.sql:/docker-entrypoint-initdb.d/05-operation-log.sql:ro
+      - ./sql/fulltext_index.sql:/docker-entrypoint-initdb.d/06-fulltext.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    logging: *default-logging
+    restart: unless-stopped
+
+  redis:
+    image: ${REDIS_IMAGE:?REDIS_IMAGE is required}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging: *default-logging
+    restart: unless-stopped
+
+  minio:
+    image: ${MINIO_IMAGE:?MINIO_IMAGE is required}
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_REGION_NAME: ${MINIO_REGION:-us-east-1}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_CORS_ALLOWED_ORIGIN:?MINIO_CORS_ALLOWED_ORIGIN is required}
+    ports:
+      - "${MINIO_BIND_ADDRESS:-127.0.0.1}:${MINIO_API_PORT:-29000}:9000"
+      - "${MINIO_CONSOLE_BIND_ADDRESS:-127.0.0.1}:${MINIO_CONSOLE_PORT:-29001}:9001"
+    volumes:
+      - minio_data:/data
+    logging: *default-logging
+    restart: unless-stopped
+
+  minio-init:
+    image: ${MINIO_MC_IMAGE:?MINIO_MC_IMAGE is required}
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-teamdocs-public}
+      MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-teamdocs-private}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+          set -eu
+          attempt=1
+          max_attempts=60
+          until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do
+            if [ "$${attempt}" -ge "$${max_attempts}" ]; then
+              echo "MinIO was not ready after $${max_attempts} attempts" >&2
+              exit 1
+            fi
+            attempt=$$((attempt + 1))
+            sleep 2
+          done
+          mc mb --ignore-existing "local/$${MINIO_BUCKET_PUBLIC}"
+          mc mb --ignore-existing "local/$${MINIO_BUCKET_PRIVATE}"
+          mc anonymous set download "local/$${MINIO_BUCKET_PUBLIC}"
+    logging: *default-logging
+    restart: "no"
+
+  backend:
+    build:
+      context: ./teamdocs-backend
+      dockerfile: Dockerfile
+    image: teamdocs-backend:${IMAGE_TAG:-latest}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      TZ: Asia/Shanghai
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_USERNAME: root
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:?MINIO_PUBLIC_ENDPOINT is required}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-teamdocs-public}
+      MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-teamdocs-private}
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-28080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    logging: *default-logging
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./teamdocs-frontend
+      dockerfile: Dockerfile
+    image: teamdocs-frontend:${IMAGE_TAG:-latest}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${WEB_BIND_ADDRESS:-0.0.0.0}:${WEB_PORT:-15173}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    logging: *default-logging
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+    external: true
+    name: ${MYSQL_VOLUME_NAME:?MYSQL_VOLUME_NAME is required}
+  redis_data:
+    external: true
+    name: ${REDIS_VOLUME_NAME:?REDIS_VOLUME_NAME is required}
+  minio_data:
+    external: true
+    name: ${MINIO_VOLUME_NAME:?MINIO_VOLUME_NAME is required}
