@@ -18,6 +18,7 @@ IMAGE_TAG=$(git rev-parse --short=12 HEAD)
 export IMAGE_TAG
 
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config --quiet
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build --pull backend frontend
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build --pull backend
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build --pull frontend
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --remove-orphans --wait --wait-timeout 180
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
