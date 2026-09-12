@@ -492,6 +492,18 @@ mq.addEventListener('change', (e) => { isMobile.value = e.matches })
 
 const spaceId = ref(0)
 const spaceInfo = ref(null)
+const workspaceReadySpaceId = ref(0)
+let workspaceRevision = 0
+let documentDetailRequestId = 0
+let folderContentRequestId = 0
+let folderNavigationRequestId = 0
+
+function isCurrentWorkspace(revision, requestedSpaceId) {
+  return revision === workspaceRevision
+    && route.name === 'SpaceWorkbench'
+    && requestedSpaceId === Number(spaceId.value)
+    && requestedSpaceId === Number(route.params.spaceId)
+}
 
 // 响应式 ResizeObserver 分栏判定
 const wbBodyRef = ref(null)
@@ -647,10 +659,18 @@ function openDocDetail(doc, tab, forceWorkspace = false) {
   })
 }
 
-function syncDocDetailFromId(docId) {
-  if (!spaceId.value) return
+async function syncDocDetailFromId(docId) {
+  if (!spaceId.value || workspaceReadySpaceId.value !== spaceId.value) return
 
-  // Try to find from current list
+  const requestId = ++documentDetailRequestId
+  const requestedSpaceId = Number(spaceId.value)
+  const revision = workspaceRevision
+  const isCurrentRequest = () => (
+    requestId === documentDetailRequestId
+    && isCurrentWorkspace(revision, requestedSpaceId)
+    && Number(route.query.doc) === docId
+  )
+
   const existing = documents.value.find((d) => d.id === docId)
   if (existing) {
     detailDoc.value = existing
@@ -658,37 +678,49 @@ function syncDocDetailFromId(docId) {
     detailDoc.value = { id: docId, name: '加载中...', fileSize: 0 }
   }
 
-  getDocumentDetailApi(spaceId.value, docId)
-    .then((detail) => {
-      if (!detail || detailDoc.value?.id !== docId) return
-      const openDetail = () => {
-        detailDoc.value = { ...(existing || detailDoc.value), ...detail }
-        setFromDetail(docId, detail.tags)
+  try {
+    const detail = await getDocumentDetailApi(requestedSpaceId, docId)
+    if (
+      !detail
+      || Number(detail.id) !== docId
+      || Number(detail.spaceId) !== requestedSpaceId
+      || !isCurrentRequest()
+    ) return
+
+    const openDetail = () => {
+      detailDoc.value = { ...(existing || detailDoc.value), ...detail }
+      setFromDetail(docId, detail.tags)
+    }
+
+    // 目录态下从动态/最近文档点进来：详情立即弹出，后台把目录定位到文档所在文件夹。
+    if (viewMode.value === 'folder') {
+      const folderId = Number(detail.folderId ?? 0)
+      const folderPath = Array.isArray(detail.folderPath) ? detail.folderPath : []
+      openDetail()
+      if (folderId !== Number(currentFolderId.value)) {
+        await revealFolderPath(folderPath, isCurrentRequest)
+        if (!isCurrentRequest()) return
+
+        const breadcrumb = folderPath.length
+          ? [{ id: 0, name: spaceInfo.value?.name || '根目录' }, ...folderPath.map((p) => ({ id: p.id, name: p.name }))]
+          : null
+        await navigateToFolder(
+          { id: folderId, name: folderPath[folderPath.length - 1]?.name || '' },
+          'force',
+          { expandTree: false, keepDetail: true, breadcrumb }
+        )
       }
-      // 目录态下从动态/最近文档点进来：详情立即弹出，后台把目录定位到文档所在文件夹，
-      // 避免"先跳目录再跳详情"的两步感；目录已正确时不做任何导航
-      if (viewMode.value === 'folder') {
-        const folderId = Number(detail.folderId ?? 0)
-        openDetail()
-        if (folderId !== Number(currentFolderId.value)) {
-          // 后端返回的完整路径链（树懒加载时前端拼不出深层路径，直接用它的）
-          const breadcrumb = detail.folderPath?.length
-            ? [{ id: 0, name: spaceInfo.value?.name || '根目录' }, ...detail.folderPath.map((p) => ({ id: p.id, name: p.name }))]
-            : null
-          navigateToFolder({ id: folderId, name: '' }, 'force', { expandTree: false, keepDetail: true, breadcrumb })
-        }
-      } else {
-        openDetail()
-      }
-    })
-    .catch(() => {
-      if (Number(route.query.doc) !== docId) return
-      detailDoc.value = null
-      const query = { ...route.query }
-      delete query.doc
-      delete query.tab
-      router.replace({ query })
-    })
+    } else {
+      openDetail()
+    }
+  } catch (err) {
+    if (!isCurrentRequest()) return
+    detailDoc.value = null
+    const query = { ...route.query }
+    delete query.doc
+    delete query.tab
+    router.replace({ query })
+  }
 }
 
 const createFolderDialogVisible = ref(false)
@@ -753,6 +785,7 @@ watch(
   () => {
     if (route.name !== 'SpaceWorkbench') return
     if (!spaceId.value) return
+    if (workspaceReadySpaceId.value !== spaceId.value) return
     const docId = Number(route.query.doc)
     if (docId > 0) {
       if (!detailDoc.value || detailDoc.value.id !== docId) {
@@ -806,7 +839,13 @@ async function initFromRoute() {
     return
   }
 
+  const initRevision = ++workspaceRevision
+
   // 先清本地状态，再设 spaceId：避免 watcher 先开详情、随后又被 reset 清掉
+  workspaceReadySpaceId.value = 0
+  documentDetailRequestId++
+  folderContentRequestId++
+  folderNavigationRequestId++
   resetViewState({ clearQuery: false })
   currentFolderId.value = 0
   treeData.value = []
@@ -822,10 +861,14 @@ async function initFromRoute() {
 
   spaceId.value = spaceIdNum
 
-  const ok = await loadSpaceDetail()
-  if (!ok) return
+  const ok = await loadSpaceDetail(spaceIdNum, initRevision)
+  if (!ok || !isCurrentWorkspace(initRevision, spaceIdNum)) return
 
-  const tasks = [loadRootTree(), loadMembers(), loadSpaceTags()]
+  const tasks = [
+    loadRootTree(initRevision),
+    loadMembers(),
+    loadSpaceTags()
+  ]
 
   // 带搜索参数进来 (全局搜索跳转) 直接进搜索态；有 doc 时优先目录+详情，不进搜索
   const keyword = String(route.query.search || '').trim()
@@ -837,13 +880,22 @@ async function initFromRoute() {
   }
   await Promise.all(tasks)
 
+  if (!isCurrentWorkspace(initRevision, spaceIdNum)) return
+  workspaceReadySpaceId.value = spaceIdNum
+
   // 侧栏直达面板 (成员/标签)
   applyPanelFromQuery()
+
+  const docId = Number(route.query.doc)
+  if (docId > 0) {
+    await syncDocDetailFromId(docId)
+  }
 }
 
-async function loadSpaceDetail() {
+async function loadSpaceDetail(requestedSpaceId = Number(spaceId.value), revision = workspaceRevision) {
   try {
-    const data = await getSpaceDetailApi(spaceId.value)
+    const data = await getSpaceDetailApi(requestedSpaceId)
+    if (!isCurrentWorkspace(revision, requestedSpaceId)) return false
     if (data) {
       spaceInfo.value = data
       breadcrumbStack.value = [{ id: 0, name: data.name || '根目录' }]
@@ -852,7 +904,9 @@ async function loadSpaceDetail() {
     router.replace('/home')
     return false
   } catch (err) {
-    router.replace('/home')
+    if (isCurrentWorkspace(revision, requestedSpaceId)) {
+      router.replace('/home')
+    }
     return false
   }
 }
@@ -963,25 +1017,52 @@ function ensureExpanded(folderId) {
   applyExpandedState(expandedKeys.value)
 }
 
-async function fetchFolderChildren(parentId) {
+async function fetchFolderChildren(parentId, requestedSpaceId = Number(spaceId.value)) {
   try {
-    const list = await listSubFoldersApi(spaceId.value, parentId)
+    const list = await listSubFoldersApi(requestedSpaceId, parentId)
     return mapFolderNodes(list)
   } catch (err) {
     return []
   }
 }
 
-async function loadRootTree() {
-  const children = await fetchFolderChildren(0)
+async function loadRootTree(revision = workspaceRevision) {
+  const requestedSpaceId = Number(spaceId.value)
+  const children = await fetchFolderChildren(0, requestedSpaceId)
+  if (!isCurrentWorkspace(revision, requestedSpaceId)) return
   treeData.value = children
   loadedFolderIds.value = new Set([0])
 }
 
-async function loadTreeChildren(parentId, force = false) {
+async function revealFolderPath(folderPath, isCurrentRequest) {
+  if (!folderPath.length) return
+
+  let parentId = 0
+  for (const item of folderPath) {
+    if (!isCurrentRequest()) return
+    if (!findTreeNode(treeData.value, item.id)) {
+      await loadTreeChildren(parentId, true, isCurrentRequest)
+    }
+    parentId = item.id
+  }
+
+  if (!isCurrentRequest()) return
+  const ancestorIds = folderPath.slice(0, -1).map((item) => item.id)
+  expandedKeys.value = Array.from(new Set([...expandedKeys.value, ...ancestorIds]))
+  applyExpandedState(expandedKeys.value)
+}
+
+async function loadTreeChildren(parentId, force = false, isCurrentRequest = null) {
+  if (isCurrentRequest && !isCurrentRequest()) return
   if (!force && loadedFolderIds.value.has(parentId)) return
 
-  const children = await fetchFolderChildren(parentId)
+  const requestedSpaceId = Number(spaceId.value)
+  const revision = workspaceRevision
+  const children = await fetchFolderChildren(parentId, requestedSpaceId)
+  if (
+    !isCurrentWorkspace(revision, requestedSpaceId)
+    || (isCurrentRequest && !isCurrentRequest())
+  ) return
   if (parentId === 0) {
     // 根层：尽量保留已展开节点的已加载子树
     if (!force && treeData.value.length > 0) {
@@ -1004,7 +1085,10 @@ async function loadTreeChildren(parentId, force = false) {
     }
   }
 
-  const nextLoaded = new Set(loadedFolderIds.value)
+  // 强刷根层会重建整棵树，旧子树的“已加载”标记也必须一起失效。
+  const nextLoaded = parentId === 0 && force
+    ? new Set()
+    : new Set(loadedFolderIds.value)
   nextLoaded.add(parentId)
   loadedFolderIds.value = nextLoaded
 }
@@ -1112,14 +1196,26 @@ async function exitFilterMode() {
 /* ========== 目录内容 ========== */
 
 async function loadCurrentFolderContent() {
+  const requestId = ++folderContentRequestId
+  const requestedSpaceId = Number(spaceId.value)
+  const requestedFolderId = Number(currentFolderId.value)
+  const revision = workspaceRevision
+  const isCurrentRequest = () => (
+    requestId === folderContentRequestId
+    && isCurrentWorkspace(revision, requestedSpaceId)
+    && requestedFolderId === Number(currentFolderId.value)
+  )
+
   loadingDocuments.value = true
   try {
-    const folderList = await listSubFoldersApi(spaceId.value, currentFolderId.value)
+    const folderList = await listSubFoldersApi(requestedSpaceId, requestedFolderId)
+    if (!isCurrentRequest()) return
+
     subFolders.value = folderList
 
     // 把当前目录的子文件夹同步进树
     const mapped = mapFolderNodes(folderList)
-    if (currentFolderId.value === 0) {
+    if (requestedFolderId === 0) {
       const oldMap = new Map(treeData.value.map((n) => [n.id, n]))
       treeData.value = mapped.map((n) => {
         const old = oldMap.get(n.id)
@@ -1129,7 +1225,7 @@ async function loadCurrentFolderContent() {
         return n
       })
     } else {
-      const parent = findTreeNode(treeData.value, currentFolderId.value)
+      const parent = findTreeNode(treeData.value, requestedFolderId)
       if (parent) {
         const oldChildMap = new Map((parent.children || []).map((n) => [n.id, n]))
         parent.children = mapped.map((n) => {
@@ -1143,20 +1239,24 @@ async function loadCurrentFolderContent() {
       }
     }
     const nextLoaded = new Set(loadedFolderIds.value)
-    nextLoaded.add(currentFolderId.value)
+    nextLoaded.add(requestedFolderId)
     loadedFolderIds.value = nextLoaded
 
-    const docPage = await listDocumentsApi(spaceId.value, currentFolderId.value, 1, 100)
+    const docPage = await listDocumentsApi(requestedSpaceId, requestedFolderId, 1, 100)
+    if (!isCurrentRequest()) return
     documents.value = docPage.records
     docTotal.value = docPage.total
     loadTagsForDocs(documents.value)
   } catch (err) {
+    if (!isCurrentRequest()) return
     subFolders.value = []
     documents.value = []
     docTotal.value = 0
   } finally {
-    loadingDocuments.value = false
-    applyExpandedState(expandedKeys.value)
+    if (isCurrentRequest()) {
+      loadingDocuments.value = false
+      applyExpandedState(expandedKeys.value)
+    }
   }
 }
 
@@ -1169,6 +1269,18 @@ function syncTreeSelection(folderId) {
 
 async function navigateToFolder(folder, fromSource = 'table', { expandTree = true, keepDetail = false, breadcrumb = null } = {}) {
   if (!folder) return
+
+  const requestId = ++folderNavigationRequestId
+  const requestedSpaceId = Number(spaceId.value)
+  const requestedFolderId = Number(folder.id)
+  const revision = workspaceRevision
+  const isCurrentRequest = () => (
+    requestId === folderNavigationRequestId
+    && isCurrentWorkspace(revision, requestedSpaceId)
+  )
+  const isCurrentFolder = () => (
+    isCurrentRequest() && requestedFolderId === Number(currentFolderId.value)
+  )
 
   // 处于筛选态或详情态时，任何目录导航先统一回到目录视图并强制刷新；
   // keepDetail 时保留详情面板与 query（如从动态定位目录），只清视图状态
@@ -1188,6 +1300,7 @@ async function navigateToFolder(folder, fromSource = 'table', { expandTree = tru
   if (folder.id === currentFolderId.value && fromSource !== 'force') {
     if (folder.id) {
       await loadTreeChildren(folder.id)
+      if (!isCurrentFolder()) return
       if (expandTree) ensureExpanded(folder.id)
     }
     syncTreeSelection(folder.id || 0)
@@ -1198,9 +1311,13 @@ async function navigateToFolder(folder, fromSource = 'table', { expandTree = tru
     currentFolderId.value = 0
     breadcrumbStack.value = [{ id: 0, name: spaceInfo.value?.name || '根目录' }]
     await loadCurrentFolderContent()
+    if (!isCurrentFolder()) return
     syncTreeSelection(0)
     return
   }
+
+  await loadTreeChildren(folder.id)
+  if (!isCurrentRequest()) return
 
   const existIndex = breadcrumbStack.value.findIndex((item) => item.id === folder.id)
   if (breadcrumb) {
@@ -1214,9 +1331,9 @@ async function navigateToFolder(folder, fromSource = 'table', { expandTree = tru
   }
 
   currentFolderId.value = folder.id
-  await loadTreeChildren(folder.id)
   if (expandTree) ensureExpanded(folder.id)
   await loadCurrentFolderContent()
+  if (!isCurrentFolder()) return
   syncTreeSelection(folder.id)
 }
 
@@ -1228,16 +1345,25 @@ async function handleRootFolderClick() {
 
 async function handleTreeNodeClick(data, node) {
   if (!data?.id) return
+  const interactionRequestId = ++folderNavigationRequestId
+  const requestedSpaceId = Number(spaceId.value)
+  const revision = workspaceRevision
+  const isCurrentInteraction = () => (
+    interactionRequestId === folderNavigationRequestId
+    && isCurrentWorkspace(revision, requestedSpaceId)
+  )
   if (node?.expanded) {
     node.collapse()
     handleTreeNodeCollapse(data)
   } else {
     await loadTreeChildren(data.id)
+    if (!isCurrentInteraction()) return
     if (!treeRef.value?.getNode(data.id)?.isLeaf) {
       ensureExpanded(data.id)
     }
   }
 
+  if (!isCurrentInteraction()) return
   await navigateToFolder(data, 'sidebar', { expandTree: false })
 }
 
@@ -1290,15 +1416,9 @@ function collapseAllTreeNodes() {
 
 async function jumpBreadcrumb(index) {
   if (index < 0 || index >= breadcrumbStack.value.length) return
-  breadcrumbStack.value = breadcrumbStack.value.slice(0, index + 1)
-  const target = breadcrumbStack.value[index]
-  currentFolderId.value = target.id
-  if (target.id) {
-    await loadTreeChildren(target.id)
-    ensureExpanded(target.id)
-  }
-  await loadCurrentFolderContent()
-  syncTreeSelection(target.id || 0)
+  const breadcrumb = breadcrumbStack.value.slice(0, index + 1)
+  const target = breadcrumb[index]
+  await navigateToFolder(target, 'force', { breadcrumb })
 }
 
 /* ========== 上传 / 下载 / 重命名 / 移动 / 删除 ========== */
