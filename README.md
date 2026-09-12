@@ -127,7 +127,6 @@ docker compose ps
 
 根目录只有一份 `docker-compose.yaml`，首次启动自动创建数据卷、数据库表和存储桶。API 与 MinIO 仅绑定本机；远程浏览器访问需要配置文件域名反代和 CORS，不能沿用模板中的 `localhost` 地址。首次镜像发布权限、HTTPS / FRP 接入、更新与回退见 [部署文档](docs/DEPLOYMENT.md)。
 
-本机原生开发与接口说明见 [后端文档](teamdocs-backend/README.md) 和 [前端文档](teamdocs-frontend/README.md)。
 
 ### CI/CD 与更新
 

@@ -53,30 +53,6 @@ docker compose ps -a
 | MinIO Console | `127.0.0.1:29001` | 本机管理入口 |
 | MySQL / Redis | 不发布端口 | 仅容器内部访问 |
 
-## HTTPS 与 FRP
-
-FRP、DNS 和公网 TLS 由宿主机及公网入口维护，不放进应用 Compose。学校服务器经 FRP 接入公网时，按以下对应关系转发：
-
-| 公网域名 | 学校服务器目标 | 说明 |
-|---|---|---|
-| Web 域名，例如 `teamdocs.example.com` | `127.0.0.1:15173` | 前端 Nginx 已处理 `/api`，不需要额外暴露后端 |
-| 文件域名，例如 `files.example.com` | `127.0.0.1:29000` | 必须指向 S3 API，不是 Console |
-
-上表假设 FRP 客户端运行在学校宿主机上；如果 FRP 本身运行在容器中，其 `127.0.0.1` 不代表宿主机。Web 和文件域名都应先解析到公网入口，配置有效证书，再通过隧道转发。仅能访问学校服务器 Web 端口不代表文件端点也已可达。
-
-对应 `.env` 示例：
-
-```dotenv
-MINIO_PUBLIC_ENDPOINT=https://files.example.com
-MINIO_CORS_ALLOWED_ORIGIN=https://teamdocs.example.com
-```
-
-`MINIO_PUBLIC_ENDPOINT` 使用独立文件域名，不加路径前缀或尾斜杠；CORS 填浏览器地址栏的精确来源，不加尾斜杠。HTTPS 页面不能使用 HTTP 文件端点，否则浏览器会阻止混合内容。反向代理应保留文件请求的 Host、路径和查询参数，避免破坏预签名；CORS 响应头由 MinIO 返回，不要重复添加。公网 Web 反代上传大小限制应至少为 105 MB，读写超时应覆盖大文件上传。
-
-不要把 S3 API 和 Console 直接以裸 HTTP 开放到公网。Console 不参与预览和下载，需要远程管理时使用 SSH 隧道或受限的 HTTPS 管理入口。
-
-配置修改后执行 `docker compose up -d --wait` 即可应用，无需重新构建镜像。
-
 ## 更新与回退
 
 等待目标版本的 CI 全部成功，在 `.env` 记录该版本的完整提交 SHA，然后执行：
@@ -100,4 +76,4 @@ curl --fail http://127.0.0.1:15173/api/actuator/health
 
 启动后先确认 `docker compose ps -a` 无失败服务，再从实际浏览器来源验证登录、空间列表、文件上传、预览和下载。仅检查 Web 的 `/healthz` 无法证明后端代理或外部文件地址可用；应同时检查上面的 `/api/actuator/health` 和文件链路。
 
-本机原生开发不使用这份 Compose 构建后端，请参阅 [后端开发说明](../teamdocs-backend/README.md) 和 [前端开发说明](../teamdocs-frontend/README.md)。
+本机原生开发不使用这份 Compose。

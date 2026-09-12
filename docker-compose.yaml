@@ -8,7 +8,7 @@ x-logging: &default-logging
 
 services:
   mysql:
-    image: mysql@sha256:31b8746d7ed35df65af0cf781a05ed871d2f56ea9daad1c03ec311688d61f94c
+    image: mysql:8.4
     command:
       - --ngram-token-size=2
       - --innodb-ft-enable-stopword=OFF
@@ -36,7 +36,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis@sha256:983bae20b7619ef65adac7087098dfd6893ad46d03428caae573debb8be30cc7
+    image: redis:7.0-alpine
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
@@ -51,7 +51,7 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio@sha256:420663b8685c5396f06405ad516d611db4465939a141cc7d40266342d0f2632d
+    image: minio/minio:RELEASE.2023-09-20T22-40-07Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-teamdocsadmin}
@@ -85,7 +85,7 @@ services:
           max_attempts=60
           until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do
             if [ "$${attempt}" -ge "$${max_attempts}" ]; then
-              echo "MinIO was not ready after $${max_attempts} attempts" >&2
+              echo "MinIO 在 $${max_attempts} 次重试后仍未就绪" >&2
               exit 1
             fi
             attempt=$$((attempt + 1))
