@@ -14,102 +14,66 @@ TeamDocs 后端服务：Spring Boot 3.5 + MyBatis-Plus + MySQL 8 + Redis 7 + Min
 
 ## 本地开发
 
-前置：本机 MySQL、Redis、MinIO 可访问。
+前置：Linux Bash、Java 17，以及本机可访问的 MySQL、Redis、MinIO。以下命令在 `teamdocs-backend` 目录执行。
 
-```powershell
-# 1. 复制环境模板并填写密钥
-Copy-Item ..\.env.example .env
-# 2. 运行后端（默认端口 8080）
-.\mvnw.cmd spring-boot:run
+```bash
+# 1. 复制环境模板，已有配置不覆盖
+cp -n ../.env.example .env
+# 2. 在 .env 填写本机 DB、Redis、MinIO 连接地址和密钥
+# 3. 运行后端（默认端口 8080）
+sh ./mvnw spring-boot:run
 # 跑测试
-.\mvnw.cmd test
+sh ./mvnw test
 ```
 
-Linux/macOS 使用 `sh ./mvnw`。环境变量也可以直接配置到操作系统，不强制使用 `.env` 文件。
+环境变量也可以直接配置到操作系统，不强制使用 `.env` 文件。
 
-后端启动后，前端开发代理 `teamdocs-frontend/vite.config.js` 默认指向 `http://localhost:8080`。
+后端启动后，前端开发代理 `teamdocs-frontend/vite.config.js` 默认指向 `http://localhost:8080`。根目录 Compose 不向宿主机暴露 MySQL 和 Redis；本机运行后端时需要另外准备可访问的依赖。
 
 ## Docker Compose 一键启动
 
-完整编排文件在仓库根目录 `docker-compose.dev.yml`（MySQL 8 + Redis 7 + MinIO + minio-init + Backend）。
+仓库根目录的 `docker-compose.yaml` 从 GHCR 拉取前后端镜像，同时启动 MySQL、Redis、MinIO 和桶初始化服务。环境配置、首次启动、更新与反向代理统一见 [部署文档](../docs/DEPLOYMENT.md)。
 
-### 前置条件
+前置：Docker Engine 与 Docker Compose v2 可用，已按部署文档准备根目录 `.env`。
 
-- Windows/macOS 已启动 Docker Desktop，或 Linux 已启动 Docker Engine
-- Docker Compose v2 可用
-- 默认宿主机端口 `18080`、`19000`、`19001` 未被占用
+以下 Compose 命令均在仓库根目录执行：
 
-### 1. 准备环境变量
-
-```powershell
-Copy-Item ..\.env.docker.example .env.docker
+```bash
+docker compose pull
+docker compose up -d --wait
+docker compose ps -a
+docker compose logs -f backend
 ```
 
-至少替换 `.env.docker` 中的数据库、Redis、JWT 和 MinIO 密钥。JWT 密钥不得少于 32 字节。`MINIO_CORS_ALLOWED_ORIGIN` 必须填写前端实际访问来源（协议、域名和端口），本地 Vite 默认是 `http://localhost:5173`。
+默认入口：Web `http://localhost:15173`，API `http://127.0.0.1:8080`，健康检查 `http://127.0.0.1:8080/actuator/health`，MinIO S3 API `http://127.0.0.1:29000`，MinIO Console `http://127.0.0.1:29001`。API 与 MinIO 仅绑定本机；MySQL 和 Redis 只在 Compose 内部网络开放。
 
-不要删除 `TEAMDOCS_DOCKER_ENV`，它用于阻止 Compose 误读原生启动使用的根目录 `.env`。如果密码含有 `$`，必须在 `.env.docker` 中用单引号包住，例如 `DB_PASSWORD='a$password'`，否则 Compose 会把 `$password` 当成变量引用。
+停止容器并保留数据卷：
 
-### 2. 启动完整环境
-
-```shell
-docker compose --env-file .env.docker -f docker-compose.dev.yml up -d --build
-docker compose --env-file .env.docker -f docker-compose.dev.yml ps -a
+```bash
+docker compose down
 ```
 
-首次启动流程：
-
-```mermaid
-flowchart TD
-    Up[docker compose up] --> Infra[启动 MySQL、Redis、MinIO]
-    Infra --> Health{MySQL、Redis 健康检查}
-    Infra --> MinioInit[minio-init 使用 mc 轮询 MinIO]
-    Health --> SQL[按顺序创建 9 张表和全文索引]
-    MinioInit --> Buckets[创建 public/private 桶并配置公有桶权限]
-    SQL --> App[启动 Spring Boot 后端]
-    Buckets --> App
-    App --> AppHealth{Actuator 健康检查}
-```
-
-查看后端日志：
-
-```shell
-docker compose --env-file .env.docker -f docker-compose.dev.yml logs -f backend
-```
-
-本地入口：API `http://localhost:18080`，Backend Health `http://localhost:18080/actuator/health`，MinIO API `http://localhost:19000`，MinIO Console `http://localhost:19001`。MySQL 和 Redis 只在 Compose 内部网络开放，不占用宿主机端口。
-
-### 3. 停止或重置
-
-```shell
-docker compose --env-file .env.docker -f docker-compose.dev.yml down
-```
-
-删除容器和全部数据卷，下一次启动会重新执行 SQL：
-
-```shell
-docker compose --env-file .env.docker -f docker-compose.dev.yml down -v
-```
-
-`down -v` 会永久删除本地 MySQL、Redis 和 MinIO 数据，只能用于明确需要重置的开发环境。
+MySQL 初始化 SQL 只在数据卷为空时运行。不要通过删除数据卷重新执行初始化 SQL，详见部署文档。
 
 ## 环境变量
 
-- `BACKEND_PORT`：后端宿主机端口，Docker 模板使用 `18080`
-- `TEAMDOCS_DOCKER_ENV`：Docker 专用环境文件标记，缺失时 Compose 拒绝启动
-- `BIND_ADDRESS`：宿主机绑定地址，开发环境默认 `127.0.0.1`
+- `IMAGE_REPOSITORY` / `IMAGE_TAG`：Compose 使用的 GHCR 镜像仓库和版本
+- `WEB_PORT` / `BACKEND_PORT`：Compose 宿主机端口，默认 `15173` / `8080`
 - `DB_NAME` / `DB_PASSWORD`：MySQL 数据库名和 root 密码
 - `REDIS_PASSWORD`：Redis 密码
 - `JWT_SECRET`：JWT HMAC 密钥，至少 32 字节
-- `MINIO_API_PORT` / `MINIO_CONSOLE_PORT`：MinIO API 与控制台宿主机端口
-- `MINIO_PUBLIC_ENDPOINT`：必填，返回给客户端的文件访问地址，Docker 模板使用 `http://localhost:19000`
+- `MINIO_API_PORT` / `MINIO_CONSOLE_PORT`：MinIO API 与控制台宿主机端口，默认 `29000` / `29001`
+- `MINIO_PUBLIC_ENDPOINT`：必填，返回给浏览器的文件访问地址；服务器部署使用可访问的 HTTPS 文件域名
 - `MINIO_CORS_ALLOWED_ORIGIN`：必填，允许读取预签名资源的前端来源，必须是精确的 `scheme://host[:port]`
 - `MINIO_REGION`：MinIO 区域，默认 `us-east-1`，后端与服务端必须一致
 - `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`：MinIO 管理账号和密码
 - `MINIO_BUCKET_PUBLIC` / `MINIO_BUCKET_PRIVATE`：公有桶和私有桶名称
 
-`DB_HOST`、`DB_USERNAME`、`REDIS_HOST` 和 `MINIO_ENDPOINT` 主要用于不通过 Compose 直接启动后端。Compose 会把它们设置成容器网络内的服务地址，并使用 MySQL root 用户。
+`DB_HOST`、`DB_PORT`、`DB_USERNAME`、`REDIS_HOST`、`REDIS_PORT` 和 `MINIO_ENDPOINT` 用于本机启动后端时连接依赖。Compose 会把连接配置设置成容器网络内的服务地址，并使用 MySQL root 用户。如果 Compose `.env` 中的密码含有 `$`，用单引号包住完整值，例如 `DB_PASSWORD='a$password'`。
 
-Compose 内部使用 `http://minio:9000` 连接 MinIO，但下载链接必须使用客户端能访问的 `MINIO_PUBLIC_ENDPOINT`。MinIO 容器通过 `MINIO_API_CORS_ALLOW_ORIGIN`（值为 `.env.docker` 中的 `MINIO_CORS_ALLOWED_ORIGIN`）仅允许配置的前端来源跨域访问；修改来源后，执行 `docker compose --env-file .env.docker -f docker-compose.dev.yml up -d --force-recreate minio` 重新应用。部署到服务器时应把 `BIND_ADDRESS` 改为 `0.0.0.0`，把公开地址改成公网 IP 或域名，例如 `http://your-server:9000`，并开放对应端口。
+Compose 内部使用 `http://minio:9000` 连接 MinIO，但下载链接必须使用客户端能访问的 `MINIO_PUBLIC_ENDPOINT`。MinIO 通过 `MINIO_API_CORS_ALLOW_ORIGIN` 接收根目录 `.env` 中的 `MINIO_CORS_ALLOWED_ORIGIN`；修改后在仓库根目录执行 `docker compose up -d --wait`，由 Compose 更新容器配置。本机单独运行 MinIO 时需要在该服务上配置相同的允许来源。
+
+公网访问通过反向代理或 FRP 接入 TLS 入口，文件域名应转发至 S3 API，而非 Console。CORS 响应头由 MinIO 返回，反向代理不要重复添加；具体配置见 [部署文档](../docs/DEPLOYMENT.md)。
 
 ## API 约定
 
@@ -173,7 +137,7 @@ Authorization: Bearer <token>
     "name": "需求文档.pdf",
     "fileType": "pdf",
     "fileSize": 102400,
-    "url": "http://localhost:19000/teamdocs-private/xxx?X-Amz-...&response-content-disposition=inline"
+    "url": "https://files.example.com/teamdocs-private/xxx?X-Amz-...&response-content-disposition=inline"
   }
 }
 ```
@@ -184,69 +148,82 @@ Authorization: Bearer <token>
 
 ## API 冒烟测试
 
-下面的 PowerShell 流程会创建临时账号、空间和小文本文件，动态获取 ID，不依赖开发数据库中的旧数据。脚本不会打印 JWT 或预签名 URL。
+前置：Linux Bash、`curl`、`jq`，以及可访问的测试后端和文件服务。下面的流程动态创建账号、空间和文档，校验上传、下载内容、最近浏览和注销；任一步失败都会以非零状态退出，不打印 JWT 或预签名 URL。
 
-```powershell
-$baseUrl = 'http://localhost:18080'
-$stamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-$username = "demo$stamp"
-$password = 'password123'
-$spaceName = "smoke-$stamp"
+仅在测试环境执行。流程会留下测试账号、空间和文档等业务数据，本机临时文件会自动清理。
 
-$accountBody = @{ username = $username; password = $password } | ConvertTo-Json
-$register = Invoke-RestMethod -Method Post -Uri "$baseUrl/user/register" -ContentType 'application/json' -Body $accountBody
-if ($register.code -ne 1) { throw $register.msg }
+```bash
+bash <<'BASH'
+set +x
+set -euo pipefail
 
-$login = Invoke-RestMethod -Method Post -Uri "$baseUrl/user/login" -ContentType 'application/json' -Body $accountBody
-if ($login.code -ne 1) { throw $login.msg }
-$headers = @{ Authorization = "Bearer $($login.data)" }
+base_url='http://localhost:8080'
+username="demo$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
+password="$(od -An -N10 -tx1 /dev/urandom | tr -d ' \n')"
+space_name="smoke-$username"
+smoke_dir=$(mktemp -d -t teamdocs-smoke.XXXXXX)
+trap 'rm -f -- "$smoke_dir/source.txt" "$smoke_dir/downloaded.txt"; rmdir -- "$smoke_dir"' EXIT
 
-$spaceBody = @{ name = $spaceName; description = 'Compose smoke test' } | ConvertTo-Json
-$createSpace = Invoke-RestMethod -Method Post -Uri "$baseUrl/space" -Headers $headers -ContentType 'application/json' -Body $spaceBody
-if ($createSpace.code -ne 1) { throw $createSpace.msg }
-
-$spaces = Invoke-RestMethod -Method Get -Uri "$baseUrl/space/list" -Headers $headers
-$spaceId = ($spaces.data | Where-Object name -eq $spaceName | Select-Object -First 1).id
-if (-not $spaceId) { throw '未找到刚创建的空间' }
-
-$sourceFile = Join-Path $env:TEMP "teamdocs-$stamp.txt"
-$downloadedFile = Join-Path $env:TEMP "teamdocs-$stamp-downloaded.txt"
-Set-Content -Path $sourceFile -Value 'TeamDocs Compose smoke test' -Encoding UTF8
-
-$uploadJson = & curl.exe --silent --request POST "$baseUrl/spaces/$spaceId/documents/upload?folderId=0" --header "Authorization: Bearer $($login.data)" --form "file=@$sourceFile"
-$upload = $uploadJson | ConvertFrom-Json
-if ($upload.code -ne 1) { throw $upload.msg }
-
-$documents = Invoke-RestMethod -Method Get -Uri "$baseUrl/spaces/$spaceId/documents?folderId=0" -Headers $headers
-$documentId = ($documents.data.records | Where-Object name -eq (Split-Path $sourceFile -Leaf) | Select-Object -First 1).id
-if (-not $documentId) { throw '未找到刚上传的文档' }
-
-$download = Invoke-RestMethod -Method Get -Uri "$baseUrl/spaces/$spaceId/documents/$documentId/download" -Headers $headers
-if ($download.code -ne 1) { throw $download.msg }
-Invoke-WebRequest -Uri $download.data -OutFile $downloadedFile
-
-Start-Sleep -Seconds 1
-$recent = Invoke-RestMethod -Method Get -Uri "$baseUrl/user/recent-documents" -Headers $headers
-if ($recent.code -ne 1) { throw $recent.msg }
-
-$logout = Invoke-RestMethod -Method Post -Uri "$baseUrl/user/logout" -Headers $headers
-if ($logout.code -ne 1) { throw $logout.msg }
-
-[pscustomobject]@{
-    User = $username
-    SpaceId = $spaceId
-    DocumentId = $documentId
-    RecentCount = @($recent.data).Count
-    Downloaded = Test-Path $downloadedFile
+# 同时检查 HTTP 状态与业务状态，响应仅供后续步骤读取
+api() {
+  local response
+  response=$(curl --fail --silent --show-error --connect-timeout 10 --max-time 60 "$@") || return $?
+  jq -ce 'if .code == 1 then . else error(.msg // "业务请求失败") end' <<< "$response"
 }
+
+# 注册并登录，账号与密码长度符合接口要求
+account_body=$(jq -nc --arg username "$username" --arg password "$password" \
+  '{username: $username, password: $password}')
+api -X POST "$base_url/user/register" -H 'Content-Type: application/json' \
+  --data "$account_body" >/dev/null
+token=$(api -X POST "$base_url/user/login" -H 'Content-Type: application/json' \
+  --data "$account_body" | jq -er '.data | strings | select(length > 0)')
+auth=(-H "Authorization: Bearer $token")
+
+# 新建空间并动态取得 ID
+space_body=$(jq -nc --arg name "$space_name" '{name: $name, description: "接口冒烟测试"}')
+api -X POST "$base_url/space" "${auth[@]}" -H 'Content-Type: application/json' \
+  --data "$space_body" >/dev/null
+space_id=$(api "$base_url/space/list" "${auth[@]}" | \
+  jq -er --arg name "$space_name" '.data[] | select(.name == $name) | .id')
+
+# 上传小文件，查询新建文档后校验下载内容
+printf 'TeamDocs 接口冒烟测试\n' > "$smoke_dir/source.txt"
+api -X POST "$base_url/spaces/$space_id/documents/upload?folderId=0" "${auth[@]}" \
+  -F "file=@$smoke_dir/source.txt;type=text/plain" >/dev/null
+document_id=$(api "$base_url/spaces/$space_id/documents?folderId=0" "${auth[@]}" | \
+  jq -er '.data.records[] | select(.name == "source.txt") | .id')
+download_url=$(api "$base_url/spaces/$space_id/documents/$document_id/download" "${auth[@]}" | \
+  jq -er '.data | strings | select(length > 0)')
+curl --fail --silent --show-error --connect-timeout 10 --max-time 60 \
+  --output "$smoke_dir/downloaded.txt" "$download_url"
+cmp -- "$smoke_dir/source.txt" "$smoke_dir/downloaded.txt"
+
+# 最近浏览异步写入，最多等待 10 秒并校验对应文档
+for attempt in {1..10}; do
+  recent=$(api "$base_url/user/recent-documents" "${auth[@]}")
+  if jq -e --argjson id "$document_id" 'any(.data[]; .documentId == $id)' <<< "$recent" >/dev/null; then
+    break
+  fi
+  sleep 1
+done
+jq -e --argjson id "$document_id" 'any(.data[]; .documentId == $id)' <<< "$recent" >/dev/null
+
+# 注销后验证同一令牌已无法访问用户信息
+api -X POST "$base_url/user/logout" "${auth[@]}" >/dev/null
+status=$(curl --silent --show-error --connect-timeout 10 --max-time 60 \
+  --output /dev/null --write-out '%{http_code}' "$base_url/user/info" "${auth[@]}")
+[[ "$status" == 401 ]] || { printf '注销验证失败，HTTP 状态：%s\n' "$status" >&2; exit 1; }
+printf '通过：账号 %s，空间 %s，文档 %s，下载、最近浏览和注销验证完成。\n' \
+  "$username" "$space_id" "$document_id"
+BASH
 ```
 
 ## 常见问题
 
-- **端口被占用**：修改 `.env.docker` 中对应的宿主机端口；容器内部端口无需修改。
-- **提示 `TEAMDOCS_DOCKER_ENV` 缺失**：命令遗漏了 `--env-file .env.docker`，Compose 已阻止误用根目录 `.env`。
-- **修改 SQL 后没有生效**：初始化脚本只在 MySQL 数据卷为空时执行。确认不需要旧数据后使用 `down -v` 重建。
-- **下载 URL 中出现 `minio:9000`**：检查后端是否设置了 `MINIO_PUBLIC_ENDPOINT`，并重新构建镜像。
+- **端口被占用**：修改根目录 `.env` 中对应的宿主机端口；容器内部端口无需修改。前端本地开发还需同步 Vite 代理目标。
+- **初始化 SQL 没有执行**：初始化脚本只在 MySQL 数据卷为空时执行，重启容器不会重复执行。可检查 MySQL 日志确认首次初始化结果，不要删除数据卷排障。
+- **下载 URL 中出现 `minio:9000`**：检查后端是否设置了 `MINIO_PUBLIC_ENDPOINT`。Compose 部署修改根目录 `.env` 后，在仓库根目录执行 `docker compose up -d --wait`，无需重新构建镜像。
 - **Backend 状态为 unhealthy**：访问 `/actuator/health`，并查看 Backend、MySQL 和 Redis 日志。
 - **接口 HTTP 200 但操作失败**：检查响应体的 `code` 和 `msg`，不要只看 HTTP 状态码。
-- **Docker 无法连接 daemon**：Windows/macOS 启动 Docker Desktop；Linux 启动 Docker 服务。
+- **Docker 无法连接 daemon**：确认 Docker 服务已启动，且当前用户有访问 Docker 的权限。

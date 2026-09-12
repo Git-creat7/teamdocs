@@ -4,15 +4,11 @@ FROM maven:3.9.9-eclipse-temurin-17 AS build
 
 WORKDIR /workspace
 
-ARG MAVEN_MIRROR_URL=https://repo.maven.apache.org/maven2
-ENV MAVEN_MIRROR_URL=${MAVEN_MIRROR_URL}
-
 COPY pom.xml .
-COPY settings.xml /tmp/settings.xml
 RUN --mount=type=cache,target=/root/.m2,sharing=locked \
     set -eu; \
     attempt=1; \
-    until mvn -s /tmp/settings.xml -B -ntp \
+    until mvn -B -ntp \
         -Dmaven.wagon.http.retryHandler.count=5 \
         -Dmaven.wagon.http.retryHandler.requestSentEnabled=true \
         dependency:go-offline; do \
@@ -26,7 +22,7 @@ COPY src ./src
 RUN --mount=type=cache,target=/root/.m2,sharing=locked \
     set -eu; \
     attempt=1; \
-    until mvn -s /tmp/settings.xml -B -ntp \
+    until mvn -B -ntp \
         -Dmaven.wagon.http.retryHandler.count=5 \
         -Dmaven.wagon.http.retryHandler.requestSentEnabled=true \
         -Dmaven.test.skip=true package; do \

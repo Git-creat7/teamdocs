@@ -96,61 +96,63 @@ flowchart LR
 </p>
 
 
-本地验证命令：
+以下命令用于源码验证，不属于服务器部署步骤；后端需要 Java 17，前端需要 Node.js 22。
 
-```powershell
+```bash
 cd teamdocs-backend
-.\mvnw.cmd test
+sh ./mvnw test
 
-cd ..\teamdocs-frontend
+cd ../teamdocs-frontend
 npm ci
 npm run build
 ```
 
 ## 快速启动
 
-前置条件：Docker 与 Docker Compose v2、Node.js 20+。
+前置条件：Docker 与 Docker Compose v2，以及已由 GitHub Actions 成功发布、当前机器可拉取的镜像。服务器不需要安装 Java、Node.js 或 Maven。
 
-```powershell
-# 1. 创建 Docker 环境文件，并替换其中的示例密钥
-Copy-Item .env.docker.example .env.docker
-
-# 2. 将 .env.docker 中的 BACKEND_PORT 改为 8080，
-#    以匹配当前 Vite 开发代理，然后启动后端依赖与 API
-docker compose --env-file .env.docker -f docker-compose.dev.yml up -d --build
-
-# 3. 启动前端
-cd teamdocs-frontend
-npm ci
-npm run dev
-```
-
-- Web：`http://localhost:5173`
-- API：`http://localhost:8080`
-- MinIO Console：`http://localhost:19001`
-
-更完整的环境变量、接口和故障排查说明见 [后端文档](teamdocs-backend/README.md) 与 [前端文档](teamdocs-frontend/README.md)。
-
-### 生产部署与更新
-
-生产环境使用 `docker-compose.prod.yml` 构建前后端镜像，并通过 Nginx 提供 SPA 路由回退与 `/api` 反向代理。首次部署时复制 `.env.prod.example`，填写密钥并创建其中声明的三个持久化卷；这些卷被标记为 external，更新或删除应用容器不会删除业务数据。
-
-后续更新执行：
+以下命令在仓库根目录执行；已有 `.env` 不要覆盖：
 
 ```bash
-./scripts/deploy.sh
+cp -n .env.example .env
+# 编辑 .env，填写数据库、Redis、JWT 和 MinIO 密钥及浏览器访问地址
+docker compose pull
+docker compose up -d --wait
+docker compose ps
 ```
 
-脚本会以 fast-forward 方式拉取仓库，按 Git 提交号重新构建前后端，并等待所有服务通过健康检查。MySQL、Redis 与 MinIO 镜像应固定版本并单独安排升级；生产环境不要使用 `docker compose down -v`。
+- 本机 Web：`http://localhost:15173`
+- 本机 API：`http://127.0.0.1:8080`
+- 本机 MinIO S3 API / Console：`http://127.0.0.1:29000` / `http://127.0.0.1:29001`
+
+根目录只有一份 `docker-compose.yaml`，首次启动自动创建数据卷、数据库表和存储桶。API 与 MinIO 仅绑定本机；远程浏览器访问需要配置文件域名反代和 CORS，不能沿用模板中的 `localhost` 地址。首次镜像发布权限、HTTPS / FRP 接入、更新与回退见 [部署文档](docs/DEPLOYMENT.md)。
+
+本机原生开发与接口说明见 [后端文档](teamdocs-backend/README.md) 和 [前端文档](teamdocs-frontend/README.md)。
+
+### CI/CD 与更新
+
+[GitHub Actions](.github/workflows/ci.yml) 在 Pull Request 和 `main` 提交时校验 Compose、运行后端测试并构建前端；`main` 校验通过后构建并发布前后端 GHCR 镜像，使用同一完整提交 SHA 标记版本，同时更新 `latest`。CI 负责测试和镜像交付，服务器由维护者执行 Compose 更新，不自动通过 SSH 部署。
+
+等待目标版本的 CI 全部成功，将 `.env` 中的 `IMAGE_TAG` 改为该次发布的完整提交 SHA，再执行：
+
+```bash
+docker compose pull
+docker compose up -d --wait
+```
+
+回退应用时改回上一次的 SHA 并执行相同命令。配置或 SQL 变更需同步对应版本的仓库文件；应用回退不等于数据库回退。MySQL、Redis 与 MinIO 使用固定镜像摘要，数据保存在命名卷中；更新无需 `down`，不要使用 `down -v` 删除数据。
 
 ## 目录结构
 
 ```text
 TeamDocs/
+├── .github/workflows/ci.yml
 ├── teamdocs-backend/    Spring Boot API、领域服务与测试
 ├── teamdocs-frontend/   Vue 3 Web 客户端
 ├── sql/                 数据库初始化与全文索引脚本
-├── docker-compose.dev.yml
+├── docs/DEPLOYMENT.md    镜像部署、更新与公网接入
+├── docker-compose.yaml
+├── .env.example
 └── README.md
 ```
 
@@ -160,4 +162,4 @@ TeamDocs/
 - 搜索使用 MySQL ngram 全文索引，不提供语义检索
 - JWT 已支持主动失效，但暂未实现 Access Token / Refresh Token 双 Token 体系
 - 自动化测试以 Java 后端为主，前端目前依赖构建检查和人工回归
-- 当前未接入 GitHub Actions，公开构建状态将在 CI 完成后补充
+- 采用单机 Compose 部署，不提供高可用或滚动发布

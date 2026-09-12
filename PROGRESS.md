@@ -2,16 +2,6 @@
 
 > 每完成一个模块就更新此文件，让下一次会话能快速接续。
 
----
-
-## 当前位置
-
-**周次**：项目完结（2026-08-01）
-**模块**：整体交付
-**状态**：在线预览前端接入验证通过、Docker 部署与生产环境（MinIO 域名反代）验证通过、README 面向简历展示更新完毕。项目完结，进入维护与简历阶段。
-
----
-
 ## 已完成
 
 - [x] W1: 项目骨架 + 用户模块 + JWT
@@ -32,27 +22,12 @@
 - [x] 部署验证：Docker Compose 与生产环境（MinIO 域名反代）全链路验证通过
 - [x] 简历展示：README 重构为后端导向（技术栈 badges、架构图、启动与部署文档）
 - [x] 代码质量收尾：批1 统一构造器风格与 import 规范（Lombok、通配符展开、空格）；批2 删除死代码与冗余注释、MinIO 方法重构；77 个单元测试全绿，已推送 GitHub
+- [x] 部署迁移：本机 build 镜像改为 GitHub Actions 构建并发布 GHCR 镜像，服务器只 `docker compose pull`；根目录仅保留一份 `docker-compose.yaml`，删除 dev/prod 双配置和 `scripts/deploy.sh`
 
----
+## 当前位置
 
-## 进行中
+**状态**：项目功能完结，进入维护阶段。部署迁移（CI 构建、服务器拉镜像）已提交推送，等待首次 CI 发布成功后把服务器 `.env` 的 `IMAGE_TAG` 改为该次提交 SHA。
 
-（无，项目已完结）
-
----
-
-## 待办
-
-- [x] 清理已明确放弃的 Elasticsearch/Kibana/Tika 依赖残留
-- [x] 编写后端 Dockerfile 与包含 MySQL、Redis、MinIO、后端的 Docker Compose
-- [x] 补充原生启动与 Docker 专用环境模板，不提交真实密码和密钥
-- [x] 完善 README：项目架构、启动方式、核心设计、API 约定与冒烟脚本
-- [x] 修复 `anyRequest().permitAll()`，仅登录、注册和健康检查允许匿名访问
-- [x] 增加 `jti`、`iat` 和 Redis Token 撤销名单，支持注销当前 Token
-- [x] 为高数据量列表增加 `current/size` 分页、稳定排序和联合索引
-- [x] 全量 API 回归并整理最终简历项目描述
-- [x] 标签批量接口：`GET /spaces/{id}/documents/tags?documentIds=...`，前端 `loadTagsForDocs` 从 N 个请求收成 1 个批量请求
-- [x] `/space/list` 聚合 VO：一次 JOIN 带出 myRole/memberCount/docCount，消掉首页每空间 2 请求的 N+1
 
 ---
 
@@ -81,42 +56,15 @@
 - W5 单元测试：`teamdocs-backend/src/test/java/asia/creat/teamdocsbackend/`
 - 后端镜像：`teamdocs-backend/Dockerfile`
 - Docker 构建上下文排除：`teamdocs-backend/.dockerignore`
-- 全栈编排：`docker-compose.dev.yml`
-- 原生启动环境模板：`.env.example`
-- Docker 环境模板：`.env.docker.example`
-- 部署与 API 冒烟文档：`README.md`
+- 全栈编排：`docker-compose.yaml`
+- 环境模板：`.env.example`
+- CI 与镜像发布：`.github/workflows/ci.yml`
+- 部署文档：`docs/DEPLOYMENT.md`
 
 ---
 
 ## 遇到的坑（值得记录的）
 ### W1
-1. **BusinessException 继承了 Throwable 而不是 RuntimeException**
-   - 错误：`extends Throwable` → 变成受检异常，所有调用方法都要声明 `throws`
-   - 正确：`extends RuntimeException` → 非受检异常，随抛随捕，全局兜底
-   - 记忆点：自定义业务异常永远继承 `RuntimeException`
-
-2. **GlobalExceptionHandler 里把 @ExceptionHandler 写进了注释**
-   - 导致 `handleDefaultException` 方法是死代码，Spring 永远不会调用它
-   - 教训：注解必须在方法签名上方，不是注释里
-
-3. **User 实体的 DateTime 导错包**
-   - 错误：导入了 `net.sf.jsqlparser.expression.DateTimeLiteralExpression.DateTime`（SQL 解析器内部类）
-   - 正确：`java.time.LocalDateTime`（Java 8+ 标准时间类型，MP 原生支持）
-   - 记忆点：IDEA 自动补全不一定对，看清包路径再确认
-
-4. **User 实体 id 字段缺 @TableId(type = IdType.AUTO)**
-   - 没有这个注解，MyBatis Plus 默认用雪花算法生成 ID，不走数据库自增
-   - 记忆点：只要表用了 AUTO_INCREMENT，实体必须显式声明 `IdType.AUTO`
-
-5. **JDBC URL 的 characterEncoding=utf8mb4 导致连接失败**
-   - 错误：`characterEncoding=utf8mb4`（这是 MySQL 服务端的字符集名）
-   - 正确：`characterEncoding=UTF-8`（JDBC 要求用 Java 字符集名）
-   - 记忆点：MySQL 字符集名 ≠ Java 字符集名，JDBC URL 里用 Java 的
-
-6. **JJWT 版本与 API 不匹配**
-   - 错误：pom 用 0.11.5 但代码写了 0.12.x 的 API（`.claims()` / `.verifyWith()` / `Jwts.parser()`）
-   - 正确：版本和 API 必须对应，0.11 用 `setClaims/parserBuilder/setSigningKey`，0.12 用 `claims/parser/verifyWith`
-   - 记忆点：引入第三方库时先确认版本号，再查对应版本的文档/API
 
 7. **JWT Filter 里 filterChain.doFilter 被调用了两次**
    - 错误：try 块内放行一次，try 块外又放行一次，请求被处理两次
@@ -134,70 +82,36 @@
    - 正确：`spaceMapper.deleteById(spaceId);` —— MP 看到 `@TableLogic` 自动改写为 `UPDATE space SET deleted=1 WHERE id=?`
    - 记忆点：`@TableLogic` 的价值就是让业务代码"写删除调用、做更新效果"。一旦手写赋值，软删除细节就泄漏到业务层，注解形同虚设
 
-2. **角色多值匹配用 OR 拼接而不是 IN**
-   - 错误：`.and(w -> { for r : roles { w.or().eq(role, r); } })` —— 循环拼 OR，代码长又难读
-   - 正确：`.in(SpaceMember::getRole, Arrays.asList(rolesToCheck))` —— 直接用 IN
-   - 记忆点：等值多选场景一律用 `IN`。MySQL 优化器对 IN 的处理比 OR 更稳（OR 多了优化器有时退化成全表扫，IN 总是走索引）。代码也短
 
-3. ⭐ **校验工具方法粒度过细，导致一次接口调用 5 次 DB 查询**
+3.  **校验工具方法粒度过细，导致一次接口调用 5 次 DB 查询**
    - 错误：`addMember` 里依次调用 `checkUserExist`（查 user）+ `checkMemberExist`（内部又查一次 user，再查 space_member）+ `checkRole`（查 space_member）+ 主流程再查一次 user 拿 id —— 5 次 DB 调用才插一条记录
    - 正确：把"查存在性"和"拿对象"合并成一次 `selectOne`，结果非空就同时满足两个条件；校验方法只做单一职责的事
    - 记忆点：每写一个 `checkXxx` 工具方法前，先想想它会不会和已有查询重复。**"check 类方法"很容易演变成隐藏的 N+1 查询**，因为它们看起来"只是一行"，但每行都打一次 DB
 
-4. ⭐ **复用 LambdaQueryWrapper + clear() 重新拼条件，最后 delete 删错记录**
+4.  **复用 LambdaQueryWrapper + clear() 重新拼条件，最后 delete 删错记录**
    - 错误：`removeMember` 里先用一个 `lqwSm` 查目标成员，然后 `lqwSm.clear()` 再加上当前登录用户的条件查操作者，最后 `spaceMemberMapper.delete(lqwSm)` —— 这时 wrapper 持有的是"操作者"的条件，删的不是目标，是自己
    - 正确：每个查询用独立的 `new LambdaQueryWrapper<>()`；删除一旦拿到主键就走 `deleteById(target.getId())`，不要再让 wrapper 参与
    - 记忆点：**wrapper 是有状态的**。`clear()` + 重新拼条件是高危操作，因为它把"查"的语义和"改/删"的语义在同一个对象上来回切换。一旦顺序乱了，删的就是错的行。规则：一个查询一个新 wrapper；按 ID 操作时优先 `xxxById`
 ---
 ### W3
 
-1. ⭐ **`moveDocument` 目标为根目录（folderId=0）时报"目标文件夹不存在"**
+1.  **`moveDocument` 目标为根目录（folderId=0）时报"目标文件夹不存在"**
    - 错误：`dto.getTargetFolderId() = 0` 不等于 null，走进了文件夹存在性校验，`selectById(0)` 返回 null，抛异常
    - 正确：加 `&& dto.getTargetFolderId() != 0` 跳过根目录校验，根目录不在 DB 里
    - 记忆点：**根目录（id=0）是虚拟概念**，不是 DB 里的真实记录。所有涉及文件夹存在性校验的地方都要排除 0
 
-2. ⭐ **`restoreDocument` 恢复根目录文档时报"原文件夹已经被删除"**
+2.  **`restoreDocument` 恢复根目录文档时报"原文件夹已经被删除"**
    - 错误：`doc.getFolderId() = 0`，`selectById(0)` 返回 null，被当成"原文件夹不存在"
    - 正确：加 `doc.getFolderId() != 0` 判断，根目录跳过 DB 查询直接恢复原位
    - 记忆点：同上，id=0 永远不在 DB 里，所有恢复/移动逻辑都要特殊处理
 
-3. ⭐ **`@TableLogic` 拦截了恢复操作的 UPDATE**
+3.  **`@TableLogic` 拦截了恢复操作的 UPDATE**
    - 错误：`doc.setDeleted(0); documentMapper.updateById(doc);` → MP 自动追加 `WHERE deleted=0`，但已删文档 `deleted=1`，WHERE 条件不匹配，UPDATE 0 行，静默失败
    - 正确：自定义 SQL `UPDATE document SET deleted=0, folder_id=? WHERE id=?`，绕过 `@TableLogic`
    - 记忆点：**`@TableLogic` 不仅在 SELECT 时自动加 `WHERE deleted=0`，UPDATE 时也会加**。恢复已删除记录只能用自定义 SQL。`@TableLogic` 是双向封锁：删（SELECT 查不到）+ 恢复（UPDATE 改不了）
 
-4. **`DocumentMapper.xml` 中 MyBatis 参数占位符缺 `#`**
-   - 错误：`folder_id = {folderId}` → MyBatis 不解析 `{}`，当普通字符串发给 MySQL，SQL 语法错误但异常被吞
-   - 正确：`folder_id = #{folderId}`
-   - 记忆点：**MyBatis XML 中参数占位符永远用 `#{}`**，缺 `#` 不报编译错，运行时才暴露
-
-5. **自定义 SQL 参数名与 Java 方法参数名大小写不一致**
-   - 错误：Java 方法参数 `Long FolderId`（大写 F），XML 写 `#{folderId}`（小写 f），MyBatis 报 `Parameter 'folderId' not found. Available parameters are [documentId, FolderId, param1, param2]`
-   - 正确：`#{FolderId}` 或用 `@Param("folderId")`
-   - 记忆点：**不带 `@Param` 时，MyBatis 按编译后参数名匹配**。IDEA 默认 `-parameters` 编译，参数名即原样。大小写必须一致
-
-6. ⭐ **按标签筛选文档：Service 漏校验「标签归属空间」，导致跨空间越权**
-   - 错误：`listDocumentsByTag` 里只 `tagMapper.selectById(tagId)` 判存在，没校验 `tag.getSpaceId().equals(spaceId)`。用户 A 拿空间 2 的 tagId 调空间 1 的接口，校验通过，走到 SQL
-   - 正确：Service 加 `tag.getSpaceId().equals(spaceId)` 归属校验，XML 的 `WHERE d.space_id = #{spaceId}` 作为第二道防线
-   - 记忆点：**只校验「资源存在」不校验「资源归属当前空间」= 越权漏洞**。跨空间资源（标签、文档、文件夹）的查询都要先验归属。SQL 里加 space_id 是兜底，Service 的业务校验才是主防线——靠 SQL 兜底返回空列表会让前端误以为"没数据"，业务上应直接拒绝
-
-7. **Mapper 方法名跟 Service 方法名撞名（代码质量，非 bug）**
-   - 现象：`DocumentMapper.listDocumentsByTag` 和 `TagService.listDocumentsByTag` 同名，调用处 `documentMapper.listDocumentsByTag(...)` / `tagService.listDocumentsByTag(...)` 看着像同一个东西
-   - 约定：Mapper 方法名偏数据访问动作（`selectByTag` / `listByTag`），Service 方法名偏业务动作（`listDocumentsByTag`）。参考旁边已有：`selectTrashedDocuments`（Mapper） vs `listTrashedDocuments`（Service）
-   - 记忆点：**Mapper 泛型决定主语**——返回 `List<Document>` 的查询归 `DocumentMapper`，不管它 join 了什么表。join 的表只是过滤条件，不决定归属
 
 ### W4
-
-1. ⭐ **Mapper 方法名跟 XML `id` 不匹配 → 启动直接炸 `BindingException`**
-   - 错误：`DocumentMapper.java` 方法叫 `searchDocuments`，`DocumentMapper.xml` 的 `<select id="search">`，两个名字对不上
-   - 正确：XML 的 `id` 必须跟 Java 接口方法名**完全一致**
-   - 记忆点：MyBatis 启动时按方法名绑定 XML 语句。名字对不上，启动期就 `BindingException: Invalid bound statement`，根本到不了运行期。**改了 Mapper 方法名（或新建方法），XML 的 `id` 要同步改**
-
-2. ⭐ **Service 方法贴了 `@RequireSpaceRole` 但参数漏 `@SpaceId` → 一调就 500**
-   - 错误：`searchDocuments(Long spaceId, ...)` 方法上有 `@RequireSpaceRole`，但 `spaceId` 参数没贴 `@SpaceId`
-   - 后果：`SpaceRoleAspect` 切面遍历参数找不到 `@SpaceId` 标记的 Long，抛 `IllegalStateException("未找到空间ID或登录用户")`
-   - 正确：方法上贴 `@RequireSpaceRole`，参数上必须成对贴 `@SpaceId`
-   - 记忆点：这是 W2 提过的第三个坑（"注解化的方法必须成对贴注解"）。**复制别的注解化方法时只复制了方法注解，参数注解漏了**。可以加个自检：每个 `@RequireSpaceRole` 方法，参数列表里至少要有一个 `@SpaceId`
 
 3. ⭐ **`MATCH AGAINST` 必须用 `IN BOOLEAN MODE`，否则数据量小时搜啥都搜不到**
    - 错误：`MATCH(name) AGAINST(#{keyword})`（默认自然语言模式）
@@ -215,47 +129,39 @@
    - 一个文档多标签命中会产生多行，必须 `SELECT DISTINCT` 去重，否则同一文档返回多次
    - 记忆点：**`OR` 跨表条件必须配 `LEFT JOIN`，多对多 join 必须配 `DISTINCT`**。两个一起记
 
-6. ⭐ **评论删除后仍要显示占位，不能使用 `@TableLogic` 自动过滤**
-   - 冲突：评论被删除后仍要保留在列表中，给已有回复提供上下文；`@TableLogic` 会让所有常规查询自动忽略删除行
-   - 正确：把 `deleted` 当普通字段管理，删除时显式更新，列表查询不过滤；接口对已删除评论返回空内容，由前端展示占位文案
-   - 记忆点：**软删除不等于所有场景都要隐藏记录**。先确定删除后的业务可见性，再决定是否使用框架的逻辑删除能力
-
-7. ⭐ **回复评论必须同时校验存在、文档归属和删除状态**
+7.  **回复评论必须同时校验存在、文档归属和删除状态**
    - 错误：只校验 `replyToId` 对应的评论存在，攻击者可以把其他文档的评论 ID 作为回复目标
    - 正确：被回复评论必须存在、属于当前文档且未删除
    - 记忆点：**自指关联同样存在越权风险**。任何由客户端提交的关联 ID 都要校验它与当前资源处于同一业务边界
 
-8. ⭐ **操作日志失败不能反向阻断主业务**
+8.  **操作日志失败不能反向阻断主业务**
    - 风险：切面保存日志时数据库异常，如果异常继续向外抛，原本成功的上传、评论或成员操作会被日志模块拖垮
    - 正确：日志保存由切面兜底捕获；日志 Service 使用 `REQUIRES_NEW` 独立事务，业务失败时也能提交失败日志
    - 记忆点：**审计日志是旁路能力，必须失败隔离**。记录失败不能改变被记录业务原本的成功或失败结果
 
-9. **`@SpaceId` 与 `@OperationTarget` 语义不同，必要时要同时标记**
-   - `@SpaceId` 告诉权限/日志切面当前空间是谁，`@OperationTarget` 告诉日志切面被操作的主资源是谁
-   - 空间更新、成员管理等操作中，同一个 `spaceId` 参数可以同时承担两种语义；漏掉 `@SpaceId` 会导致日志中的 `space_id` 为空
-   - 记忆点：**上下文 ID 和资源 ID 恰好相同时也不能省略语义标记**，切面不会根据参数名字猜测用途
 
-10. ⭐ **标签写操作也要校验标签归属空间**
+
+10.  **标签写操作也要校验标签归属空间**
    - 错误：给文档添加标签、重命名标签时只按 `tagId` 查询，没有比较 `tag.spaceId` 与当前空间
    - 正确：抽出 `checkTag(spaceId, tagId)`，在删除、重命名、添加、移除和按标签查询中复用
    - 记忆点：**读接口修过的越权问题，写接口也要系统性排查**。不能只修一个入口，所有接收同类资源 ID 的方法都要统一校验
 
 ### 前端联调期 (后端侧发现)
 
-1. ⭐ **ngram 全文索引搜不到 "zip"——InnoDB 默认停用词的连带杀伤**
+1.  **ngram 全文索引搜不到 "zip"——InnoDB 默认停用词的连带杀伤**
    - 现象：文档名含 `zip` 却搜不到；`md`、`txt`、中文都正常
    - 原因：ngram 把 "zip" 切成 "zi"/"ip"，而 InnoDB 默认停用词表含单词 "i"，**ngram 的规则是 token 里"包含"停用词即整体丢弃**，所以带 i 的英文 bigram 全军覆没 (zi、ip、in、is…)
-   - 修复：`SET PERSIST innodb_ft_enable_stopword = OFF` 后重建两个 FULLTEXT 索引；`docker-compose.dev.yml` 的 mysql command 加 `--innodb-ft-enable-stopword=OFF`；`sql/fulltext_index.sql` 已同步
+   - 修复：`SET PERSIST innodb_ft_enable_stopword = OFF` 后重建两个 FULLTEXT 索引；`docker-compose.yaml` 的 mysql command 加 `--innodb-ft-enable-stopword=OFF`；`sql/fulltext_index.sql` 已同步
    - 记忆点：**ngram + 默认停用词 = 部分英文短词永远进不了索引**。建 ngram 索引前先关停用词，已建过的必须重建才回填
 
 ### W5
 
-1. ⭐ **缓存不是越多越好，只缓存高频读取且失效边界清楚的数据**
+1.  **缓存不是越多越好，只缓存高频读取且失效边界清楚的数据**
    - 空间详情适合 Cache Aside；文档列表、评论和搜索结果更新入口多，当前阶段强行缓存会显著增加一致性复杂度
    - `/user/info` 直接返回 JWT 解析出的 `LoginUser`，本身不查数据库，再加 Redis 只会增加一次网络访问
    - 记忆点：**Redis 的价值来自解决具体问题，不来自覆盖了多少个模块**
 
-2. ⭐ **空值缓存必须使用明确哨兵，不能用空字符串**
+2.  **空值缓存必须使用明确哨兵，不能用空字符串**
    - 不存在的空间缓存为 `"NULL"`，TTL 60 秒；查询命中哨兵时直接返回“空间不存在”
    - 空字符串会与“未命中/空白值”判断混在一起，容易再次访问数据库
    - 记忆点：**空值缓存要能和普通值、缓存未命中明确区分，并使用短 TTL**
@@ -265,22 +171,18 @@
    - 更新、删除空间时先更新数据库，再删除对应缓存 Key
    - 记忆点：缓存一致性采用 Cache Aside：**读时回填，写时更新数据库后删缓存**
 
-4. ⭐ **限流的计数与首次过期设置必须保持原子性**
+4.  **限流的计数与首次过期设置必须保持原子性**
    - 使用 Redis + Lua 完成 `INCR` 与首次 `EXPIRE`，避免并发下出现只有计数没有 TTL 的永久 Key
    - 登录按 IP 固定窗口限制为 60 秒最多 10 次；Redis 故障时降级放行，避免缓存故障拖垮登录主业务
    - 记忆点：**需要多条 Redis 命令共同保证一个语义时，用 Lua 合成一次原子执行**
 
-5. ⭐ **最近浏览记录必须落在成功获取下载 URL 之后**
+5.  **最近浏览记录必须落在成功获取下载 URL 之后**
    - 权限、文档查询或 MinIO 生成预签名 URL 失败时不能记录浏览
    - `recordRecentDocument` 放在独立 Spring Bean 中并使用 `@Async`；启动类通过 `@EnableAsync` 开启代理
    - 记忆点：`@Async` 自调用不会生效，必须经过 Spring 代理；旁路记录失败不能影响下载主流程
 
-6. **ZSet 同时解决去重、排序和定长保留**
-   - Key：`teamdocs:user:recent:{userId}`，member 为 `documentId`，score 为浏览时间戳
-   - 重复浏览同一文档只更新 score；`ZREMRANGEBYRANK 0 -(MAX + 1)` 将集合裁剪为最近 20 条；Key 30 天无访问后过期
-   - 记忆点：ZSet 的 member 天然唯一，score 负责排序，不需要额外去重
 
-7. ⭐ **Redis 只保存最近文档 ID，卡片元数据仍从 MySQL 查询**
+7. **Redis 只保存最近文档 ID，卡片元数据仍从 MySQL 查询**
    - `ZREVRANGE WITHSCORES` 先取有序 ID 与浏览时间，再一次 JOIN `document + space + space_member` 查询当前仍可访问的文档
    - 自定义 XML SQL 必须显式过滤文档/空间软删除；多参数 Mapper 使用 `@Param`；空 ID 列表不能生成 `IN ()`
    - SQL 的 `IN` 不保证结果顺序，Service 需要按 Redis ID 顺序重新组装，并用 score 填充 `lastViewedAt`
@@ -331,40 +233,6 @@
 
 ---
 
-## W6 Docker Compose 与部署验证结果
-
-### 交付内容
-
-- Java 17 多阶段 Dockerfile：Maven 构建、JRE 运行，最终容器使用非 root 用户 `teamdocs`
-- Compose 编排 MySQL 8、Redis 7、MinIO、桶初始化任务和后端；基础服务健康后才启动后端
-- MySQL 初始化脚本按 `01`～`06` 固定顺序挂载，补齐 `initUser.sql` 分号和 `document_tag` 重建顺序
-- MySQL 启用 `ngram_token_size=2`，首次初始化实测创建 9 张表和 2 个 FULLTEXT 索引
-- MinIO 分离内部连接地址和客户端公开地址；固定 region 后，容器内可离线生成面向宿主机的预签名 URL
-- 排除未使用的 `UserDetailsServiceAutoConfiguration`，避免创建默认内存用户和在日志中打印随机密码
-- `.env` 用于原生启动，`.env.docker` 用于 Compose；README 命令显式指定 Docker env，避免误用远程 Redis/MinIO 配置
-- MySQL 与 Redis 不发布宿主机端口，只允许 Compose 内部网络访问；后端和 MinIO 使用可配置宿主机端口
-
-### 验证结果
-
-- Maven `package`：84 个主源码文件、5 个测试源码文件编译通过，`BUILD SUCCESS`
-- Redis 相关隔离单测：14 个通过，0 失败、0 错误
-- Docker 多阶段镜像构建成功；最终 ENTRYPOINT 实测为 `Path=java`、参数 `[-jar, app.jar]`
-- 容器状态：MySQL/Redis/MinIO healthy，`minio-init` ExitCode 0，Backend running 且 RestartCount 0
-- 固定的 MinIO 镜像实测包含 `/usr/bin/curl 8.7.1`，当前 HTTP healthcheck 可用；升级镜像时必须重新验证
-- Spring Security 默认内存用户日志已消失；重新注册和 JWT 登录仍通过
-- 核心 API 冒烟全部通过：注册登录、空间 Cache Aside、文档上传/列表、评论删除占位、私有下载、最近浏览
-- 下载文件哈希与上传源文件一致；Redis 最近浏览 ZSet 成员数 1，TTL 约 30 天
-- 操作日志表在冒烟流程后产生 4 条记录，证明 AOP 日志随容器化链路正常写入
-
-### 本次验收环境
-
-- 隔离 Compose project：`teamdocs-w6`
-- API：`http://localhost:18080`
-- MinIO API / Console：`http://localhost:19000` / `http://localhost:19001`
-- 验收容器当前保持运行；清理时使用 `docker compose --env-file .env.docker.example -p teamdocs-w6 -f docker-compose.dev.yml down -v`
-
----
-
 ## W2 AOP 权限切面改造过程
 
 ### 改造动机
@@ -404,192 +272,9 @@ Spring AOP 是高频面试点，且现成的 `@Around` 注解就能覆盖所有�
 
 选 B。原因：`updateMemberRole(Long spaceId, Long targetUserId, ...)` 有两个 Long，按位置取很容易拿错。注解让"哪个是 spaceId"变成显式声明，不依赖位置约定。`LoginUser` 类型全局唯一，按类型匹配就够了，不需要再加 `@LoginUser` 注解。
 
-### 实施步骤
-
-#### Step 1：加 AOP 依赖
-
-```xml
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-aop</artifactId>
-</dependency>
-```
-
-Spring Boot 默认不带 AOP starter。引入后会自动配置 AspectJ Auto Proxy（基于 CGLIB 给 Bean 生成代理对象，方法调用先经过代理，代理把切面织入进去）。
-
-#### Step 2：写两个注解
-
-```java
-// 标在方法上，声明该方法需要哪些角色
-@Target(ElementType.METHOD)
-@Retention(RetentionPolicy.RUNTIME)
-public @interface RequireSpaceRole {
-    SpaceRole[] value() default {SpaceRole.OWNER, SpaceRole.ADMIN, SpaceRole.MEMBER};
-}
-
-// 标在参数上，告诉切面"这个 Long 是 spaceId"
-@Target(ElementType.PARAMETER)
-@Retention(RetentionPolicy.RUNTIME)
-public @interface SpaceId {
-}
-```
-
-关键理解：
-- `@Retention(RUNTIME)` 必须有，否则编译后注解会被擦除，反射读不到
-- `@Target` 限制注解能贴在哪种语法位置上，错了编译都过不了
-- `value()` 是注解的特殊属性名，使用时可以省略：`@RequireSpaceRole(SpaceRole.OWNER)` 等价于 `@RequireSpaceRole(value = SpaceRole.OWNER)`
-
-#### Step 3：写切面 `SpaceRoleAspect`
-
-```java
-@Slf4j
-@Component   // 让 Spring 扫描成 Bean
-@Aspect      // 告诉 AOP 框架这是切面类
-public class SpaceRoleAspect {
-
-    @Autowired private SpaceMemberMapper spaceMemberMapper;
-    @Autowired private SpaceMapper spaceMapper;
-
-    @Around("@annotation(asia.creat.anno.RequireSpaceRole)")
-    public Object check(ProceedingJoinPoint pjp) throws Throwable {
-        // 1. 反射拿到方法上的 @RequireSpaceRole 注解
-        MethodSignature signature = (MethodSignature) pjp.getSignature();
-        Method method = signature.getMethod();
-        RequireSpaceRole ano = method.getAnnotation(RequireSpaceRole.class);
-        SpaceRole[] roles = anno.value();
-        if (roles == null || roles.length == 0) {
-            roles = new SpaceRole[]{SpaceRole.OWNER, SpaceRole.ADMIN};
-        }
-
-        // 2. 遍历参数找 spaceId 和 loginUser
-        Object[] args = pjp.getArgs();
-        Annotation[][] paramAnnos = method.getParameterAnnotations();
-        Long spaceId = null;
-        LoginUser loginUser = null;
-        for (int i = 0; i < args.length; i++) {
-            for (Annotation a : paramAnnos[i]) {
-                if (a instanceof asia.creat.anno.SpaceId) {
-                    spaceId = (Long) args[i];
-                }
-            }
-            if (args[i] instanceof LoginUser) {
-                loginUser = (LoginUser) args[i];
-            }
-        }
-        if (spaceId == null || loginUser == null) {
-            throw new IllegalStateException("未找到空间ID或登录用户");
-        }
-
-        // 3. 校验空间存在 + 用户在该空间的角色 ∈ roles
-        if (spaceMapper.selectById(spaceId) == null) {
-            throw new BusinessException("空间不存在");
-        }
-        long count = spaceMemberMapper.selectCount(
-            new LambdaQueryWrapper<SpaceMember>()
-                .eq(SpaceMember::getSpaceId, spaceId)
-                .eq(SpaceMember::getUserId, loginUser.getUserId())
-                .in(SpaceMember::getRole, Arrays.asList(roles))
-        );
-        if (count == 0) {
-            throw new BusinessException("您没有权限操作该空间");
-        }
-
-        // 4. 放行
-        return pjp.proceed();
-    }
-}
-```
-
-关键 API：
-- `ProceedingJoinPoint` 是 `@Around` 专属的连接点对象，比普通 `JoinPoint` 多一个 `proceed()` 方法用来放行目标方法
-- `MethodSignature.getMethod()` 拿到 `java.lang.reflect.Method`，可以反射读注解
-- `getParameterAnnotations()` 返回二维数组 `[参数索引][该参数上的注解]`，所以判断"第 i 个参数有没有 `@SpaceId`"要内层再循环一次
-- `pjp.proceed()` 是放行开关，不调用就等于拦截了请求
-
-异常类型选择：
-- `IllegalStateException`：程序员把注解用错（带了 `@RequireSpaceRole` 却忘了 `@SpaceId`），用户怎么操作都触发不了，让它直接 500，开发者立刻能发现
-- `BusinessException`：用户操作触发的业务错误（无权限、空间不存在），交给 `GlobalExceptionHandler` 兜成规范响应
-
-#### Step 4：改造 Service 方法
-
-```java
-@Override
-@RequireSpaceRole(SpaceRole.OWNER)
-public void deleteSpace(@SpaceId Long spaceId, LoginUser loginUser) {
-    spaceMapper.deleteById(spaceId);   // 一行业务
-}
-
-@Override
-@RequireSpaceRole({SpaceRole.OWNER, SpaceRole.ADMIN})
-public void updateSpace(@SpaceId Long spaceId, UpdateSpaceDTO dto, LoginUser loginUser) {
-    Space space = checkSpace(spaceId);  // 这里还需要拿对象，所以保留
-    space.setName(dto.getName());
-    space.setDescription(dto.getDescription());
-    spaceMapper.updateById(space);
-}
-```
-
-不是所有方法都适合切面：
-
-| 方法                             | 是否注解化 | 原因                                                              |
-|--------------------------------|-------|-----------------------------------------------------------------|
-| `deleteSpace`                  | ✅     | 纯角色校验                                                           |
-| `updateSpace`                  | ✅     | 纯角色校验                                                           |
-| `addMember`                    | ✅     | 纯角色校验                                                           |
-| `updateMemberRole`             | ✅     | 纯角色校验                                                           |
-| `removeMember`                 | ✅（混合） | 注解限制调用者为 OWNER/ADMIN，Service 再判断目标角色，阻止移除 OWNER 和 ADMIN 踢 ADMIN |
-| `getSpaceById` / `listMembers` | ❌     | 当前保留显式成员校验；直接改用切面不会减少查询，复用切面查出的 `Space` 还需要扩展上下文                |
-
-**原则**：注解负责"调用者角色是否允许"这种粗粒度准入；涉及目标资源状态、目标成员角色等关系型规则时，继续在 Service 中做细粒度判断。复杂权限不必在注解和手写之间二选一，可以组合使用。
-
-注解只替换了 `checkRole` 调用，原 `checkRole` 私有方法删除；`checkSpace` / `checkIsMember` 在非注解方法里还在用，保留。
-
-### 改造前后对比
-
-改造前 `deleteSpace`：
-
-```java
-public void deleteSpace(Long spaceId, LoginUser loginUser) {
-    checkSpace(spaceId);
-    checkRole(spaceId, loginUser, SpaceRole.OWNER);
-    spaceMapper.deleteById(spaceId);
-}
-```
-
-改造后：
-
-```java
-@RequireSpaceRole(SpaceRole.OWNER)
-public void deleteSpace(@SpaceId Long spaceId, LoginUser loginUser) {
-    spaceMapper.deleteById(spaceId);
-}
-```
-
-收益：
-- 业务方法只剩业务逻辑，权限规则上移到注解
-- 改权限规则只改注解，不动方法体
-- 看 Service 类一眼能看出每个方法的权限要求
-
-代价：
-- 调试时栈帧多一层切面，新人需要理解 AOP 才能看懂校验在哪
-- 切面里有反射和泛型转型（`(Long) args[i]`），运行时才报错；注解贴错位置编译期发现不了
-
 ### 过程中踩的坑
 
-**1. `@RequireSpaceRole` 的 `@Target` 写成 `PARAMETER`**
 
-复制粘贴 `@SpaceId` 时连 `@Target(ElementType.PARAMETER)` 一起复制了，结果注解只能贴在参数上，贴方法上编译报错。**记忆点**：每写一个注解，先问自己"它该出现在哪种语法位置"，对应改 `@Target`。
-
-**2. 切面里取出注解的 roles 但没用，校验时仍写死 `OWNER + ADMIN`**
-
-```java
-SpaceRole[] roles = requireSpaceRole.value();   // 取了
-// ...
-SpaceRole[] rolesToCheck = new SpaceRole[]{SpaceRole.OWNER, SpaceRole.ADMIN}; // 又写死
-.in(SpaceMember::getRole, Arrays.asList(rolesToCheck));   // 用的是写死的
-```
-
-**后果**：`@RequireSpaceRole(SpaceRole.OWNER)` 实际允许 ADMIN 通过。注解形同虚设，所有方法权限都变成"OWNER 和 ADMIN 都能过"。**记忆点**：从注解读出来的值必须用上，否则注解参数就是装饰品。这种 bug 编译不报错、单元测试要专门构造 ADMIN 用例才发现，最坑。
 
 **3. 方法上加了 `@RequireSpaceRole` 但参数上忘加 `@SpaceId`**
 

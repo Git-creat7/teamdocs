@@ -62,6 +62,7 @@ pnpm-debug.log*
 # --- Cache ---
 .cache/
 
-# Repository-local secrets
-/.env
-/.env.docker
+# 环境密钥文件，包括原生运行后端时的本地配置
+.env
+.env.*
+!.env.example
