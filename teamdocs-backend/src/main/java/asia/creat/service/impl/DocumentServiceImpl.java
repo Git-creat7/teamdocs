@@ -13,6 +13,7 @@ import asia.creat.dto.RenameDocumentDTO;
 import asia.creat.entity.Document;
 import asia.creat.entity.DocumentTag;
 import asia.creat.entity.Folder;
+import asia.creat.entity.ParseStatus;
 import asia.creat.entity.SpaceMember;
 import asia.creat.entity.Tag;
 import asia.creat.helper.ResourcePermissionHelper;
@@ -22,6 +23,7 @@ import asia.creat.mapper.FolderMapper;
 import asia.creat.mapper.TagMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
+import asia.creat.service.DocumentContentService;
 import asia.creat.service.DocumentService;
 import asia.creat.service.FileStorageService;
 import asia.creat.service.RecentDocumentService;
@@ -56,6 +58,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final RecentDocumentService recentDocumentService;
     private final DocumentTagMapper documentTagMapper;
     private final TagMapper tagMapper;
+    private final DocumentContentService documentContentService;
 
     @Override
     @OperationLog(
@@ -92,6 +95,8 @@ public class DocumentServiceImpl implements DocumentService {
         doc.setFileSize(file.getSize());
         doc.setFileType(file.getContentType());
         doc.setUploadBy(loginUser.getUserId());
+        doc.setParseStatus(ParseStatus.PENDING);
+        doc.setChunkCount(0);
         try {
             int inserted = documentMapper.insert(doc);
             if (inserted != 1) {
@@ -318,6 +323,8 @@ public class DocumentServiceImpl implements DocumentService {
         LambdaQueryWrapper<DocumentTag> relationQuery = new LambdaQueryWrapper<>();
         relationQuery.eq(DocumentTag::getDocumentId, documentId);
         documentTagMapper.delete(relationQuery);
+
+        documentContentService.purgeByDocumentId(documentId);
 
         boolean flag = documentMapper.purgeDeleteById(documentId);
 

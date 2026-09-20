@@ -26,6 +26,10 @@
                description,
                upload_by,
                deleted,
+               parse_status,
+               chunk_count,
+               parse_error,
+               parsed_at,
                created_at,
                updated_at
         FROM document
@@ -45,6 +49,10 @@
                description,
                upload_by,
                deleted,
+               parse_status,
+               chunk_count,
+               parse_error,
+               parsed_at,
                created_at,
                updated_at
         FROM document
@@ -63,6 +71,10 @@
                d.description,
                d.upload_by,
                d.deleted,
+               d.parse_status,
+               d.chunk_count,
+               d.parse_error,
+               d.parsed_at,
                d.created_at,
                d.updated_at
         FROM document d
@@ -83,6 +95,10 @@
                         d.description,
                         d.upload_by,
                         d.deleted,
+                        d.parse_status,
+                        d.chunk_count,
+                        d.parse_error,
+                        d.parsed_at,
                         d.created_at,
                         d.updated_at
         FROM document d

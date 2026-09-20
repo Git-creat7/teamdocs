@@ -26,6 +26,7 @@ services:
       - ./sql/initComment.sql:/docker-entrypoint-initdb.d/04-comment.sql:ro
       - ./sql/initOperationLog.sql:/docker-entrypoint-initdb.d/05-operation-log.sql:ro
       - ./sql/fulltext_index.sql:/docker-entrypoint-initdb.d/06-fulltext.sql:ro
+      - ./sql/document_content.sql:/docker-entrypoint-initdb.d/07-document-content.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
       interval: 10s
