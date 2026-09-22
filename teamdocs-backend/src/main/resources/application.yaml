@@ -64,3 +64,13 @@ management:
       access: read-only
       show-details: never
       show-components: never
+
+# Agent
+teamdocs:
+  agent:
+    enabled: ${AGENT_ENABLED:false}
+    base-url: ${AGENT_BASE_URL:}
+    api-key: ${AGENT_API_KEY:}
+    model-name: ${AGENT_MODEL_NAME:}
+    timeout-seconds: ${AGENT_TIMEOUT_SECONDS:60}
+

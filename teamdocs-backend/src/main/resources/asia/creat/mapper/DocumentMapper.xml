@@ -30,6 +30,8 @@
                chunk_count,
                parse_error,
                parsed_at,
+               parse_version,
+               parse_started_at,
                created_at,
                updated_at
         FROM document
@@ -53,6 +55,8 @@
                chunk_count,
                parse_error,
                parsed_at,
+               parse_version,
+               parse_started_at,
                created_at,
                updated_at
         FROM document
@@ -75,6 +79,8 @@
                d.chunk_count,
                d.parse_error,
                d.parsed_at,
+               d.parse_version,
+               d.parse_started_at,
                d.created_at,
                d.updated_at
         FROM document d
@@ -99,6 +105,8 @@
                         d.chunk_count,
                         d.parse_error,
                         d.parsed_at,
+                        d.parse_version,
+                        d.parse_started_at,
                         d.created_at,
                         d.updated_at
         FROM document d

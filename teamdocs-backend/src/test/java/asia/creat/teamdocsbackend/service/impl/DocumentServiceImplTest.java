@@ -124,6 +124,7 @@ class DocumentServiceImplTest {
         assertEquals(USER_ID, saved.getUploadBy());
         assertEquals(ParseStatus.PENDING, saved.getParseStatus());
         assertEquals(0, saved.getChunkCount());
+        assertEquals(0, saved.getParseVersion());
         assertEquals(88L, documentId);
     }
 

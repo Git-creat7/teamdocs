@@ -97,6 +97,7 @@ public class DocumentServiceImpl implements DocumentService {
         doc.setUploadBy(loginUser.getUserId());
         doc.setParseStatus(ParseStatus.PENDING);
         doc.setChunkCount(0);
+        doc.setParseVersion(0);
         try {
             int inserted = documentMapper.insert(doc);
             if (inserted != 1) {
