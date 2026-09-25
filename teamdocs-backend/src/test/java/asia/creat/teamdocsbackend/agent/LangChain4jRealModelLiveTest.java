@@ -1,23 +1,28 @@
 package asia.creat.teamdocsbackend.agent;
 
+import asia.creat.config.AgentModelConfiguration;
+import asia.creat.config.AgentProperties;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
-import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.output.Response;
 import dev.langchain4j.model.output.TokenUsage;
 import io.github.cdimascio.dotenv.Dotenv;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import java.io.File;
-import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * 真实模型端点在线连通性、Tool Calling 与 TokenUsage 验证测试
@@ -28,8 +33,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * - AGENT_API_KEY
  * - AGENT_MODEL_NAME
  *
- * 若未配置有效 API KEY 则自动跳过，不阻断常规离线构建。
+ * 使用 -Dteamdocs.live-model=true 显式启用，常规 CI 不调用外部模型。
  */
+@EnabledIfSystemProperty(named = "teamdocs.live-model", matches = "true")
 public class LangChain4jRealModelLiveTest {
 
     private static String apiKey;
@@ -52,43 +58,30 @@ public class LangChain4jRealModelLiveTest {
         modelName = dotenv.get("AGENT_MODEL_NAME", System.getenv("AGENT_MODEL_NAME"));
         String enabledStr = dotenv.get("AGENT_ENABLED", System.getenv("AGENT_ENABLED"));
         enabled = Boolean.parseBoolean(enabledStr);
+        assumeTrue(enabled && apiKey != null && !apiKey.isBlank()
+                && modelName != null && !modelName.isBlank(), "未配置在线模型测试所需参数");
     }
 
-    private OpenAiChatModel buildModel(String customBaseUrl) {
-        OpenAiChatModel.OpenAiChatModelBuilder builder = OpenAiChatModel.builder()
-                .apiKey(apiKey)
-                .modelName(modelName != null && !modelName.isBlank() ? modelName : "gpt-3.5-turbo")
-                .timeout(Duration.ofSeconds(60))
-                .maxRetries(0)
-                .logRequests(false)
-                .logResponses(false);
-
-        if (customBaseUrl != null && !customBaseUrl.isBlank()) {
-            builder.baseUrl(customBaseUrl);
-        }
-        return builder.build();
+    private ChatLanguageModel buildModel(String customBaseUrl) {
+        AgentProperties properties = new AgentProperties();
+        properties.setApiKey(apiKey);
+        properties.setModelName(modelName);
+        properties.setBaseUrl(customBaseUrl);
+        return new AgentModelConfiguration(properties).chatLanguageModel();
     }
 
     @Test
     @DisplayName("测试真实模型基础对话与 TokenUsage 返回")
     void testRealModelTextGeneration() {
-        if (!enabled || apiKey == null || apiKey.isBlank()) {
-            System.out.println("[SKIP] 未配置有效 AGENT_API_KEY 或 AGENT_ENABLED != true，跳过真实模型在线测试");
-            return;
-        }
-
-        // 处理 baseUrl 路径兼容（部分网关需要 /v1，部分直接提供）
+        // 使用与实际应用相同的地址，不在测试中补写路径。
         String targetUrl = baseUrl;
-        if (targetUrl != null && !targetUrl.isBlank() && !targetUrl.contains("/v1")) {
-            targetUrl = targetUrl.endsWith("/") ? targetUrl + "v1" : targetUrl + "/v1";
-        }
 
         System.out.println("====== [Real Model Test] 开始测试基础文本生成 ======");
         System.out.println("目标模型: " + modelName);
         System.out.println("目标 BaseURL: " + targetUrl);
 
         long start = System.currentTimeMillis();
-        OpenAiChatModel model = buildModel(targetUrl);
+        ChatLanguageModel model = buildModel(targetUrl);
 
         Response<AiMessage> response = model.generate(List.of(UserMessage.from("你好！请严格只输出'收到'两个字。")));
         long elapsed = System.currentTimeMillis() - start;
@@ -100,6 +93,7 @@ public class LangChain4jRealModelLiveTest {
         System.out.println("耗时: " + elapsed + " ms");
 
         TokenUsage usage = response.tokenUsage();
+        assertNotNull(usage, "模型必须返回 TokenUsage");
         if (usage != null) {
             System.out.println("Token 用量: input=" + usage.inputTokenCount()
                     + ", output=" + usage.outputTokenCount()
@@ -114,21 +108,13 @@ public class LangChain4jRealModelLiveTest {
 
     @Test
     @DisplayName("测试真实模型对 OpenAI-compatible Tool Calling 的原生支持")
-    void testRealModelToolCalling() {
-        if (!enabled || apiKey == null || apiKey.isBlank()) {
-            System.out.println("[SKIP] 未配置有效 AGENT_API_KEY，跳过真实模型工具调用测试");
-            return;
-        }
-
+    void testRealModelToolCalling() throws Exception {
         String targetUrl = baseUrl;
-        if (targetUrl != null && !targetUrl.isBlank() && !targetUrl.contains("/v1")) {
-            targetUrl = targetUrl.endsWith("/") ? targetUrl + "v1" : targetUrl + "/v1";
-        }
 
         System.out.println("====== [Real Model Test] 开始测试原生 Tool Calling 协议兼容性 ======");
         System.out.println("目标模型: " + modelName);
 
-        OpenAiChatModel model = buildModel(targetUrl);
+        ChatLanguageModel model = buildModel(targetUrl);
 
         // 构造一个低层工具定义：search_documents
         ToolSpecification searchTool = ToolSpecification.builder()
@@ -152,6 +138,7 @@ public class LangChain4jRealModelLiveTest {
 
         System.out.println("Tool Calling 耗时: " + elapsed + " ms");
         System.out.println("是否有工具调用请求: " + aiMessage.hasToolExecutionRequests());
+        assertTrue(aiMessage.hasToolExecutionRequests(), "应返回原生工具调用，不能以普通文本代替");
 
         if (aiMessage.hasToolExecutionRequests()) {
             List<ToolExecutionRequest> requests = aiMessage.toolExecutionRequests();
@@ -159,13 +146,18 @@ public class LangChain4jRealModelLiveTest {
                 System.out.println("成功触发工具调用: ID=" + req.id() + ", Name=" + req.name() + ", Args=" + req.arguments());
                 assertEquals("search_documents", req.name());
                 assertNotNull(req.arguments());
-                assertTrue(req.arguments().contains("数据库") || req.arguments().contains("备份"));
+                JsonNode arguments = new ObjectMapper().readTree(req.arguments());
+                assertTrue(arguments.path("keyword").isTextual());
+                String keyword = arguments.path("keyword").asText();
+                assertTrue(keyword.contains("数据库") || keyword.contains("备份"));
             }
         } else {
             System.out.println("模型直接输出了文本（未触发工具调用）: " + aiMessage.text());
         }
 
         TokenUsage usage = response.tokenUsage();
+        assertNotNull(usage, "工具调用必须返回 TokenUsage");
+        assertTrue(usage.totalTokenCount() > 0);
         if (usage != null) {
             System.out.println("Tool Calling Token 用量: input=" + usage.inputTokenCount()
                     + ", output=" + usage.outputTokenCount()

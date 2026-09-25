@@ -2,6 +2,8 @@
 
 TeamDocs 只使用根目录的 `docker-compose.yaml`。GitHub Actions 负责测试和发布镜像，服务器负责拉取并启动；不在服务器构建源码，不需要部署脚本。Nginx 已包含在前端镜像中，用于托管页面和转发 `/api`。
 
+交付以全新服务器和空 MySQL 数据目录为准，数据库结构统一维护在 `sql/` 初始化脚本中，首次启动时自动创建。
+
 ## 首次发布镜像
 
 将代码推送到 `main`，或在 `main` 上手动运行仓库的 **CI** workflow。Pull Request 只做检查，不发布镜像。

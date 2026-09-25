@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
+import java.net.URI;
 
 /**
  * AI 模型接入配置类（P0 阶段）
@@ -42,7 +43,13 @@ public class AgentModelConfiguration {
                 .logResponses(false); // 关闭响应体日志
 
         if (StringUtils.hasText(properties.getBaseUrl())) {
-            builder.baseUrl(properties.getBaseUrl());
+            String baseUrl = properties.getBaseUrl().trim();
+            String path = URI.create(baseUrl).getPath();
+            // 只为站点根地址补标准路径，显式配置的网关路径保持原样。
+            if (path == null || path.isEmpty() || "/".equals(path)) {
+                baseUrl = baseUrl.replaceAll("/+$", "") + "/v1";
+            }
+            builder.baseUrl(baseUrl);
         }
 
         log.info("成功创建通用 ChatLanguageModel 实例: modelName={}", properties.getModelName());
