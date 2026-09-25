@@ -28,7 +28,7 @@ CREATE TABLE document (
     description  VARCHAR(512) DEFAULT NULL COMMENT '文档描述',
     upload_by        BIGINT       NOT NULL COMMENT '上传者ID',
     deleted          TINYINT      NOT NULL DEFAULT 0 COMMENT '软删除，0未删除，1已删除',
-    parse_status     VARCHAR(16)  NOT NULL DEFAULT 'PENDING' COMMENT '解析状态: PENDING, PARSING, READY, FAILED',
+    parse_status     VARCHAR(16)  NOT NULL DEFAULT 'PENDING' COMMENT '解析状态: PENDING, PARSING, READY, FAILED, SKIPPED',
     chunk_count      INT          NOT NULL DEFAULT 0 COMMENT '生成的Chunk数量',
     parse_error      VARCHAR(512) DEFAULT NULL COMMENT '解析失败异常信息',
     parsed_at        DATETIME     DEFAULT NULL COMMENT '完成解析时间',
@@ -38,7 +38,8 @@ CREATE TABLE document (
     updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_space_folder_updated (space_id, folder_id, deleted, updated_at, id),
-    KEY idx_space_deleted_updated (space_id, deleted, updated_at, id)
+    KEY idx_space_deleted_updated (space_id, deleted, updated_at, id),
+    KEY idx_parse_status (parse_status, deleted, id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '文档表';
 
 -- 标签表

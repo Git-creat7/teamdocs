@@ -6,6 +6,7 @@ import asia.creat.dto.PageQuery;
 import asia.creat.dto.RenameDocumentDTO;
 import asia.creat.dto.RestoreDocumentDTO;
 import asia.creat.security.LoginUser;
+import asia.creat.service.DocumentParseService;
 import asia.creat.service.DocumentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -18,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 public class DocumentController {
     private final DocumentService documentService;
+    private final DocumentParseService documentParseService;
 
     @PostMapping("/upload")
     public Result uploadDocument(@PathVariable Long spaceId,
@@ -67,6 +69,20 @@ public class DocumentController {
                                     @PathVariable Long documentId,
                                     @AuthenticationPrincipal LoginUser loginUser) {
         return Result.success(documentService.getDocumentDetail(spaceId, documentId, loginUser));
+    }
+
+    @GetMapping("/{documentId}/parse-status")
+    public Result getParseStatus(@PathVariable Long spaceId,
+                                 @PathVariable Long documentId,
+                                 @AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(documentParseService.getStatus(spaceId, documentId, loginUser));
+    }
+
+    @PostMapping("/{documentId}/reparse")
+    public Result reparseDocument(@PathVariable Long spaceId,
+                                  @PathVariable Long documentId,
+                                  @AuthenticationPrincipal LoginUser loginUser) {
+        return Result.success(documentParseService.reparse(spaceId, documentId, loginUser));
     }
 
     @GetMapping("/{documentId}/download")

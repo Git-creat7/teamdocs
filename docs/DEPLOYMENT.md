@@ -76,6 +76,8 @@ curl --fail http://127.0.0.1:15173/api/actuator/health
 
 ## 验收
 
+后台解析支持 UTF-8 TXT、Markdown、文本型 PDF 和 DOCX，默认文件上限 10MB、正文上限 200,000 字符。扫描件、加密文件及不支持的格式会显示明确原因，原文件仍可下载，预览沿用原有支持范围。可通过 `.env` 中的 `PARSE_ENABLED=false` 停止后台扫描；解析大小、字符数、超时和重试间隔分别由 `PARSE_MAX_BYTES`、`PARSE_MAX_CHARS`、`PARSE_TIMEOUT_SECONDS`、`PARSE_RETRY_DELAY_SECONDS` 设置。
+
 启动后先确认 `docker compose ps -a` 无失败服务，再从实际浏览器来源验证登录、空间列表、文件上传、预览和下载。仅检查 Web 的 `/healthz` 无法证明后端代理或外部文件地址可用；应同时检查上面的 `/api/actuator/health` 和文件链路。
 
 本机原生开发不使用这份 Compose。

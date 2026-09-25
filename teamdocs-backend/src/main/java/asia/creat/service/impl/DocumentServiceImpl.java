@@ -158,6 +158,7 @@ public class DocumentServiceImpl implements DocumentService {
 
         documentMapper.deleteById(documentId);
 
+
         log.debug("用户 {} 删除了空间 {} 的文件 {}", loginUser.getUserId(), spaceId, doc.getName());
     }
 
@@ -229,7 +230,6 @@ public class DocumentServiceImpl implements DocumentService {
                 );
         recentDocumentService.recordRecentDocument(loginUser.getUserId(), documentId);
         return url;
-
     }
 
     @Override
@@ -258,7 +258,6 @@ public class DocumentServiceImpl implements DocumentService {
     public PageResult<Document> listTrashedDocuments(@SpaceId Long spaceId, PageQuery pageQuery, LoginUser loginUser) {
 
         return PageResult.from(documentMapper.selectTrashedDocuments(pageQuery.toPage(), spaceId));
-
     }
 
     @Override
@@ -324,6 +323,12 @@ public class DocumentServiceImpl implements DocumentService {
         LambdaQueryWrapper<DocumentTag> relationQuery = new LambdaQueryWrapper<>();
         relationQuery.eq(DocumentTag::getDocumentId, documentId);
         documentTagMapper.delete(relationQuery);
+
+        // 先锁文档行，避免解析任务在删分块之后又写回孤立切片
+        Document locked = documentMapper.lockById(documentId);
+        if (locked == null || !Integer.valueOf(1).equals(locked.getDeleted())) {
+            throw new BusinessException("文件不存在");
+        }
 
         documentContentService.purgeByDocumentId(documentId);
 

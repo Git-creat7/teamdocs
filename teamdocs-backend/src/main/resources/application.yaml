@@ -73,4 +73,14 @@ teamdocs:
     api-key: ${AGENT_API_KEY:}
     model-name: ${AGENT_MODEL_NAME:}
     timeout-seconds: ${AGENT_TIMEOUT_SECONDS:60}
-
+  parse:
+    enabled: ${PARSE_ENABLED:true}
+    max-bytes: ${PARSE_MAX_BYTES:10485760}
+    max-chars: ${PARSE_MAX_CHARS:200000}
+    timeout-seconds: ${PARSE_TIMEOUT_SECONDS:120}
+    retry-delay-seconds: ${PARSE_RETRY_DELAY_SECONDS:5}
+    chunk-size: 1000
+    chunk-overlap: 120
+    batch-size: 5
+    pool-size: 2
+    scan-delay-ms: 5000

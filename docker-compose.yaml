@@ -52,7 +52,7 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:RELEASE.2023-09-20T22-40-07Z
+    image: minio/minio:RELEASE.2023-09-20T22-49-55Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-teamdocsadmin}
@@ -125,6 +125,11 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
       MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-teamdocs-public}
       MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-teamdocs-private}
+      PARSE_ENABLED: ${PARSE_ENABLED:-true}
+      PARSE_MAX_BYTES: ${PARSE_MAX_BYTES:-10485760}
+      PARSE_MAX_CHARS: ${PARSE_MAX_CHARS:-200000}
+      PARSE_TIMEOUT_SECONDS: ${PARSE_TIMEOUT_SECONDS:-120}
+      PARSE_RETRY_DELAY_SECONDS: ${PARSE_RETRY_DELAY_SECONDS:-5}
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
     healthcheck:

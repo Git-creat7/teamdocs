@@ -19,6 +19,10 @@ public class DocumentContent {
     private Integer chunkIndex;
     private String content;
     private Integer tokenCount;
+    // PDF 从 1 开始；TXT/MD/DOCX 为空。偏移相对该段提取文本，不是原文件字节
+    private Integer pageNumber;
+    private Integer charStart;
+    private Integer charEnd;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

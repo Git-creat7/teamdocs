@@ -2,6 +2,7 @@ package asia.creat.teamdocsbackend.controller;
 
 import asia.creat.common.exception.GlobalExceptionHandler;
 import asia.creat.controller.DocumentController;
+import asia.creat.service.DocumentParseService;
 import asia.creat.service.DocumentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,7 @@ class PaginationValidationWebTest {
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new DocumentController(documentService))
+                .standaloneSetup(new DocumentController(documentService, mock(DocumentParseService.class)))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();

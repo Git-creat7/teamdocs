@@ -155,4 +155,28 @@
         AND space_id = #{spaceId}
     </select>
 
+    <select id="lockById" resultType="asia.creat.entity.Document">
+        SELECT id,
+               space_id,
+               folder_id,
+               name,
+               file_type,
+               file_size,
+               file_path,
+               description,
+               upload_by,
+               deleted,
+               parse_status,
+               chunk_count,
+               parse_error,
+               parsed_at,
+               parse_version,
+               parse_started_at,
+               created_at,
+               updated_at
+        FROM document
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
 </mapper>

@@ -23,6 +23,7 @@ public class DocumentDetailVO {
     private Integer chunkCount;
     private String parseError;
     private LocalDateTime parsedAt;
+    private Integer parseVersion;
     private List<Tag> tags;
     private List<FolderPathItemVO> folderPath;
 }

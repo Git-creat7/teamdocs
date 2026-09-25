@@ -15,6 +15,8 @@
             <span>{{ formatBytes(doc.fileSize) }}</span>
             <span class="meta-dot">·</span>
             <span>更新于 {{ formatDateTime(doc.updatedAt || doc.createdAt) }}</span>
+            <span class="meta-dot">·</span>
+            <span :title="parseErrorTitle">{{ parseStatusLabel }}</span>
             <template v-if="tags.length">
               <span class="meta-dot">·</span>
               <span
@@ -44,6 +46,9 @@
           <el-button size="small" class="doc-action-btn" @click="$emit('move', doc)">
             <el-icon><FolderInput /></el-icon>
             移动到
+          </el-button>
+          <el-button v-if="canReparse" size="small" class="doc-action-btn" @click="reparse">
+            重新解析
           </el-button>
           <el-button size="small" type="danger" plain class="doc-action-btn" @click="$emit('delete', doc)">
             <el-icon><Trash2 /></el-icon>
@@ -184,6 +189,7 @@ import { View, FullScreen } from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
 import FileIcon from '@/components/FileIcon.vue'
 import { listCommentsApi, addCommentApi, deleteCommentApi } from '@/api/comment'
+import { reparseDocumentApi } from '@/api/document'
 import { formatBytes, formatDateTime, getFileExt, getFileTypeColor } from '@/utils/format'
 import { tagStyle } from '@/utils/tagColors'
 
@@ -200,6 +206,35 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'download', 'rename', 'tags', 'move', 'delete', 'update:activeTab'])
+
+const localParseStatus = ref(null)
+watch(() => [props.spaceId, props.doc?.id, props.doc?.parseStatus], () => {
+  localParseStatus.value = null
+})
+const parseStatus = computed(() => localParseStatus.value || props.doc?.parseStatus || 'PENDING')
+const parseStatusLabel = computed(() => {
+  if (parseStatus.value === 'READY') return `已解析 ${props.doc?.chunkCount || 0} 段`
+  if (parseStatus.value === 'PARSING') return '解析中'
+  if (parseStatus.value === 'FAILED') return '解析失败'
+  if (parseStatus.value === 'SKIPPED') return '未解析'
+  return '等待解析'
+})
+const parseErrorTitle = computed(() => {
+  if (parseStatus.value === 'FAILED' || parseStatus.value === 'SKIPPED') {
+    return props.doc?.parseError || ''
+  }
+  return ''
+})
+const canReparse = computed(() => parseStatus.value === 'FAILED' || parseStatus.value === 'SKIPPED')
+
+async function reparse() {
+  const spaceId = props.spaceId
+  const documentId = props.doc.id
+  await reparseDocumentApi(spaceId, documentId)
+  if (props.spaceId !== spaceId || props.doc?.id !== documentId) return
+  localParseStatus.value = 'PENDING'
+  ElMessage.success('已重新加入解析队列')
+}
 
 const router = useRouter()
 const PAGE_SIZE = 100

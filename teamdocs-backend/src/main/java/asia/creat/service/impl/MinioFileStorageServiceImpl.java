@@ -4,6 +4,7 @@ import asia.creat.common.BucketType;
 import asia.creat.common.exception.BusinessException;
 import asia.creat.config.MinioProperties;
 import asia.creat.service.FileStorageService;
+import io.minio.GetObjectArgs;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -14,6 +15,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -94,6 +96,21 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
         } catch (Exception e) {
             log.error("生成访问URL失败: objectKey={}, error={}", objectKey, e.getMessage());
             throw new BusinessException("生成访问URL失败", e);
+        }
+    }
+
+    @Override
+    public InputStream open(BucketType bucket, String objectKey) {
+        try {
+            return minioClient.getObject(
+                    GetObjectArgs.builder()
+                            .bucket(resolveBucketName(bucket))
+                            .object(objectKey)
+                            .build()
+            );
+        } catch (Exception e) {
+            log.error("读取文件失败: objectKey={}, error={}", objectKey, e.getMessage());
+            throw new BusinessException("文件读取失败", e);
         }
     }
 

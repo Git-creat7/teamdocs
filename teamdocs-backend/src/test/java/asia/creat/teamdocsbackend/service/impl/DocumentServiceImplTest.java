@@ -73,6 +73,7 @@ class DocumentServiceImplTest {
     @Mock
     private asia.creat.service.DocumentContentService documentContentService;
 
+
     private DocumentServiceImpl service;
 
     @BeforeEach
@@ -366,14 +367,17 @@ class DocumentServiceImplTest {
     void purgeShouldDeleteObjectAndRelationsBeforeMetadata() {
         Document document = document(10L, SPACE_ID, USER_ID, 0L);
         document.setFilePath("space/1/notes.txt");
+        document.setDeleted(1);
         when(documentMapper.selectDeletedDocument(10L)).thenReturn(document);
+        when(documentMapper.lockById(10L)).thenReturn(document);
         when(documentMapper.purgeDeleteById(10L)).thenReturn(true);
 
         service.purgeDocument(SPACE_ID, 10L, LOGIN_USER);
 
-        var inOrder = inOrder(fileStorageService, documentTagMapper, documentContentService, documentMapper);
+        var inOrder = inOrder(fileStorageService, documentTagMapper, documentMapper, documentContentService);
         inOrder.verify(fileStorageService).delete(BucketType.PRIVATE, "space/1/notes.txt");
         inOrder.verify(documentTagMapper).delete(any());
+        inOrder.verify(documentMapper).lockById(10L);
         inOrder.verify(documentContentService).purgeByDocumentId(10L);
         inOrder.verify(documentMapper).purgeDeleteById(10L);
     }

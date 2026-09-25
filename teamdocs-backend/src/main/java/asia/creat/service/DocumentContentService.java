@@ -1,6 +1,7 @@
 package asia.creat.service;
 
 import asia.creat.entity.DocumentContent;
+import asia.creat.entity.ParseStatus;
 
 import java.util.List;
 
@@ -28,7 +29,17 @@ public interface DocumentContentService {
     void resetParseStatus(Long documentId);
 
     /**
-     * 按切片序号升序获取指定文档的所有切片内容
+     * 任务仍是当前 PARSING 版本时替换分块并标为 READY。条件不匹配则不改分块。
+     */
+    boolean publishIfParsing(Long documentId, Long spaceId, Integer parseVersion, List<DocumentContent> chunks);
+
+    /**
+     * 任务仍是当前 PARSING 版本时标为 FAILED 或 SKIPPED。未删除文档会清掉旧分块。
+     */
+    boolean discardIfParsing(Long documentId, Long spaceId, Integer parseVersion, ParseStatus status, String reason);
+
+    /**
+     * 只返回未删除且 READY 文档的切片
      */
     List<DocumentContent> getChunksByDocumentId(Long documentId);
 
