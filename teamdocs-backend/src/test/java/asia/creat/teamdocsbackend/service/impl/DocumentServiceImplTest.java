@@ -23,6 +23,7 @@ import asia.creat.vo.DocumentPreviewVO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import asia.creat.service.DocumentIndexSync;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -74,6 +75,9 @@ class DocumentServiceImplTest {
     private asia.creat.service.DocumentContentService documentContentService;
 
 
+    @Mock
+    private DocumentIndexSync documentIndexSync;
+
     private DocumentServiceImpl service;
 
     @BeforeEach
@@ -86,7 +90,8 @@ class DocumentServiceImplTest {
                 recentDocumentService,
                 documentTagMapper,
                 tagMapper,
-                documentContentService
+                documentContentService,
+                documentIndexSync
         );
         SpaceMember member = new SpaceMember();
         member.setRole(SpaceRole.MEMBER);

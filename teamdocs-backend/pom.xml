@@ -28,6 +28,7 @@
     </scm>
     <properties>
         <java.version>17</java.version>
+        <elasticsearch.version>8.15.3</elasticsearch.version>
         <langchain4j.version>0.36.2</langchain4j.version>
         <tika.version>2.9.2</tika.version>
         <pdfbox.version>2.0.31</pdfbox.version>
@@ -157,6 +158,17 @@
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-all</artifactId>
             <version>5.8.40</version>
+        </dependency>
+
+        <dependency>
+            <groupId>co.elastic.clients</groupId>
+            <artifactId>elasticsearch-java</artifactId>
+            <version>${elasticsearch.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.elasticsearch.client</groupId>
+            <artifactId>elasticsearch-rest-client</artifactId>
+            <version>${elasticsearch.version}</version>
         </dependency>
 
         <!-- LangChain4j 候选接入依赖（P0 兼容性验证阶段：仅引入低层模型与工具消息核心 API） -->

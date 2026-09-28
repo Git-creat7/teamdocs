@@ -25,6 +25,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import asia.creat.service.DocumentIndexSync;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -62,6 +63,9 @@ class DocumentParseServiceImplTest {
     }
 
     private ParseProperties properties;
+    @Mock
+    private DocumentIndexSync documentIndexSync;
+
     private DocumentParseServiceImpl service;
 
     @BeforeEach
@@ -76,7 +80,8 @@ class DocumentParseServiceImplTest {
                 fileStorageService,
                 textExtractor,
                 properties,
-                new ResourcePermissionHelper()
+                new ResourcePermissionHelper(),
+                documentIndexSync
         );
     }
 

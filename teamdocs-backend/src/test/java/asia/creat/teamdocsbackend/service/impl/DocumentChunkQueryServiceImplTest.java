@@ -10,6 +10,8 @@ import asia.creat.mapper.DocumentMapper;
 import asia.creat.mapper.SpaceMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.service.impl.DocumentChunkQueryServiceImpl;
+import asia.creat.service.ChunkIndex;
+import asia.creat.vo.ChunkIndexHit;
 import asia.creat.vo.ChunkCitationVO;
 import asia.creat.vo.ChunkHitVO;
 import asia.creat.vo.ChunkReadVO;
@@ -43,6 +45,9 @@ class DocumentChunkQueryServiceImplTest {
     @Mock
     private SpaceMapper spaceMapper;
 
+    @Mock
+    private ChunkIndex chunkIndex;
+
     private DocumentChunkQueryServiceImpl service;
 
     @BeforeEach
@@ -51,7 +56,7 @@ class DocumentChunkQueryServiceImplTest {
         properties.setSearchLimit(6);
         properties.setReadLimit(20);
         properties.setMaxChars(8);
-        service = new DocumentChunkQueryServiceImpl(documentContentMapper, documentMapper, spaceMapper, properties);
+        service = new DocumentChunkQueryServiceImpl(documentContentMapper, documentMapper, spaceMapper, properties, chunkIndex);
     }
 
     @Test
@@ -185,6 +190,45 @@ class DocumentChunkQueryServiceImplTest {
         assertEquals(3, citation.getChunk().getParseVersion());
         assertEquals("12345678", citation.getChunk().getExcerpt());
         assertEquals(8, citation.getChunk().getCharEnd());
+    }
+
+    @Test
+    void elasticCandidatesAreVerifiedAndPartialIndexIsSupplementedWithoutDuplicates() {
+        when(chunkIndex.enabled()).thenReturn(true);
+        when(chunkIndex.search(1L, "上线检查", 6)).thenReturn(List.of(
+                new ChunkIndexHit(99L, 10L, 3, "<mark>上线</mark>检查"),
+                new ChunkIndexHit(88L, 11L, 1, "foreign")));
+        when(documentContentMapper.findReadableChunk(1L, 10L, 99L, 3)).thenReturn(hit("上线检查"));
+        ChunkHitVO extra = hit("补充");
+        extra.setChunkId(100L);
+        when(documentContentMapper.searchChunks(1L, "\"上线检查\"", 6)).thenReturn(List.of(hit("上线检查"), extra));
+
+        List<ChunkHitVO> hits = service.searchChunks(1L, "上线检查", USER);
+
+        assertEquals(List.of(99L, 100L), hits.stream().map(ChunkHitVO::getChunkId).toList());
+        assertEquals("上线检查", hits.get(0).getExcerpt());
+        assertEquals("<mark>上线</mark>检查", hits.get(0).getHighlight());
+        verify(documentContentMapper).findReadableChunk(1L, 11L, 88L, 1);
+    }
+
+    @Test
+    void elasticFailureFallsBackToMysql() {
+        when(chunkIndex.enabled()).thenReturn(true);
+        when(chunkIndex.search(1L, "上线检查", 6)).thenThrow(new IllegalStateException("offline"));
+        when(documentContentMapper.searchChunks(1L, "\"上线检查\"", 6)).thenReturn(List.of(hit("备份")));
+        assertEquals("备份", service.searchChunks(1L, "上线检查", USER).get(0).getExcerpt());
+    }
+
+    @Test
+    void untrustedOrOutOfRangeHighlightNeverReplacesAuthoritativeText() {
+        for (String highlight : List.of("<img src=x onerror=alert(1)>", "<mark>不在正文</mark>")) {
+            when(chunkIndex.enabled()).thenReturn(true);
+            when(chunkIndex.search(1L, "上线检查", 6)).thenReturn(List.of(new ChunkIndexHit(99L, 10L, 3, highlight)));
+            when(documentContentMapper.findReadableChunk(1L, 10L, 99L, 3)).thenReturn(hit("上线检查"));
+            List<ChunkHitVO> hits = service.searchChunks(1L, "上线检查", USER);
+            assertEquals("上线检查", hits.get(0).getExcerpt());
+            assertEquals(null, hits.get(0).getHighlight());
+        }
     }
 
     private Document readyDocument() {

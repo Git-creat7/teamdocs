@@ -39,6 +39,9 @@ jobs:
           cache: maven
           cache-dependency-path: teamdocs-backend/pom.xml
 
+      - name: Build Elasticsearch with matching IK plugin for integration tests
+        run: docker build -t teamdocs-elasticsearch:8.15.3 docker/elasticsearch
+
       - name: Run backend tests
         run: mvn -B -ntp -f teamdocs-backend/pom.xml test
 
@@ -120,14 +123,26 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
-      - name: Update latest tags after both images are published
+      - name: Build and push Elasticsearch image
+        id: elasticsearch
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker/elasticsearch
+          push: true
+          tags: ${{ steps.images.outputs.repository }}/elasticsearch:${{ github.sha }}
+          cache-from: type=gha,scope=elasticsearch
+          cache-to: type=gha,mode=max,scope=elasticsearch
+
+      - name: Update latest tags after all images are published
         env:
           IMAGE_REPOSITORY: ${{ steps.images.outputs.repository }}
           BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
           FRONTEND_DIGEST: ${{ steps.frontend.outputs.digest }}
+          ELASTICSEARCH_DIGEST: ${{ steps.elasticsearch.outputs.digest }}
         run: |
           docker buildx imagetools create --tag "$IMAGE_REPOSITORY/backend:latest" "$IMAGE_REPOSITORY/backend@$BACKEND_DIGEST"
           docker buildx imagetools create --tag "$IMAGE_REPOSITORY/frontend:latest" "$IMAGE_REPOSITORY/frontend@$FRONTEND_DIGEST"
+          docker buildx imagetools create --tag "$IMAGE_REPOSITORY/elasticsearch:latest" "$IMAGE_REPOSITORY/elasticsearch@$ELASTICSEARCH_DIGEST"
 
       - name: Summarize published release
         env:
@@ -138,6 +153,7 @@ jobs:
             echo
             echo "- $IMAGE_REPOSITORY/backend:$GITHUB_SHA"
             echo "- $IMAGE_REPOSITORY/frontend:$GITHUB_SHA"
+            echo "- $IMAGE_REPOSITORY/elasticsearch:$GITHUB_SHA"
             echo
             echo "Deploy this release with IMAGE_TAG=$GITHUB_SHA in your .env file."
           } >> "$GITHUB_STEP_SUMMARY"

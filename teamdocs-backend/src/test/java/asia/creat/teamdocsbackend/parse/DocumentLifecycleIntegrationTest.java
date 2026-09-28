@@ -1,6 +1,22 @@
 package asia.creat.teamdocsbackend.parse;
 
 import asia.creat.aspect.SpaceRoleAspect;
+import asia.creat.config.ElasticsearchProperties;
+import asia.creat.config.RetrievalProperties;
+import asia.creat.mapper.DocumentContentMapper;
+import asia.creat.service.ChunkIndex;
+import asia.creat.service.DocumentChunkQueryService;
+import asia.creat.service.DocumentIndexSync;
+import asia.creat.service.impl.ElasticsearchChunkIndex;
+import asia.creat.service.impl.DocumentChunkQueryServiceImpl;
+import asia.creat.vo.ChunkHitVO;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.core.io.ClassPathResource;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import asia.creat.common.BucketType;
 import asia.creat.common.exception.BusinessException;
 import asia.creat.config.MinioProperties;
@@ -31,6 +47,9 @@ import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
@@ -74,12 +93,24 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @Testcontainers
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @SpringJUnitConfig(DocumentLifecycleIntegrationTest.Config.class)
+@TestPropertySource(properties = "teamdocs.elasticsearch.enabled=true")
 class DocumentLifecycleIntegrationTest {
     private static final LoginUser OWNER = new LoginUser(7L, "owner");
 
     @Container
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4");
+    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
+            .withCommand("--ngram-token-size=2", "--innodb-ft-enable-stopword=OFF");
+    @Container
+    static final GenericContainer<?> ES = new GenericContainer<>(DockerImageName.parse(System.getProperty(
+            "teamdocs.test.elasticsearch-image", "teamdocs-elasticsearch:8.15.3")))
+            .withEnv("discovery.type", "single-node")
+            .withEnv("xpack.security.enabled", "false")
+            .withEnv("ES_JAVA_OPTS", "-Xms512m -Xmx512m")
+            .withCreateContainerCmdModifier(command -> command.getHostConfig().withMemory(1536L * 1024 * 1024))
+            .withExposedPorts(9200)
+            .waitingFor(Wait.forHttp("/").forPort(9200).withStartupTimeout(Duration.ofMinutes(3)));
     @Container
     static final GenericContainer<?> MINIO = new GenericContainer<>(DockerImageName.parse(System.getProperty(
             "teamdocs.test.minio-image", "minio/minio:RELEASE.2023-09-20T22-49-55Z")))
@@ -89,6 +120,9 @@ class DocumentLifecycleIntegrationTest {
             .withExposedPorts(9000)
             .waitingFor(Wait.forHttp("/minio/health/live").forPort(9000));
 
+    @Autowired ChunkIndex index;
+    @Autowired DocumentChunkQueryService retrieval;
+    @Autowired DocumentContentMapper chunks;
     @Autowired DocumentService documents;
     @Autowired DocumentParseService parsing;
     @Autowired DocumentContentService content;
@@ -119,6 +153,7 @@ class DocumentLifecycleIntegrationTest {
         jdbc.update("DELETE FROM space");
         jdbc.update("INSERT INTO space (id,name,owner_id) VALUES (1,'解析测试',7)");
         jdbc.update("INSERT INTO space_member (space_id,user_id,role) VALUES (1,7,'OWNER'),(1,8,'MEMBER')");
+        index.rebuild();
     }
 
     @Test
@@ -130,6 +165,7 @@ class DocumentLifecycleIntegrationTest {
         Document ready = documentMapper.selectById(id);
         assertEquals(ParseStatus.READY, ready.getParseStatus());
         assertTrue(ready.getChunkCount() > 1);
+        assertFalse(index.search(1L, "备份", 6).isEmpty());
         assertEquals(modifiedAt, ready.getUpdatedAt());
         List<Long> originalIds = content.getChunksByDocumentId(id).stream().map(DocumentContent::getId).toList();
         parsing.parseDocument(id);
@@ -139,6 +175,7 @@ class DocumentLifecycleIntegrationTest {
         jdbc.update("UPDATE document SET parse_started_at=DATE_SUB(NOW(), INTERVAL 1 MINUTE),updated_at=updated_at WHERE id=?", id);
         var pending = parsing.reparse(1L, id, OWNER);
         assertEquals(ready.getParseVersion() + 1, pending.getParseVersion());
+        assertTrue(index.search(1L, "备份", 6).isEmpty());
         assertTrue(content.getChunksByDocumentId(id).isEmpty());
         worker().scanPending();
         assertEquals(ParseStatus.READY, documentMapper.selectById(id).getParseStatus());
@@ -235,14 +272,18 @@ class DocumentLifecycleIntegrationTest {
     void softDeleteHidesChunksAndPurgeAfterPublicationCleansThem() {
         Long id = upload("notes.txt", "删除后不可读");
         parsing.parseDocument(id);
+        assertFalse(index.search(1L, "删除", 6).isEmpty());
         documents.deleteDocument(1L, id, OWNER);
+        assertTrue(index.search(1L, "删除", 6).isEmpty());
         assertTrue(content.getChunksByDocumentId(id).isEmpty());
         assertEquals(1, chunkCount(id));
         documents.restoreDocument(1L, id, 0L, OWNER);
         assertEquals(1, content.getChunksByDocumentId(id).size());
+        assertFalse(index.search(1L, "删除", 6).isEmpty());
         documents.deleteDocument(1L, id, OWNER);
         documents.purgeDocument(1L, id, OWNER);
         assertEquals(0, chunkCount(id));
+        assertTrue(index.search(1L, "删除", 6).isEmpty());
     }
 
     @Test
@@ -255,6 +296,105 @@ class DocumentLifecycleIntegrationTest {
         parsing.parseDocument(id);
         assertEquals(ParseStatus.PENDING, documentMapper.selectById(id).getParseStatus());
         verify(storage, never()).open(any(), any());
+    }
+
+    @Test
+    void sameSamplesCompareMysqlAndElasticRecallWithEscapedHighlight() throws Exception {
+        loadRetrievalSamples();
+        assertEquals(5, index.rebuild());
+        assertEquals(5, index.rebuild());
+        for (String keyword : List.of("上线检查", "回滚 备份", "api", "zip")) {
+            var mysql = chunks.searchChunks(1L, DocumentChunkQueryServiceImpl.matchQuery(keyword), 6);
+            var elastic = index.search(1L, keyword, 6);
+            System.out.println("RECALL " + keyword + " mysql=" + keys(mysql)
+                    + " elastic=" + elastic.stream().map(hit -> hit.getDocumentId() + "#" + chunks.findReadableChunk(1L, hit.getDocumentId(), hit.getChunkId(), hit.getParseVersion()).getChunkIndex()).toList());
+            assertFalse(mysql.isEmpty());
+            assertFalse(elastic.isEmpty());
+        }
+        assertTrue(index.search(1L, "上线检查", 6).stream().anyMatch(hit -> hit.getDocumentId() == 10L));
+        assertEquals(List.of(11L), index.search(2L, "上线检查", 6).stream().map(hit -> hit.getDocumentId()).toList());
+        assertTrue(index.search(3L, "上线检查", 6).isEmpty());
+        assertTrue(retrieval.searchChunks(1L, "上线检查", OWNER).stream().anyMatch(hit -> hit.getHighlight() != null));
+
+        Long id = upload("html.txt", "上线检查 <script>alert(1)</script>：先备份数据库。");
+        parsing.parseDocument(id);
+        var hit = index.search(1L, "备份", 6).stream().filter(row -> row.getDocumentId().equals(id)).findFirst().orElseThrow();
+        assertTrue(hit.getHighlight().contains("<mark>"));
+        assertFalse(hit.getHighlight().contains("<script>"));
+        assertTrue(hit.getHighlight().contains("&lt;script&gt;"));
+        var verified = retrieval.searchChunks(1L, "备份", OWNER).stream()
+                .filter(row -> row.getDocumentId().equals(id)).findFirst().orElseThrow();
+        assertTrue(verified.getExcerpt().contains("<script>"));
+        assertNotNull(verified.getHighlight());
+    }
+
+    @Test
+    void staleForeignDeletedAndNonReadyCandidatesAreRecheckedAgainstMysql() throws Exception {
+        loadRetrievalSamples();
+        index.rebuild();
+        // 模拟索引空间信息过期，不能凭 ES 的 space_id 授权。
+        esRequest("POST", "/test-chunks/_update/11_0?refresh=true", "{\"doc\":{\"space_id\":1}}");
+        jdbc.update("UPDATE document SET parse_version=4 WHERE id=10");
+        var current = retrieval.searchChunks(1L, "上线检查", OWNER);
+        assertTrue(current.stream().noneMatch(hit -> hit.getDocumentId() == 11L));
+        assertTrue(current.stream().anyMatch(hit -> hit.getDocumentId() == 10L && hit.getParseVersion() == 4));
+        for (String state : List.of("deleted=1", "deleted=0,parse_status='PENDING'")) {
+            jdbc.update("UPDATE document SET " + state + " WHERE id=10");
+            assertTrue(retrieval.searchChunks(1L, "上线检查", OWNER).stream().noneMatch(hit -> hit.getDocumentId() == 10L));
+        }
+        jdbc.update("DELETE FROM space_member WHERE space_id=1 AND user_id=7");
+        assertThrows(BusinessException.class, () -> retrieval.searchChunks(1L, "上线检查", OWNER));
+    }
+
+    @Test
+    void missingIndexEntriesUseMysqlAndRebuildRemovesStaleRows() throws Exception {
+        loadRetrievalSamples();
+        index.rebuild();
+        esRequest("DELETE", "/test-chunks/_doc/10_0?refresh=true", null);
+        assertTrue(retrieval.searchChunks(1L, "上线检查", OWNER).stream().anyMatch(hit -> hit.getDocumentId() == 10L));
+        jdbc.update("UPDATE document SET deleted=1 WHERE id=11");
+        assertEquals(4, index.rebuild());
+        assertEquals(4, index.rebuild());
+        assertTrue(index.search(2L, "上线检查", 6).isEmpty());
+        assertTrue(esRequest("GET", "/test-chunks/_count", null).contains("\"count\":4"));
+    }
+
+    // 真实停服会破坏本组共享依赖；放在最后，由 Testcontainers 统一清理，避免污染其他用例。
+    @Test
+    @Order(Integer.MAX_VALUE)
+    void stoppedElasticFallsBackWithoutBreakingUploadParseAndPreview() throws Exception {
+        loadRetrievalSamples();
+        index.rebuild();
+        ES.getDockerClient().stopContainerCmd(ES.getContainerId()).withTimeout(1).exec();
+        assertTrue(retrieval.searchChunks(1L, "上线检查", OWNER).stream().anyMatch(hit -> hit.getDocumentId() == 10L));
+        Long id = upload("offline.txt", "离线期间依旧可以解析和下载");
+        parsing.parseDocument(id);
+        assertEquals(ParseStatus.READY, documentMapper.selectById(id).getParseStatus());
+        assertNotNull(documents.downloadDocument(1L, id, OWNER));
+        assertNotNull(documents.previewDocument(1L, id, OWNER));
+    }
+
+    private void loadRetrievalSamples() throws Exception {
+        jdbc.update("DELETE FROM space_member");
+        jdbc.update("DELETE FROM space");
+        try (Connection connection = dataSource.getConnection()) {
+            ScriptUtils.executeSqlScript(connection, new EncodedResource(new ClassPathResource("retrieval-samples.sql"), StandardCharsets.UTF_8));
+        }
+        jdbc.update("INSERT INTO space_member (space_id,user_id,role) VALUES (1,7,'OWNER'),(2,7,'OWNER')");
+    }
+
+    private static List<String> keys(List<ChunkHitVO> hits) {
+        return hits.stream().map(hit -> hit.getDocumentId() + "#" + hit.getChunkIndex()).toList();
+    }
+
+    private static String esUrl() { return "http://" + ES.getHost() + ":" + ES.getMappedPort(9200); }
+
+    private static String esRequest(String method, String path, String body) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create(esUrl() + path)).header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(10)).method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body)).build();
+        var response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+        assertTrue(response.statusCode() < 300, response.body());
+        return response.body();
     }
 
     private Long upload(String name, String text) {
@@ -302,7 +442,8 @@ class DocumentLifecycleIntegrationTest {
     @EnableAspectJAutoProxy(proxyTargetClass = true)
     @MapperScan("asia.creat.mapper")
     @Import({DocumentServiceImpl.class, DocumentParseServiceImpl.class, DocumentContentServiceImpl.class,
-            DocumentTextExtractor.class, SpaceRoleAspect.class, ResourcePermissionHelper.class})
+            DocumentTextExtractor.class, SpaceRoleAspect.class, ResourcePermissionHelper.class,
+            DocumentIndexSync.class, ElasticsearchChunkIndex.class, DocumentChunkQueryServiceImpl.class})
     static class Config {
         @Bean DataSource dataSource() {
             return new DriverManagerDataSource(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
@@ -320,6 +461,14 @@ class DocumentLifecycleIntegrationTest {
         @Bean PlatformTransactionManager transactionManager(DataSource dataSource) {
             return new DataSourceTransactionManager(dataSource);
         }
+        @Bean ElasticsearchProperties elasticsearchProperties() {
+            ElasticsearchProperties properties = new ElasticsearchProperties();
+            properties.setEnabled(true);
+            properties.setUrl(esUrl());
+            properties.setIndex("test-chunks");
+            return properties;
+        }
+        @Bean RetrievalProperties retrievalProperties() { return new RetrievalProperties(); }
         @Bean ParseProperties parseProperties() { return new ParseProperties(); }
         @Bean RecentDocumentService recentDocumentService() { return mock(RecentDocumentService.class); }
         @Bean FileStorageService fileStorageService() {

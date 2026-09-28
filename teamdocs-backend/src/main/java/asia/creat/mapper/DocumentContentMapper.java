@@ -11,6 +11,10 @@ import java.util.List;
 @Mapper
 public interface DocumentContentMapper extends BaseMapper<DocumentContent> {
 
+    List<ChunkHitVO> listIndexableChunks(@Param("afterChunkId") Long afterChunkId, @Param("limit") int limit);
+
+    List<ChunkHitVO> listIndexableDocumentChunks(@Param("documentId") Long documentId);
+
     List<ChunkHitVO> searchChunks(@Param("spaceId") Long spaceId,
                                   @Param("keyword") String keyword,
                                   @Param("limit") int limit);

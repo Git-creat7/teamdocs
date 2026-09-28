@@ -6,6 +6,7 @@
 
     <!-- FULLTEXT 写不进 Wrapper。过滤放在排序和 LIMIT 前面。 -->
     <sql id="readableChunkColumns">
+        c.space_id,
         c.id AS chunk_id,
         c.document_id,
         c.chunk_index,
@@ -17,16 +18,34 @@
         d.parse_version
     </sql>
 
-    <sql id="readableChunkJoin">
+    <sql id="indexableChunkJoin">
         FROM document_content c
         INNER JOIN document d ON d.id = c.document_id
         INNER JOIN space s ON s.id = d.space_id
-        WHERE c.space_id = #{spaceId}
-          AND d.space_id = #{spaceId}
+        WHERE c.space_id = d.space_id
           AND d.deleted = 0
           AND d.parse_status = 'READY'
           AND s.deleted = 0
     </sql>
+
+    <sql id="readableChunkJoin">
+        <include refid="indexableChunkJoin"/>
+          AND d.space_id = #{spaceId}
+    </sql>
+
+    <select id="listIndexableChunks" resultType="asia.creat.vo.ChunkHitVO">
+        SELECT <include refid="readableChunkColumns"/>
+        <include refid="indexableChunkJoin"/>
+          AND c.id &gt; #{afterChunkId}
+        ORDER BY c.id ASC LIMIT #{limit}
+    </select>
+
+    <select id="listIndexableDocumentChunks" resultType="asia.creat.vo.ChunkHitVO">
+        SELECT <include refid="readableChunkColumns"/>
+        <include refid="indexableChunkJoin"/>
+          AND d.id = #{documentId}
+        ORDER BY c.chunk_index ASC
+    </select>
 
     <select id="searchChunks" resultType="asia.creat.vo.ChunkHitVO">
         SELECT

@@ -98,6 +98,25 @@ services:
     logging: *default-logging
     restart: "no"
 
+  elasticsearch:
+    image: ${IMAGE_REPOSITORY:-ghcr.io/git-creat7/teamdocs}/elasticsearch:${IMAGE_TAG:-latest}
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    mem_limit: 1536m
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    # 仅容器网络可访问；不将未启用认证的 9200 暴露给宿主机或公网。
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+    logging: *default-logging
+    restart: unless-stopped
+
   backend:
     image: ${IMAGE_REPOSITORY:-ghcr.io/git-creat7/teamdocs}/backend:${IMAGE_TAG:-latest}
     depends_on:
@@ -125,6 +144,9 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
       MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-teamdocs-public}
       MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-teamdocs-private}
+      ES_ENABLED: ${ES_ENABLED:-true}
+      ES_URL: http://elasticsearch:9200
+      ES_INDEX: ${ES_INDEX:-teamdocs-chunks}
       PARSE_ENABLED: ${PARSE_ENABLED:-true}
       PARSE_MAX_BYTES: ${PARSE_MAX_BYTES:-10485760}
       PARSE_MAX_CHARS: ${PARSE_MAX_CHARS:-200000}
@@ -158,6 +180,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  elasticsearch_data:
   mysql_data:
   redis_data:
   minio_data:

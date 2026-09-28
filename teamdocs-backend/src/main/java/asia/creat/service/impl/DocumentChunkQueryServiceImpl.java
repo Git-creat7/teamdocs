@@ -11,17 +11,24 @@ import asia.creat.mapper.DocumentMapper;
 import asia.creat.mapper.SpaceMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.service.DocumentChunkQueryService;
+import asia.creat.service.ChunkIndex;
+import asia.creat.vo.ChunkIndexHit;
 import asia.creat.vo.ChunkCitationVO;
 import asia.creat.vo.ChunkHitVO;
 import asia.creat.vo.ChunkReadVO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.util.HtmlUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService {
     private static final String CITATION_MISS = "原引用已更新或不可访问";
 
@@ -29,13 +36,44 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
     private final DocumentMapper documentMapper;
     private final SpaceMapper spaceMapper;
     private final RetrievalProperties retrievalProperties;
+    private final ChunkIndex chunkIndex;
 
     @Override
     @RequireSpaceRole
     public List<ChunkHitVO> searchChunks(@SpaceId Long spaceId, String keyword, LoginUser loginUser) {
         String query = matchQuery(keyword);
-        int limit = Math.max(1, retrievalProperties.getSearchLimit());
-        return fitExcerpts(documentContentMapper.searchChunks(spaceId, query, limit));
+        int limit = Math.min(6, Math.max(1, retrievalProperties.getSearchLimit()));
+        Map<Long, ChunkHitVO> hits = new LinkedHashMap<>();
+        if (chunkIndex.enabled()) {
+            try {
+                for (ChunkIndexHit candidate : chunkIndex.search(spaceId, query.replace("\"", ""), limit)) {
+                    if (candidate.getChunkId() == null || candidate.getDocumentId() == null || candidate.getParseVersion() == null) {
+                        continue;
+                    }
+                    ChunkHitVO current = documentContentMapper.findReadableChunk(spaceId, candidate.getDocumentId(),
+                            candidate.getChunkId(), candidate.getParseVersion());
+                    if (current != null) {
+                        current.setHighlight(candidate.getHighlight());
+                        hits.putIfAbsent(current.getChunkId(), current);
+                    }
+                    if (hits.size() == limit) {
+                        break;
+                    }
+                }
+            } catch (RuntimeException e) {
+                log.warn("Elasticsearch 召回失败，退回 MySQL: {}", e.getClass().getSimpleName());
+            }
+        }
+        // 不止空结果才降级：部分分块尚未索引时，也从 MySQL 补足，且不返回重复块。
+        if (hits.size() < limit) {
+            for (ChunkHitVO row : documentContentMapper.searchChunks(spaceId, query, limit)) {
+                hits.putIfAbsent(row.getChunkId(), row);
+                if (hits.size() == limit) {
+                    break;
+                }
+            }
+        }
+        return fitExcerpts(new ArrayList<>(hits.values()));
     }
 
     @Override
@@ -147,6 +185,15 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
             }
         }
         row.setExcerpt(text);
+        String highlight = row.getHighlight();
+        if (highlight != null) {
+            String escaped = highlight.replace("<mark>", "").replace("</mark>", "");
+            // 高亮不是权威原文；仅允许 mark 标签，且必须对应实际返回范围中的正文。
+            if (highlight.length() > 1024 || escaped.contains("<") || escaped.contains(">")
+                    || !text.contains(HtmlUtils.htmlUnescape(escaped))) {
+                row.setHighlight(null);
+            }
+        }
         return row;
     }
 

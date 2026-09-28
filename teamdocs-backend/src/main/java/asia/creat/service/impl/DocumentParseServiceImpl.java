@@ -18,6 +18,7 @@ import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
 import asia.creat.service.DocumentContentService;
 import asia.creat.service.DocumentParseService;
+import asia.creat.service.DocumentIndexSync;
 import asia.creat.service.FileStorageService;
 import asia.creat.vo.DocumentParseStatusVO;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -40,6 +41,7 @@ public class DocumentParseServiceImpl implements DocumentParseService {
     private final DocumentTextExtractor textExtractor;
     private final ParseProperties parseProperties;
     private final ResourcePermissionHelper permissionHelper;
+    private final DocumentIndexSync documentIndexSync;
 
     @Override
     public void parseDocument(Long documentId) {
@@ -106,6 +108,7 @@ public class DocumentParseServiceImpl implements DocumentParseService {
         document.setParsedAt(null);
         document.setChunkCount(0);
         document.setParseVersion(document.getParseVersion() + 1);
+        documentIndexSync.afterCommit(documentId);
 
         return toStatus(document);
     }
@@ -146,6 +149,7 @@ public class DocumentParseServiceImpl implements DocumentParseService {
             log.info("文档 {} 的解析结果已过期，放弃发布", document.getId());
             return;
         }
+        documentIndexSync.afterCommit(document.getId());
     }
 
     private List<DocumentContent> chunk(ExtractedText extracted) {
