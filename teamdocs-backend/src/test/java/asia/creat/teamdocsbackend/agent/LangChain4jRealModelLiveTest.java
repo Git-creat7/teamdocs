@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -142,6 +143,7 @@ public class LangChain4jRealModelLiveTest {
 
         if (aiMessage.hasToolExecutionRequests()) {
             List<ToolExecutionRequest> requests = aiMessage.toolExecutionRequests();
+            List<String> keywords = new ArrayList<>();
             for (ToolExecutionRequest req : requests) {
                 System.out.println("成功触发工具调用: ID=" + req.id() + ", Name=" + req.name() + ", Args=" + req.arguments());
                 assertEquals("search_documents", req.name());
@@ -149,8 +151,11 @@ public class LangChain4jRealModelLiveTest {
                 JsonNode arguments = new ObjectMapper().readTree(req.arguments());
                 assertTrue(arguments.path("keyword").isTextual());
                 String keyword = arguments.path("keyword").asText();
-                assertTrue(keyword.contains("数据库") || keyword.contains("备份"));
+                assertFalse(keyword.isBlank());
+                keywords.add(keyword);
             }
+            // 模型可能把问题拆成几次并行调用，比如单独查“数据恢复”，只要求至少一次查的是这个主题
+            assertTrue(keywords.stream().anyMatch(k -> k.contains("数据库") || k.contains("备份") || k.contains("恢复")));
         } else {
             System.out.println("模型直接输出了文本（未触发工具调用）: " + aiMessage.text());
         }
