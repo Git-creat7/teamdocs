@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 @Configuration
-@EnableConfigurationProperties(ParseProperties.class)
+@EnableConfigurationProperties({ParseProperties.class, RetrievalProperties.class})
 @Slf4j
 public class DocumentParseConfiguration {
 

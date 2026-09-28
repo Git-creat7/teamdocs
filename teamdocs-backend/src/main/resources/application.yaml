@@ -84,3 +84,7 @@ teamdocs:
     batch-size: 5
     pool-size: 2
     scan-delay-ms: 5000
+  retrieval:
+    search-limit: 6
+    read-limit: 20
+    max-chars: 4000

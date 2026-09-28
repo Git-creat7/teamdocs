@@ -16,5 +16,7 @@ CREATE TABLE document_content (
     PRIMARY KEY (id),
     UNIQUE KEY uk_doc_chunk (document_id, chunk_index),
     KEY idx_space_id (space_id),
-    KEY idx_document_id (document_id)
+    KEY idx_document_id (document_id),
+    -- 依赖实例已关闭 innodb_ft_enable_stopword，否则含停用词的英文 bigram 进不了索引
+    FULLTEXT KEY ft_content (content) WITH PARSER ngram
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '文档正文切片表';
