@@ -76,6 +76,10 @@ teamdocs:
     api-key: ${AGENT_API_KEY:}
     model-name: ${AGENT_MODEL_NAME:}
     timeout-seconds: ${AGENT_TIMEOUT_SECONDS:60}
+    allow-document-egress: ${AGENT_ALLOW_DOCUMENT_EGRESS:false}
+    input-price-per-million: ${AGENT_INPUT_PRICE_PER_MILLION:}
+    output-price-per-million: ${AGENT_OUTPUT_PRICE_PER_MILLION:}
+    daily-budget: ${AGENT_DAILY_BUDGET:}
   parse:
     enabled: ${PARSE_ENABLED:true}
     max-bytes: ${PARSE_MAX_BYTES:10485760}

@@ -9,6 +9,8 @@ import java.util.List;
 
 public interface DocumentChunkQueryService {
 
+    List<ChunkHitVO> searchChunksInDocument(Long spaceId, Long documentId, String keyword, LoginUser loginUser);
+
     /**
      * 在当前空间检索 READY 正文。不替代原来的文档名搜索。
      */

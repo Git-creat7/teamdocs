@@ -27,6 +27,7 @@ services:
       - ./sql/initOperationLog.sql:/docker-entrypoint-initdb.d/05-operation-log.sql:ro
       - ./sql/fulltext_index.sql:/docker-entrypoint-initdb.d/06-fulltext.sql:ro
       - ./sql/document_content.sql:/docker-entrypoint-initdb.d/07-document-content.sql:ro
+      - ./sql/agent.sql:/docker-entrypoint-initdb.d/08-agent.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
       interval: 10s
@@ -144,6 +145,15 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
       MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-teamdocs-public}
       MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-teamdocs-private}
+      AGENT_ENABLED: ${AGENT_ENABLED:-false}
+      AGENT_BASE_URL: ${AGENT_BASE_URL:-}
+      AGENT_API_KEY: ${AGENT_API_KEY:-}
+      AGENT_MODEL_NAME: ${AGENT_MODEL_NAME:-}
+      AGENT_TIMEOUT_SECONDS: ${AGENT_TIMEOUT_SECONDS:-60}
+      AGENT_ALLOW_DOCUMENT_EGRESS: ${AGENT_ALLOW_DOCUMENT_EGRESS:-false}
+      AGENT_INPUT_PRICE_PER_MILLION: ${AGENT_INPUT_PRICE_PER_MILLION:-}
+      AGENT_OUTPUT_PRICE_PER_MILLION: ${AGENT_OUTPUT_PRICE_PER_MILLION:-}
+      AGENT_DAILY_BUDGET: ${AGENT_DAILY_BUDGET:-}
       ES_ENABLED: ${ES_ENABLED:-true}
       ES_URL: http://elasticsearch:9200
       ES_INDEX: ${ES_INDEX:-teamdocs-chunks}

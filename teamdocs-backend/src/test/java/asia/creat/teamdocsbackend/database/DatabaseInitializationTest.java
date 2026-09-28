@@ -30,7 +30,7 @@ class DatabaseInitializationTest {
              Statement statement = connection.createStatement()) {
             // 与 docker-compose.yaml 中的初始化顺序一致。
             for (String script : List.of("initUser.sql", "initSpace.sql", "initDocument.sql",
-                    "initComment.sql", "initOperationLog.sql", "fulltext_index.sql", "document_content.sql")) {
+                    "initComment.sql", "initOperationLog.sql", "fulltext_index.sql", "document_content.sql", "agent.sql")) {
                 ScriptUtils.executeSqlScript(connection, new EncodedResource(
                         new FileSystemResource("../sql/" + script), StandardCharsets.UTF_8));
             }
@@ -41,7 +41,7 @@ class DatabaseInitializationTest {
                 }
             }
             assertEquals(Set.of("user", "space", "space_member", "folder", "document", "tag",
-                    "document_tag", "comment", "operation_log", "document_content"), tables);
+                    "document_tag", "comment", "operation_log", "document_content", "agent_session", "agent_run", "agent_message", "agent_tool_call", "agent_model_call"), tables);
 
             statement.execute("INSERT INTO document (space_id, folder_id, name, file_path, upload_by) VALUES (1, 0, '上线检查', 'space/1/checks.txt', 1)");
             try (ResultSet row = statement.executeQuery("SELECT parse_status, chunk_count, parse_version, parse_started_at FROM document")) {

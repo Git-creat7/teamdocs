@@ -13,9 +13,10 @@ TeamDocs 只使用根目录的 `docker-compose.yaml`。GitHub Actions 负责测�
 ```text
 ghcr.io/git-creat7/teamdocs/backend:<完整提交 SHA>
 ghcr.io/git-creat7/teamdocs/frontend:<完整提交 SHA>
+ghcr.io/git-creat7/teamdocs/elasticsearch:<完整提交 SHA>
 ```
 
-两份镜像发布成功后才更新 `latest`。发布版本会显示在 Actions 运行摘要中。首次部署前必须先有一次成功发布；仓库公开不代表镜像包公开，需要分别把 GHCR 的 backend、frontend 包设为 Public，或者在服务器执行 `docker login ghcr.io`，使用具有 `read:packages` 权限的令牌登录。令牌不要写入仓库或 Compose 文件。
+三份镜像发布成功后才更新 `latest`。发布版本会显示在 Actions 运行摘要中。首次部署前必须先有一次成功发布；仓库公开不代表镜像包公开，需要分别把 GHCR 的 backend、frontend、elasticsearch 包设为 Public，或者在服务器执行 `docker login ghcr.io`，使用具有 `read:packages` 权限的令牌登录。令牌不要写入仓库或 Compose 文件。
 
 Fork 后 CI 会发布到自己的仓库命名空间，需要同步修改 `.env` 中的 `IMAGE_REPOSITORY`；仓库路径使用小写。
 
@@ -29,10 +30,12 @@ cd teamdocs
 cp -n .env.example .env
 ```
 
+先按 [Elasticsearch 部署检查](ELASTICSEARCH.md) 核实目标机器内存与内核参数，内存不足时不要直接启动全栈。启用只读 Agent 还需配置模型、文档出站授权和费用额度，参见 [P3 后端说明](AGENT_BACKEND.md)；默认不会发送真实空间内容。
+
 编辑 `.env` 后再启动，已有配置不要覆盖：
 
 - 填写不同的 `DB_PASSWORD`、`REDIS_PASSWORD`、`MINIO_SECRET_KEY`，以及至少 32 字节的随机 `JWT_SECRET`。Linux 可用 `openssl rand -hex 32` 每次生成一个值。已有 MySQL 卷不会因修改环境变量而自动修改库内密码。
-- 正式部署推荐将 `IMAGE_TAG` 设为一次完整成功发布的提交 SHA，使前后端版本一致。`latest` 适合本机快速体验，不作为可追溯的版本记录。
+- 正式部署推荐将 `IMAGE_TAG` 设为一次完整成功发布的提交 SHA，使前后端和 ES 镜像版本一致。`latest` 适合本机快速体验，不作为可追溯的版本记录。
 - 本机浏览器体验可保留模板中的 `localhost` URL；远程访问先按下一节配置 HTTPS 文件域名与前端来源。
 - 密码含 `$` 时用单引号包住完整值，例如 `DB_PASSWORD='a$password'`。不要把真实 `.env` 或解析后的完整配置上传到仓库。
 
@@ -43,7 +46,7 @@ docker compose up -d --wait
 docker compose ps -a
 ```
 
-首次启动会自动创建 `teamdocs_mysql_data`、`teamdocs_redis_data`、`teamdocs_minio_data` 三个命名卷，并在空 MySQL 卷中初始化表和全文索引。`minio-init` 创建公私桶后正常退出，状态为 `Exited (0)`；后端等待数据库、Redis 和桶初始化就绪，前端等待后端健康检查通过。
+首次启动会自动创建 `teamdocs_mysql_data`、`teamdocs_redis_data`、`teamdocs_minio_data`、`teamdocs_elasticsearch_data` 四个命名卷，并在空 MySQL 卷中初始化表和全文索引。`minio-init` 创建公私桶后正常退出，状态为 `Exited (0)`；后端等待数据库、Redis 和桶初始化就绪，前端等待后端健康检查通过。
 
 默认端口如下，可在 `.env` 调整宿主机端口，不需要修改容器内端口：
 

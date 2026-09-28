@@ -14,9 +14,8 @@ import java.time.Duration;
 import java.net.URI;
 
 /**
- * AI 模型接入配置类（P0 阶段）
- * 仅负责读取配置并在开启时条件装配 ChatLanguageModel。
- * 严禁提前引入业务 Agent 循环、ProviderFactory 等 P3 抽象。
+ * 仅负责读取配置并在开启时条件装配低层 ChatLanguageModel。
+ * 工具循环由 AgentWorker 显式控制，不使用 AI Services 自动执行工具。
  */
 @Configuration
 @EnableConfigurationProperties(AgentProperties.class)
@@ -37,7 +36,8 @@ public class AgentModelConfiguration {
         OpenAiChatModel.OpenAiChatModelBuilder builder = OpenAiChatModel.builder()
                 .apiKey(properties.getApiKey())
                 .modelName(properties.getModelName())
-                .timeout(Duration.ofSeconds(Math.max(1, properties.getTimeoutSeconds())))
+                .timeout(Duration.ofSeconds(Math.min(90, Math.max(1, properties.getTimeoutSeconds()))))
+                .maxTokens(Math.min(4096, Math.max(1, properties.getMaxOutputTokens())))
                 .maxRetries(0)       // 强制关闭 SDK 内部不可控重试
                 .logRequests(false)  // 关闭请求体正文与敏感凭据日志
                 .logResponses(false); // 关闭响应体日志

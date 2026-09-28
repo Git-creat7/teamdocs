@@ -41,12 +41,23 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
     @Override
     @RequireSpaceRole
     public List<ChunkHitVO> searchChunks(@SpaceId Long spaceId, String keyword, LoginUser loginUser) {
+        return search(spaceId, null, keyword);
+    }
+
+    @Override
+    @RequireSpaceRole
+    public List<ChunkHitVO> searchChunksInDocument(@SpaceId Long spaceId, Long documentId, String keyword, LoginUser loginUser) {
+        return search(spaceId, documentId, keyword);
+    }
+
+    private List<ChunkHitVO> search(Long spaceId, Long documentId, String keyword) {
         String query = matchQuery(keyword);
         int limit = Math.min(6, Math.max(1, retrievalProperties.getSearchLimit()));
         Map<Long, ChunkHitVO> hits = new LinkedHashMap<>();
         if (chunkIndex.enabled()) {
             try {
                 for (ChunkIndexHit candidate : chunkIndex.search(spaceId, query.replace("\"", ""), limit)) {
+                    if (documentId != null && !documentId.equals(candidate.getDocumentId())) continue;
                     if (candidate.getChunkId() == null || candidate.getDocumentId() == null || candidate.getParseVersion() == null) {
                         continue;
                     }
@@ -66,7 +77,9 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
         }
         // 不止空结果才降级：部分分块尚未索引时，也从 MySQL 补足，且不返回重复块。
         if (hits.size() < limit) {
-            for (ChunkHitVO row : documentContentMapper.searchChunks(spaceId, query, limit)) {
+            List<ChunkHitVO> fallback = documentId == null ? documentContentMapper.searchChunks(spaceId, query, limit)
+                    : documentContentMapper.searchChunksInDocument(spaceId, documentId, query, limit);
+            for (ChunkHitVO row : fallback) {
                 hits.putIfAbsent(row.getChunkId(), row);
                 if (hits.size() == limit) {
                     break;
