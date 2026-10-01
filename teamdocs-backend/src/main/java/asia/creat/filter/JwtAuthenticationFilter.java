@@ -15,6 +15,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
@@ -85,6 +86,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             UsernamePasswordAuthenticationToken auth =
                     new UsernamePasswordAuthenticationToken(loginUser, null, Collections.emptyList());
             SecurityContextHolder.getContext().setAuthentication(auth);
+            new RequestAttributeSecurityContextRepository().saveContext(SecurityContextHolder.getContext(), request, response);
         } catch (Exception e) {
             SecurityContextHolder.clearContext();
             log.warn("Token验证失败: {}", e.getMessage());

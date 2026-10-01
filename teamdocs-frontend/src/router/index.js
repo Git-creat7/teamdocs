@@ -9,6 +9,7 @@ const ActivityView = () => import('@/views/ActivityView.vue')
 const TrashView = () => import('@/views/TrashView.vue')
 const TagManageView = () => import('@/views/TagManageView.vue')
 const SettingsView = () => import('@/views/SettingsView.vue')
+const AgentView = () => import('@/views/AgentView.vue')
 const SpaceWorkbenchView = () => import('@/views/SpaceWorkbenchView.vue')
 const DocumentPreviewPage = () => import('@/views/DocumentPreviewPage.vue')
 
@@ -40,7 +41,8 @@ const routes = [
       { path: 'settings', name: 'Settings', component: SettingsView },
       // 兼容旧路径
       { path: 'spaces', redirect: '/home' },
-      { path: 'spaces/:spaceId', name: 'SpaceWorkbench', component: SpaceWorkbenchView }
+      { path: 'spaces/:spaceId', name: 'SpaceWorkbench', component: SpaceWorkbenchView },
+      { path: 'spaces/:spaceId/agent/:sessionId?', name: 'SpaceAgent', component: AgentView }
     ]
   },
   {

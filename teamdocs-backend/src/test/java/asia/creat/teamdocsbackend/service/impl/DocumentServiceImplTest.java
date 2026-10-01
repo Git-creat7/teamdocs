@@ -6,6 +6,7 @@ import asia.creat.dto.MoveDocumentDTO;
 import asia.creat.dto.PageQuery;
 import asia.creat.entity.Document;
 import asia.creat.entity.Folder;
+import asia.creat.entity.ParseStatus;
 import asia.creat.entity.SpaceMember;
 import asia.creat.entity.SpaceRole;
 import asia.creat.helper.ResourcePermissionHelper;
@@ -22,6 +23,7 @@ import asia.creat.vo.DocumentPreviewVO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import asia.creat.service.DocumentIndexSync;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -69,6 +71,13 @@ class DocumentServiceImplTest {
     @Mock
     private TagMapper tagMapper;
 
+    @Mock
+    private asia.creat.service.DocumentContentService documentContentService;
+
+
+    @Mock
+    private DocumentIndexSync documentIndexSync;
+
     private DocumentServiceImpl service;
 
     @BeforeEach
@@ -80,7 +89,9 @@ class DocumentServiceImplTest {
                 folderMapper,
                 recentDocumentService,
                 documentTagMapper,
-                tagMapper
+                tagMapper,
+                documentContentService,
+                documentIndexSync
         );
         SpaceMember member = new SpaceMember();
         member.setRole(SpaceRole.MEMBER);
@@ -117,6 +128,9 @@ class DocumentServiceImplTest {
         assertEquals(0L, saved.getFolderId());
         assertEquals("notes.txt", saved.getName());
         assertEquals(USER_ID, saved.getUploadBy());
+        assertEquals(ParseStatus.PENDING, saved.getParseStatus());
+        assertEquals(0, saved.getChunkCount());
+        assertEquals(0, saved.getParseVersion());
         assertEquals(88L, documentId);
     }
 
@@ -358,14 +372,18 @@ class DocumentServiceImplTest {
     void purgeShouldDeleteObjectAndRelationsBeforeMetadata() {
         Document document = document(10L, SPACE_ID, USER_ID, 0L);
         document.setFilePath("space/1/notes.txt");
+        document.setDeleted(1);
         when(documentMapper.selectDeletedDocument(10L)).thenReturn(document);
+        when(documentMapper.lockById(10L)).thenReturn(document);
         when(documentMapper.purgeDeleteById(10L)).thenReturn(true);
 
         service.purgeDocument(SPACE_ID, 10L, LOGIN_USER);
 
-        var inOrder = inOrder(fileStorageService, documentTagMapper, documentMapper);
+        var inOrder = inOrder(fileStorageService, documentTagMapper, documentMapper, documentContentService);
         inOrder.verify(fileStorageService).delete(BucketType.PRIVATE, "space/1/notes.txt");
         inOrder.verify(documentTagMapper).delete(any());
+        inOrder.verify(documentMapper).lockById(10L);
+        inOrder.verify(documentContentService).purgeByDocumentId(10L);
         inOrder.verify(documentMapper).purgeDeleteById(10L);
     }
 
@@ -383,6 +401,25 @@ class DocumentServiceImplTest {
 
         verify(documentTagMapper, never()).delete(any());
         verify(documentMapper, never()).purgeDeleteById(any());
+    }
+
+    @Test
+    void getDocumentDetailShouldIncludeParseStatusAndChunkCount() {
+        Document document = document(10L, SPACE_ID, USER_ID, 0L);
+        document.setName("spec.pdf");
+        document.setParseStatus(ParseStatus.READY);
+        document.setChunkCount(15);
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        document.setParsedAt(now);
+        when(documentMapper.selectById(10L)).thenReturn(document);
+        when(documentTagMapper.selectList(any())).thenReturn(java.util.List.of());
+
+        asia.creat.vo.DocumentDetailVO vo = service.getDocumentDetail(SPACE_ID, 10L, LOGIN_USER);
+
+        assertEquals(ParseStatus.READY, vo.getParseStatus());
+        assertEquals(15, vo.getChunkCount());
+        assertEquals(now, vo.getParsedAt());
+        verify(recentDocumentService).recordRecentDocument(USER_ID, 10L);
     }
 
     private Document document(Long id, Long spaceId, Long uploadBy, Long folderId) {

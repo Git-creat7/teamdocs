@@ -13,6 +13,7 @@ import asia.creat.dto.RenameDocumentDTO;
 import asia.creat.entity.Document;
 import asia.creat.entity.DocumentTag;
 import asia.creat.entity.Folder;
+import asia.creat.entity.ParseStatus;
 import asia.creat.entity.SpaceMember;
 import asia.creat.entity.Tag;
 import asia.creat.helper.ResourcePermissionHelper;
@@ -22,7 +23,9 @@ import asia.creat.mapper.FolderMapper;
 import asia.creat.mapper.TagMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
+import asia.creat.service.DocumentContentService;
 import asia.creat.service.DocumentService;
+import asia.creat.service.DocumentIndexSync;
 import asia.creat.service.FileStorageService;
 import asia.creat.service.RecentDocumentService;
 import asia.creat.vo.DocumentDetailVO;
@@ -56,6 +59,8 @@ public class DocumentServiceImpl implements DocumentService {
     private final RecentDocumentService recentDocumentService;
     private final DocumentTagMapper documentTagMapper;
     private final TagMapper tagMapper;
+    private final DocumentContentService documentContentService;
+    private final DocumentIndexSync documentIndexSync;
 
     @Override
     @OperationLog(
@@ -92,6 +97,9 @@ public class DocumentServiceImpl implements DocumentService {
         doc.setFileSize(file.getSize());
         doc.setFileType(file.getContentType());
         doc.setUploadBy(loginUser.getUserId());
+        doc.setParseStatus(ParseStatus.PENDING);
+        doc.setChunkCount(0);
+        doc.setParseVersion(0);
         try {
             int inserted = documentMapper.insert(doc);
             if (inserted != 1) {
@@ -151,6 +159,8 @@ public class DocumentServiceImpl implements DocumentService {
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
         documentMapper.deleteById(documentId);
+        documentIndexSync.afterCommit(documentId);
+
 
         log.debug("用户 {} 删除了空间 {} 的文件 {}", loginUser.getUserId(), spaceId, doc.getName());
     }
@@ -223,7 +233,6 @@ public class DocumentServiceImpl implements DocumentService {
                 );
         recentDocumentService.recordRecentDocument(loginUser.getUserId(), documentId);
         return url;
-
     }
 
     @Override
@@ -252,7 +261,6 @@ public class DocumentServiceImpl implements DocumentService {
     public PageResult<Document> listTrashedDocuments(@SpaceId Long spaceId, PageQuery pageQuery, LoginUser loginUser) {
 
         return PageResult.from(documentMapper.selectTrashedDocuments(pageQuery.toPage(), spaceId));
-
     }
 
     @Override
@@ -291,6 +299,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         documentMapper.updateDeleted(documentId, targetFolderId);
+        documentIndexSync.afterCommit(documentId);
         return new RestoreDocumentVO(targetFolderId, originalFolderDeleted);
     }
 
@@ -319,12 +328,21 @@ public class DocumentServiceImpl implements DocumentService {
         relationQuery.eq(DocumentTag::getDocumentId, documentId);
         documentTagMapper.delete(relationQuery);
 
+        // 先锁文档行，避免解析任务在删分块之后又写回孤立切片
+        Document locked = documentMapper.lockById(documentId);
+        if (locked == null || !Integer.valueOf(1).equals(locked.getDeleted())) {
+            throw new BusinessException("文件不存在");
+        }
+
+        documentContentService.purgeByDocumentId(documentId);
+
         boolean flag = documentMapper.purgeDeleteById(documentId);
 
         if (!flag) {
             log.error("彻底删除文件 {} 失败", documentId);
             throw new BusinessException("文件删除失败");
         }
+        documentIndexSync.afterCommit(documentId);
     }
 
     @Override

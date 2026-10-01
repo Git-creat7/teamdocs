@@ -65,15 +65,22 @@ flowchart LR
 - 评论与回复、操作日志、团队活动流、最近浏览
 - 图片、文本、PDF、Word、表格、演示文稿和 OFD 在线预览
 
+## 只读文档 Agent 后端
+
+当前已接入文档解析、ES/MySQL 正文检索和只读 Agent 后端。模型可在空间权限范围内选择检索/读取工具，返回经过来源校验的回答；支持会话、幂等提交、费用预占、取消和历史回答失效遮蔽。
+
+P3 目前只提供 REST 后端，尚无聊天页面、SSE 或写操作。默认关闭文档出站；启用前须配置供应商报价、日额度并取得数据发送授权。接口与验证方式见 [Agent 后端说明](docs/AGENT_BACKEND.md)，索引部署与重建见 [Elasticsearch 说明](docs/ELASTICSEARCH.md)。
+
 ## 质量与验证
 
-当前后端包含 **16 个测试类、83 个 JUnit 测试用例**，主要覆盖：
+当前后端包含 **34 个测试类、197 个 JUnit 测试用例**（普通 CI 默认关闭 3 项需要授权的在线模型测试），主要覆盖：
 
 - 用户注册登录、密码修改和 Token 撤销
 - JWT Filter、统一 401 响应和空间角色切面
 - 文档生命周期、评论权限、分页模型和标签业务
 - Redis 缓存故障隔离、Lua 限流与最近浏览
 - 操作日志成功、失败和异常隔离
+- 文档解析与正文检索、Agent 工具权限、幂等并发、费用预占、取消超时与来源失效遮蔽
 
 服务器端 Docker 冒烟验收覆盖了健康检查、注册登录、空间创建、文件上传、预览 CORS、下载响应头、最近文档以及退出登录后的 Token 失效。
 
@@ -130,7 +137,7 @@ docker compose ps
 
 ### CI/CD 与更新
 
-[GitHub Actions](.github/workflows/ci.yml) 在 Pull Request 和 `main` 提交时校验 Compose、运行后端测试并构建前端；`main` 校验通过后构建并发布前后端 GHCR 镜像，使用同一完整提交 SHA 标记版本，同时更新 `latest`。CI 负责测试和镜像交付，服务器由维护者执行 Compose 更新，不自动通过 SSH 部署。
+[GitHub Actions](.github/workflows/ci.yml) 在 Pull Request 和 `main` 提交时校验 Compose、运行后端测试并构建前端；`main` 校验通过后构建并发布前后端及 Elasticsearch GHCR 镜像，使用同一完整提交 SHA 标记版本，同时更新 `latest`。CI 负责测试和镜像交付，服务器由维护者执行 Compose 更新，不自动通过 SSH 部署。
 
 等待目标版本的 CI 全部成功，将 `.env` 中的 `IMAGE_TAG` 改为该次发布的完整提交 SHA，再执行：
 

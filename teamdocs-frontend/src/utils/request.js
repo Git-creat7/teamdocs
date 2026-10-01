@@ -34,7 +34,7 @@ request.interceptors.response.use(
         return res.data
       } else {
         const errMsg = res.msg || '业务操作失败'
-        ElMessage.error(errMsg)
+        if (!response.config?.silent) ElMessage.error(errMsg)
         return Promise.reject(new Error(errMsg))
       }
     }
@@ -42,23 +42,27 @@ request.interceptors.response.use(
   },
   (error) => {
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('teamdocs_token')
-      if (!is401Notifying) {
-        is401Notifying = true
-        ElMessage.error('登录状态已失效，请重新登录')
-        if (router.currentRoute.value.path !== '/login') {
-          router.replace('/login')
-        }
-        setTimeout(() => {
-          is401Notifying = false
-        }, 1500)
-      }
+      handleUnauthorized()
     } else {
       const msg = error.response?.data?.msg || error.message || '网络请求失败，请检查后端服务'
-      ElMessage.error(msg)
+      if (!error.config?.silent) ElMessage.error(msg)
     }
     return Promise.reject(error)
   }
 )
+
+export function handleUnauthorized() {
+  localStorage.removeItem('teamdocs_token')
+  if (!is401Notifying) {
+    is401Notifying = true
+    ElMessage.error('登录状态已失效，请重新登录')
+    if (router.currentRoute.value.path !== '/login') {
+      router.replace('/login')
+    }
+    setTimeout(() => {
+      is401Notifying = false
+    }, 1500)
+  }
+}
 
 export default request

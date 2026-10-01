@@ -25,6 +25,12 @@ public class Document {
     private Long uploadBy;
     @TableLogic
     private Integer deleted;
+    private ParseStatus parseStatus;
+    private Integer chunkCount;
+    private String parseError;
+    private LocalDateTime parsedAt;
+    private Integer parseVersion;
+    private LocalDateTime parseStartedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

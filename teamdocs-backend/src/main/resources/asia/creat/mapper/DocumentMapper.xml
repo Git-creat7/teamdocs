@@ -26,6 +26,12 @@
                description,
                upload_by,
                deleted,
+               parse_status,
+               chunk_count,
+               parse_error,
+               parsed_at,
+               parse_version,
+               parse_started_at,
                created_at,
                updated_at
         FROM document
@@ -45,6 +51,12 @@
                description,
                upload_by,
                deleted,
+               parse_status,
+               chunk_count,
+               parse_error,
+               parsed_at,
+               parse_version,
+               parse_started_at,
                created_at,
                updated_at
         FROM document
@@ -63,6 +75,12 @@
                d.description,
                d.upload_by,
                d.deleted,
+               d.parse_status,
+               d.chunk_count,
+               d.parse_error,
+               d.parsed_at,
+               d.parse_version,
+               d.parse_started_at,
                d.created_at,
                d.updated_at
         FROM document d
@@ -83,6 +101,12 @@
                         d.description,
                         d.upload_by,
                         d.deleted,
+                        d.parse_status,
+                        d.chunk_count,
+                        d.parse_error,
+                        d.parsed_at,
+                        d.parse_version,
+                        d.parse_started_at,
                         d.created_at,
                         d.updated_at
         FROM document d
@@ -129,6 +153,30 @@
         FROM document
         WHERE id = #{documentId}
         AND space_id = #{spaceId}
+    </select>
+
+    <select id="lockById" resultType="asia.creat.entity.Document">
+        SELECT id,
+               space_id,
+               folder_id,
+               name,
+               file_type,
+               file_size,
+               file_path,
+               description,
+               upload_by,
+               deleted,
+               parse_status,
+               chunk_count,
+               parse_error,
+               parsed_at,
+               parse_version,
+               parse_started_at,
+               created_at,
+               updated_at
+        FROM document
+        WHERE id = #{id}
+        FOR UPDATE
     </select>
 
 </mapper>

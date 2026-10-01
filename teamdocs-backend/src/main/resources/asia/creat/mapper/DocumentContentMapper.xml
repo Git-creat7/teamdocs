@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="asia.creat.mapper.DocumentContentMapper">
+
+    <!-- FULLTEXT 写不进 Wrapper。过滤放在排序和 LIMIT 前面。 -->
+    <sql id="readableChunkColumns">
+        c.space_id,
+        c.id AS chunk_id,
+        c.document_id,
+        c.chunk_index,
+        c.page_number,
+        c.char_start,
+        c.char_end,
+        c.content AS excerpt,
+        d.name AS document_name,
+        d.parse_version
+    </sql>
+
+    <sql id="indexableChunkJoin">
+        FROM document_content c
+        INNER JOIN document d ON d.id = c.document_id
+        INNER JOIN space s ON s.id = d.space_id
+        WHERE c.space_id = d.space_id
+          AND d.deleted = 0
+          AND d.parse_status = 'READY'
+          AND s.deleted = 0
+    </sql>
+
+    <sql id="readableChunkJoin">
+        <include refid="indexableChunkJoin"/>
+          AND d.space_id = #{spaceId}
+    </sql>
+
+    <select id="listIndexableChunks" resultType="asia.creat.vo.ChunkHitVO">
+        SELECT <include refid="readableChunkColumns"/>
+        <include refid="indexableChunkJoin"/>
+          AND c.id &gt; #{afterChunkId}
+        ORDER BY c.id ASC LIMIT #{limit}
+    </select>
+
+    <select id="listIndexableDocumentChunks" resultType="asia.creat.vo.ChunkHitVO">
+        SELECT <include refid="readableChunkColumns"/>
+        <include refid="indexableChunkJoin"/>
+          AND d.id = #{documentId}
+        ORDER BY c.chunk_index ASC
+    </select>
+
+    <select id="searchChunks" resultType="asia.creat.vo.ChunkHitVO">
+        SELECT
+        <include refid="readableChunkColumns"/>
+        <include refid="readableChunkJoin"/>
+          AND MATCH(c.content) AGAINST(#{keyword} IN BOOLEAN MODE)
+        ORDER BY MATCH(c.content) AGAINST(#{keyword} IN BOOLEAN MODE) DESC, c.id ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="searchChunksInDocument" resultType="asia.creat.vo.ChunkHitVO">
+        SELECT <include refid="readableChunkColumns"/>
+        <include refid="readableChunkJoin"/>
+          AND c.document_id = #{documentId}
+          AND MATCH(c.content) AGAINST(#{keyword} IN BOOLEAN MODE)
+        ORDER BY MATCH(c.content) AGAINST(#{keyword} IN BOOLEAN MODE) DESC, c.id ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="readChunks" resultType="asia.creat.vo.ChunkHitVO">
+        SELECT
+        <include refid="readableChunkColumns"/>
+        <include refid="readableChunkJoin"/>
+          AND c.document_id = #{documentId}
+          AND c.chunk_index &gt;= #{startIndex}
+        ORDER BY c.chunk_index ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="findReadableChunk" resultType="asia.creat.vo.ChunkHitVO">
+        SELECT
+        <include refid="readableChunkColumns"/>
+        <include refid="readableChunkJoin"/>
+          AND c.id = #{chunkId}
+          AND c.document_id = #{documentId}
+          AND d.parse_version = #{parseVersion}
+    </select>
+
+</mapper>

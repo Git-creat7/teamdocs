@@ -1,7 +1,6 @@
 # 端口配置
 server:
-  port: 8080
-
+  port: ${SERVER_PORT:8080}
 # Spring配置
 spring:
   application:
@@ -14,6 +13,9 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      # ES 由可降级的 ChunkIndex 管理，避免 Boot 再创建一套 localhost 客户端及强依赖健康检查。
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientAutoConfiguration
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchClientAutoConfiguration
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:teamdocs}?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
@@ -64,3 +66,56 @@ management:
       access: read-only
       show-details: never
       show-components: never
+
+# Agent
+teamdocs:
+  agent:
+    base-url: ${AGENT_BASE_URL:}
+    api-key: ${AGENT_API_KEY:}
+    model-name: ${AGENT_MODEL_NAME:}
+    timeout-seconds: ${AGENT_TIMEOUT_SECONDS:60}
+    max-input-tokens: 500000
+    max-output-tokens: 4096
+    # MCP: 联网搜索与外部工具扩展
+    mcp:
+      servers:
+        web-search:
+          type: http
+          url: ${MCP_STEP_URL:}
+          headers:
+            Authorization: "Bearer ${MCP_STEP_API_KEY:}"
+  parse:
+    enabled: ${PARSE_ENABLED:true}
+    max-bytes: ${PARSE_MAX_BYTES:10485760}
+    max-chars: ${PARSE_MAX_CHARS:200000}
+    timeout-seconds: ${PARSE_TIMEOUT_SECONDS:120}
+    retry-delay-seconds: ${PARSE_RETRY_DELAY_SECONDS:5}
+    chunk-size: 1000
+    chunk-overlap: 120
+    batch-size: 5
+    pool-size: 2
+    scan-delay-ms: 5000
+  retrieval:
+    search-limit: 6
+    read-limit: 20
+    max-chars: 4000
+  elasticsearch:
+    enabled: ${ES_ENABLED:false}
+    url: ${ES_URL:http://localhost:9200}
+    index: ${ES_INDEX:teamdocs-chunks}
+  embedding:
+    base-url: ${EMBEDDING_BASE_URL:}
+    api-key: ${EMBEDDING_API_KEY:}
+    model-name: ${EMBEDDING_MODEL:}
+    dimensions: ${EMBEDDING_DIMENSIONS:1024}
+    timeout-seconds: ${EMBEDDING_TIMEOUT_SECONDS:10}
+  rerank:
+    base-url: ${RERANK_BASE_URL:}
+    api-key: ${RERANK_API_KEY:}
+    model-name: ${RERANK_MODEL:}
+    timeout-seconds: ${RERANK_TIMEOUT_SECONDS:10}
+  milvus:
+    url: ${MILVUS_URL:http://127.0.0.1:19530}
+    token: ${MILVUS_TOKEN:}
+    collection: ${MILVUS_COLLECTION:teamdocs_qwen3_8b_d1024_v1}
+    timeout-seconds: ${MILVUS_TIMEOUT_SECONDS:3}

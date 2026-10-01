@@ -62,6 +62,10 @@ export function getDocumentDetailApi(spaceId, documentId) {
   return request.get(`/spaces/${spaceId}/documents/${documentId}`)
 }
 
+export function reparseDocumentApi(spaceId, documentId) {
+  return request.post(`/spaces/${spaceId}/documents/${documentId}/reparse`)
+}
+
 /**
  * 重命名文档 (后端接收 body 为 { newName })
  * @param {number|string} spaceId 

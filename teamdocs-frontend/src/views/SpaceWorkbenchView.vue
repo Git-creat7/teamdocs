@@ -28,6 +28,9 @@
       </div>
 
       <div class="wb-actions">
+        <button type="button" class="wb-action-btn" @click="router.push({ name: 'SpaceAgent', params: { spaceId } })">
+          <MessageSquare :size="16" /><span>文档问答</span>
+        </button>
         <button type="button" class="wb-action-btn" @click="openMembersDrawer">
           <User :size="16" />
           <span>成员</span>

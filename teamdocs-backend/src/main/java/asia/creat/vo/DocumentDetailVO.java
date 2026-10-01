@@ -1,5 +1,6 @@
 package asia.creat.vo;
 
+import asia.creat.entity.ParseStatus;
 import asia.creat.entity.Tag;
 import lombok.Data;
 
@@ -18,6 +19,11 @@ public class DocumentDetailVO {
     private Long uploadBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private ParseStatus parseStatus;
+    private Integer chunkCount;
+    private String parseError;
+    private LocalDateTime parsedAt;
+    private Integer parseVersion;
     private List<Tag> tags;
     private List<FolderPathItemVO> folderPath;
 }
