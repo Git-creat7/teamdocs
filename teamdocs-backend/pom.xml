@@ -171,7 +171,7 @@
             <version>${elasticsearch.version}</version>
         </dependency>
 
-        <!-- LangChain4j 候选接入依赖（P0 兼容性验证阶段：仅引入低层模型与工具消息核心 API） -->
+        <!-- LangChain4j 候选接入依赖-->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-core</artifactId>
@@ -183,7 +183,14 @@
             <version>${langchain4j.version}</version>
         </dependency>
 
-        <!-- 只接 PDF 与 DOCX 所需解析器，不引入 tika-parsers 全家桶 -->
+        <!-- LangChain4j MCP-->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-mcp</artifactId>
+            <version>1.0.0-beta1</version>
+        </dependency>
+
+        <!-- 只接 PDF 与 DOCX 所需解析器，不引入 tika-parsers -->
         <dependency>
             <groupId>org.apache.tika</groupId>
             <artifactId>tika-core</artifactId>

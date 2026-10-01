@@ -18,6 +18,7 @@ public class AgentStore {
     private final AgentMapper mapper;
     private final AgentProperties properties;
     private final AgentJson json;
+    private final AgentEventHub events;
 
     public record Created(Run run, boolean created) { }
 
@@ -42,7 +43,6 @@ public class AgentStore {
             return new Created(existing, false);
         }
         AgentBudget.requireConfigured(properties);
-        if (mapper.dailyCharged(userId).compareTo(properties.getDailyBudget()) >= 0) throw new AgentFailure("DAILY_BUDGET_EXCEEDED");
         if (mapper.activeRuns(userId) != 0) throw new BusinessException("当前用户已有运行中的 AI 请求");
         Run run = new Run();
         run.setSpaceId(spaceId); run.setUserId(userId); run.setSessionId(sessionId);
@@ -67,6 +67,7 @@ public class AgentStore {
         message.setSessionId(run.getSessionId()); message.setRunId(run.getId()); message.setRole("ASSISTANT");
         message.setBody(answer); message.setDependencies(json.write(dependencies)); message.setSources(json.write(sources));
         mapper.insertMessage(message); mapper.touchSession(run.getSessionId());
+        events.afterCommit(run.getId(), "SUCCEEDED".equals(status) ? "run_finished" : "run_failed");
         return true;
     }
 

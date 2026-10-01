@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -77,17 +76,13 @@ public final class AgentData {
     }
 
     @Data
-    public static class Charge {
+    public static class ModelCall {
         private Long id;
         private Long runId;
         private Long userId;
         private int sequence;
         private int estimatedInput;
         private int maxOutput;
-        private BigDecimal inputPrice;
-        private BigDecimal outputPrice;
-        private BigDecimal reservedCost;
-        private BigDecimal chargedCost;
         private Long inputTokens;
         private Long outputTokens;
         private boolean usageKnown;
@@ -98,9 +93,9 @@ public final class AgentData {
     public record Source(String id, Long documentId, Long chunkId, Integer parseVersion) { }
     public record Citation(String id, Long documentId, Long chunkId, Integer chunkIndex, Integer parseVersion, String documentName,
                            Integer pageNumber, Integer charStart, Integer charEnd, String excerpt, String url) { }
-    public record MessageView(Long id, String role, String text, boolean masked,
+    public record MessageView(Long id, Long runId, String role, String text, boolean masked,
                               List<Citation> citations, LocalDateTime createdAt) { }
     public record RunView(Long id, Long sessionId, String status, String errorCode, int modelCalls, int toolCalls,
-                          long inputTokens, long outputTokens, BigDecimal chargedCost, boolean usageUnknown,
+                          long inputTokens, long outputTokens, boolean usageUnknown,
                           MessageView answer, List<Trace> tools, LocalDateTime createdAt, Long deadlineMs) { }
 }

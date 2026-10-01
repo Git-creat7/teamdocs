@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @ExtendWith(OutputCaptureExtension.class)
@@ -33,7 +34,7 @@ class AgentControllerTest {
     @BeforeEach
     void prepare() {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));
-        mvc = MockMvcBuilders.standaloneSetup(new AgentController(service))
+        mvc = MockMvcBuilders.standaloneSetup(new AgentController(service, mock(asia.creat.agent.AgentEventHub.class)))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
     }
@@ -46,6 +47,15 @@ class AgentControllerTest {
                         .content("{\"clientRequestId\":\"client-key\",\"question\":\"如何备份\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(1)).andExpect(jsonPath("$.data.runId").value(3));
         verify(service).submit(eq(1L), eq(2L), any(NewRun.class), same(user));
+    }
+
+    @Test
+    void deletionUsesPathScopeAndAuthenticatedPrincipal() throws Exception {
+        mvc.perform(delete("/spaces/1/agent/sessions/2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(1));
+
+        verify(service).deleteSession(1L, 2L, user);
     }
 
     @Test

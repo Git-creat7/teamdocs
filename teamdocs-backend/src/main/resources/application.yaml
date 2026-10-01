@@ -1,7 +1,6 @@
 # 端口配置
 server:
-  port: 8080
-
+  port: ${SERVER_PORT:8080}
 # Spring配置
 spring:
   application:
@@ -71,15 +70,20 @@ management:
 # Agent
 teamdocs:
   agent:
-    enabled: ${AGENT_ENABLED:false}
     base-url: ${AGENT_BASE_URL:}
     api-key: ${AGENT_API_KEY:}
     model-name: ${AGENT_MODEL_NAME:}
     timeout-seconds: ${AGENT_TIMEOUT_SECONDS:60}
-    allow-document-egress: ${AGENT_ALLOW_DOCUMENT_EGRESS:false}
-    input-price-per-million: ${AGENT_INPUT_PRICE_PER_MILLION:}
-    output-price-per-million: ${AGENT_OUTPUT_PRICE_PER_MILLION:}
-    daily-budget: ${AGENT_DAILY_BUDGET:}
+    max-input-tokens: 500000
+    max-output-tokens: 4096
+    # MCP: 联网搜索与外部工具扩展
+    mcp:
+      servers:
+        web-search:
+          type: http
+          url: ${MCP_STEP_URL:}
+          headers:
+            Authorization: "Bearer ${MCP_STEP_API_KEY:}"
   parse:
     enabled: ${PARSE_ENABLED:true}
     max-bytes: ${PARSE_MAX_BYTES:10485760}
@@ -99,3 +103,19 @@ teamdocs:
     enabled: ${ES_ENABLED:false}
     url: ${ES_URL:http://localhost:9200}
     index: ${ES_INDEX:teamdocs-chunks}
+  embedding:
+    base-url: ${EMBEDDING_BASE_URL:}
+    api-key: ${EMBEDDING_API_KEY:}
+    model-name: ${EMBEDDING_MODEL:}
+    dimensions: ${EMBEDDING_DIMENSIONS:1024}
+    timeout-seconds: ${EMBEDDING_TIMEOUT_SECONDS:10}
+  rerank:
+    base-url: ${RERANK_BASE_URL:}
+    api-key: ${RERANK_API_KEY:}
+    model-name: ${RERANK_MODEL:}
+    timeout-seconds: ${RERANK_TIMEOUT_SECONDS:10}
+  milvus:
+    url: ${MILVUS_URL:http://127.0.0.1:19530}
+    token: ${MILVUS_TOKEN:}
+    collection: ${MILVUS_COLLECTION:teamdocs_qwen3_8b_d1024_v1}
+    timeout-seconds: ${MILVUS_TIMEOUT_SECONDS:3}

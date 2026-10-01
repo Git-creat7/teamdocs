@@ -18,6 +18,14 @@ public class AgentExecutionConfiguration {
     @Bean(name = "agentModelExecutor", destroyMethod = "shutdownNow")
     public ExecutorService models() { return pool("agent-model-", new SynchronousQueue<>()); }
 
+    @Bean(name = "agentEventExecutor", destroyMethod = "shutdownNow")
+    public ExecutorService eventsExecutor() { return pool("agent-events-", new ArrayBlockingQueue<>(32)); }
+
+    @Bean
+    public AgentEventHub agentEventHub(@org.springframework.beans.factory.annotation.Qualifier("agentEventExecutor") ExecutorService executor) {
+        return new AgentEventHub(executor);
+    }
+
     private ExecutorService pool(String prefix, BlockingQueue<Runnable> queue) {
         AtomicInteger number = new AtomicInteger();
         return new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, queue, task -> {
