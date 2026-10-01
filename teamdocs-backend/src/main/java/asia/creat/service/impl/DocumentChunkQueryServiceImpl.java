@@ -16,6 +16,8 @@ import asia.creat.vo.ChunkIndexHit;
 import asia.creat.vo.ChunkCitationVO;
 import asia.creat.vo.ChunkHitVO;
 import asia.creat.vo.ChunkReadVO;
+import asia.creat.retrieval.HybridChunkSearch;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.util.HtmlUtils;
@@ -37,16 +39,23 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
     private final SpaceMapper spaceMapper;
     private final RetrievalProperties retrievalProperties;
     private final ChunkIndex chunkIndex;
+    private final Optional<HybridChunkSearch> hybrid;
 
     @Override
     @RequireSpaceRole
     public List<ChunkHitVO> searchChunks(@SpaceId Long spaceId, String keyword, LoginUser loginUser) {
+        if (hybrid.isPresent() && hybrid.get().enabled()) {
+            return fitExcerpts(hybrid.get().search(spaceId, null, keyword, loginUser, retrievalProperties.getSearchLimit()));
+        }
         return search(spaceId, null, keyword);
     }
 
     @Override
     @RequireSpaceRole
     public List<ChunkHitVO> searchChunksInDocument(@SpaceId Long spaceId, Long documentId, String keyword, LoginUser loginUser) {
+        if (hybrid.isPresent() && hybrid.get().enabled()) {
+            return fitExcerpts(hybrid.get().search(spaceId, documentId, keyword, loginUser, retrievalProperties.getSearchLimit()));
+        }
         return search(spaceId, documentId, keyword);
     }
 

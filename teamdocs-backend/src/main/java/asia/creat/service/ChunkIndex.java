@@ -7,6 +7,12 @@ import java.util.List;
 public interface ChunkIndex {
     boolean enabled();
     List<ChunkIndexHit> search(Long spaceId, String keyword, int limit);
+    /** 在最终截断前提供有界候选，供混合检索融合与重排。 */
+    default List<ChunkIndexHit> searchCandidates(Long spaceId, Long documentId, String keyword, int limit) {
+        return search(spaceId, keyword, limit).stream()
+                .filter(hit -> documentId == null || documentId.equals(hit.getDocumentId()))
+                .toList();
+    }
     void syncDocument(Long documentId);
     int rebuild();
 }

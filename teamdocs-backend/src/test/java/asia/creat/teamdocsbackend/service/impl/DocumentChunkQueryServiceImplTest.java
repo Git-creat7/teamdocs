@@ -56,7 +56,7 @@ class DocumentChunkQueryServiceImplTest {
         properties.setSearchLimit(6);
         properties.setReadLimit(20);
         properties.setMaxChars(8);
-        service = new DocumentChunkQueryServiceImpl(documentContentMapper, documentMapper, spaceMapper, properties, chunkIndex);
+        service = new DocumentChunkQueryServiceImpl(documentContentMapper, documentMapper, spaceMapper, properties, chunkIndex, java.util.Optional.empty());
     }
 
     @Test

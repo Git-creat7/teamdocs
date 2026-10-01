@@ -12,4 +12,6 @@ public class RetrievalProperties {
     private int readLimit = 20;
     /** 一次返回的正文总字符上限 */
     private int maxChars = 4000;
+    /** 可显式关闭；未配置可用客户端时仍走原关键词路径。 */
+    private boolean hybridEnabled = true;
 }

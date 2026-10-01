@@ -12,7 +12,7 @@ import static org.mockito.Mockito.*;
 
 class DocumentIndexSyncTest {
     private final ChunkIndex index = mock(ChunkIndex.class);
-    private final DocumentIndexSync sync = new DocumentIndexSync(index);
+    private final DocumentIndexSync sync = new DocumentIndexSync(index, java.util.Optional.empty());
 
     @AfterEach
     void clear() { TransactionSynchronizationManager.clear(); }

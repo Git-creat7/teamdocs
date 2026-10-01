@@ -61,12 +61,22 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
 
     @Override
     public List<ChunkIndexHit> search(Long spaceId, String keyword, int limit) {
+        return searchCandidates(spaceId, null, keyword, Math.min(6, Math.max(1, limit)));
+    }
+
+    @Override
+    public List<ChunkIndexHit> searchCandidates(Long spaceId, Long documentId, String keyword, int limit) {
         try {
             var response = client.search(request -> request.index(properties.getIndex())
-                            .size(Math.min(6, Math.max(1, limit)))
-                            .query(query -> query.bool(bool -> bool
-                                    .must(must -> must.match(match -> match.field("content").query(keyword)))
-                                    .filter(filter -> filter.term(term -> term.field("space_id").value(spaceId)))))
+                            .size(Math.min(20, Math.max(1, limit)))
+                            .query(query -> query.bool(bool -> {
+                                bool.must(must -> must.match(match -> match.field("content").query(keyword)))
+                                        .filter(filter -> filter.term(term -> term.field("space_id").value(spaceId)));
+                                if (documentId != null) {
+                                    bool.filter(filter -> filter.term(term -> term.field("document_id").value(documentId)));
+                                }
+                                return bool;
+                            }))
                             .highlight(highlight -> highlight.encoder(HighlighterEncoder.Html)
                                     .preTags("<mark>").postTags("</mark>")
                                     .fields("content", field -> field.fragmentSize(160).numberOfFragments(1))),
