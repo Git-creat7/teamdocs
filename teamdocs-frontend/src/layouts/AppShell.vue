@@ -139,6 +139,10 @@
 
             <!-- 展开的直达入口：成员 / 标签 / 回收站 -->
             <div v-if="!effectiveCollapsed && expandedSpaceIds.has(space.id)" class="space-sublinks">
+              <button type="button" class="space-sublink" :aria-label="`${space.name}：文档问答`"
+                @click="router.push({ name: 'SpaceAgent', params: { spaceId: space.id } })">
+                <el-icon><MessageSquare /></el-icon><span>文档问答</span>
+              </button>
               <button
                 type="button"
                 class="space-sublink"
@@ -305,7 +309,7 @@
       <main class="shell-content">
         <router-view v-slot="{ Component }">
           <transition name="page" mode="out-in">
-            <component :is="Component" :key="route.path" />
+            <component :is="Component" :key="route.name === 'SpaceAgent' ? 'SpaceAgent' : route.path" />
           </transition>
         </router-view>
       </main>
@@ -404,7 +408,8 @@ import {
   FileText,
   SearchX,
   Menu,
-  UsersRound
+  UsersRound,
+  MessageSquare
 } from 'lucide-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
 import { createSpaceApi } from '@/api/space'
