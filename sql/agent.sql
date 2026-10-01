@@ -1,4 +1,12 @@
--- 仅用于全新空库初始化。模型请求、正文与私有思维链不写入运行追踪。
+
+DROP TABLE IF EXISTS agent_session;
+DROP TABLE IF EXISTS agent_run;
+DROP TABLE IF EXISTS agent_message;
+DROP TABLE IF EXISTS agent_tool_call;
+DROP TABLE IF EXISTS agent_model_call;
+
+
+-- 初始化
 CREATE TABLE agent_session (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     space_id BIGINT NOT NULL,
@@ -61,24 +69,17 @@ CREATE TABLE agent_tool_call (
     UNIQUE KEY uk_agent_tool (run_id, sequence)
 );
 
--- 每次付费尝试的预占凭证。用量未知时保留 charged_cost=reserved_cost，不退款或重放。
+-- 每次模型尝试的用量记录。未知用量不自动重试；调用计数与记录在同一事务内写入。
 CREATE TABLE agent_model_call (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     run_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
     sequence INT NOT NULL,
-    quota_day DATE NOT NULL,
     estimated_input INT NOT NULL,
     max_output INT NOT NULL,
-    input_price DECIMAL(20,8) NOT NULL,
-    output_price DECIMAL(20,8) NOT NULL,
-    reserved_cost DECIMAL(20,8) NOT NULL,
-    charged_cost DECIMAL(20,8) NOT NULL,
     input_tokens BIGINT,
     output_tokens BIGINT,
     usage_known BOOLEAN NOT NULL DEFAULT FALSE,
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    UNIQUE KEY uk_agent_model (run_id, sequence),
-    INDEX idx_agent_daily_quota (user_id, quota_day),
-    CHECK (reserved_cost >= 0 AND charged_cost >= 0)
+    UNIQUE KEY uk_agent_model (run_id, sequence)
 );

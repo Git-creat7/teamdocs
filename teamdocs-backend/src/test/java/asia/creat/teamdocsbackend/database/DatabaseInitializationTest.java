@@ -14,7 +14,6 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -28,12 +27,9 @@ class DatabaseInitializationTest {
     void initializesEmptyDatabaseUsingDeploymentScripts() throws Exception {
         try (Connection connection = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
              Statement statement = connection.createStatement()) {
-            // 与 docker-compose.yaml 中的初始化顺序一致。
-            for (String script : List.of("initUser.sql", "initSpace.sql", "initDocument.sql",
-                    "initComment.sql", "initOperationLog.sql", "fulltext_index.sql", "document_content.sql", "agent.sql")) {
-                ScriptUtils.executeSqlScript(connection, new EncodedResource(
-                        new FileSystemResource("../sql/" + script), StandardCharsets.UTF_8));
-            }
+            // 与 docker-compose.yaml 中的单一初始化入口一致。
+            ScriptUtils.executeSqlScript(connection, new EncodedResource(
+                    new FileSystemResource("../sql/init.sql"), StandardCharsets.UTF_8));
             Set<String> tables = new HashSet<>();
             try (ResultSet rows = statement.executeQuery("SHOW TABLES")) {
                 while (rows.next()) {
@@ -41,7 +37,7 @@ class DatabaseInitializationTest {
                 }
             }
             assertEquals(Set.of("user", "space", "space_member", "folder", "document", "tag",
-                    "document_tag", "comment", "operation_log", "document_content", "agent_session", "agent_run", "agent_message", "agent_tool_call", "agent_model_call"), tables);
+                    "document_tag", "comment", "operation_log", "document_content", "agent_session", "agent_run", "agent_message", "agent_tool_call", "agent_model_call", "document_vector_task"), tables);
 
             statement.execute("INSERT INTO document (space_id, folder_id, name, file_path, upload_by) VALUES (1, 0, '上线检查', 'space/1/checks.txt', 1)");
             try (ResultSet row = statement.executeQuery("SELECT parse_status, chunk_count, parse_version, parse_started_at FROM document")) {

@@ -7,7 +7,7 @@ CREATE TABLE document_content (
     space_id    BIGINT     NOT NULL COMMENT '所属空间ID',
     chunk_index INT        NOT NULL COMMENT '分块序号，从0开始递增',
     content     MEDIUMTEXT NOT NULL COMMENT '正文分块文本内容',
-    token_count INT        NOT NULL DEFAULT 0 COMMENT '粗估 token，不是模型计费值',
+    token_count INT        NOT NULL DEFAULT 0 COMMENT '粗估 token，不代表模型实际用量',
     page_number INT        DEFAULT NULL COMMENT 'PDF 页码，从 1 开始',
     char_start  INT        DEFAULT NULL COMMENT '块在提取文本中的起始偏移',
     char_end    INT        DEFAULT NULL COMMENT '块在提取文本中的结束偏移',
