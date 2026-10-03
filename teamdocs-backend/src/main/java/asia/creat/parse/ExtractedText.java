@@ -24,6 +24,10 @@ public final class ExtractedText {
         return new ExtractedText(false, null, List.copyOf(segments));
     }
 
-    public record Segment(Integer pageNumber, String text) {
+    public record Segment(Integer pageNumber, String text, String imageRef, String imageLabel) {
+        /** 保留纯文本片段构造方式。 */
+        public Segment(Integer pageNumber, String text) {
+            this(pageNumber, text, null, null);
+        }
     }
 }

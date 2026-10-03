@@ -50,7 +50,7 @@ md.renderer.rules.fence = (tokens, index) => {
 
 // 仅处理 Markdown 正文 token；代码、链接、图片属性和转义示例不参与引用转换。
 md.core.ruler.after('linkify', 'file_citations', (state) => {
-  const lookup = state.env.citationLookup
+  const lookup = state.env?.citationLookup || new Map()
 
   for (const block of state.tokens) {
     if (block.type !== 'inline' || !block.children) continue

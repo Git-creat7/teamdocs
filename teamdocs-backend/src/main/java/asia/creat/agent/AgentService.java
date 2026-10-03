@@ -11,6 +11,7 @@ import asia.creat.security.LoginUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
@@ -24,6 +25,7 @@ public class AgentService {
     private final AgentTools tools;
     private final AgentJson json;
     private final AgentEventHub events;
+    private final ObjectProvider<AgentReasoningRegistry> reasoning;
 
     @RequireSpaceRole
     public Session createSession(@SpaceId Long spaceId, NewSession request, LoginUser user) {
@@ -67,6 +69,7 @@ public class AgentService {
         mapper.deleteSessionMessages(sessionId);
         mapper.deleteSessionRuns(sessionId);
         mapper.deleteSession(sessionId, spaceId, user.getUserId());
+        reasoning.ifAvailable(registry -> registry.forgetSession(sessionId));
         log.info("AgentService 会话删除成功: spaceId={}, sessionId={}", spaceId, sessionId);
     }
 
@@ -114,6 +117,7 @@ public class AgentService {
         ownedRun(spaceId, runId, user);
         if (mapper.endActive(runId, "CANCELLED", "USER_CANCELLED") == 1) {
             log.info("AgentService 运行已标记取消: runId={}", runId);
+            worker.cancelModel(runId);
             events.publish(runId, "run_finished");
         }
         return snapshot(spaceId, user, mapper.run(runId));
@@ -127,15 +131,39 @@ public class AgentService {
             output += call.getOutputTokens() == null ? 0 : call.getOutputTokens();
             unknown |= !call.isUsageKnown();
         }
+        MessageView answer = runtimeAnswer(spaceId, user, run, visible(spaceId, user, mapper.answer(run.getId())));
         return new RunView(run.getId(), run.getSessionId(), run.getStatus(), run.getErrorCode(), run.getModelCalls(), run.getToolCalls(),
-                input, output, unknown, visible(spaceId, user, mapper.answer(run.getId())), mapper.traces(run.getId()),
-                run.getCreatedAt(), run.getDeadlineMs());
+                input, output, unknown, answer, mapper.traces(run.getId()), run.getCreatedAt(), run.getDeadlineMs());
+    }
+
+    /** 仅为运行快照附加内存思考，历史消息接口不读取该缓存。 */
+    private MessageView runtimeAnswer(Long spaceId, LoginUser user, Run run, MessageView answer) {
+        AgentReasoningRegistry registry = reasoning.getIfAvailable();
+        AgentReasoningRegistry.Entry entry = registry == null ? null : registry.get(run);
+        if (entry == null || (answer != null && answer.masked())) return answer;
+        boolean invalid;
+        try {
+            invalid = tools.currentDependencies(spaceId, user, entry.dependencies());
+        } catch (AgentFailure e) {
+            invalid = true;
+        }
+        if (invalid) {
+            return new MessageView(answer == null ? null : answer.id(), run.getId(), "ASSISTANT",
+                    "资料已更新或不可访问，思考和回答已隐藏。", true, List.of(), run.getCreatedAt(),
+                    null, null, false, run.getStatus());
+        }
+        ReasoningProgress progress = entry.progress();
+        return new MessageView(answer == null ? null : answer.id(), run.getId(), "ASSISTANT",
+                answer == null ? "" : answer.text(), false, answer == null ? List.of() : answer.citations(),
+                answer == null ? run.getCreatedAt() : answer.createdAt(), progress.content(), progress.durationMs(),
+                progress.truncated(), run.getStatus());
     }
 
     private MessageView visible(Long spaceId, LoginUser user, Message message) {
         if (message == null) return null;
         if ("USER".equals(message.getRole()))
-            return new MessageView(message.getId(), message.getRunId(), message.getRole(), message.getBody(), false, List.of(), message.getCreatedAt());
+            return new MessageView(message.getId(), message.getRunId(), message.getRole(), message.getBody(), false,
+                    List.of(), message.getCreatedAt(), null, null, false, message.getRunStatus());
         try {
             List<Dependency> dependencies = json.dependencies(message.getDependencies());
             if (tools.currentDependencies(spaceId, user, dependencies))
@@ -145,12 +173,14 @@ public class AgentService {
 
             if (tools.currentDependencies(spaceId, user, dependencies))
                 return masked(message);
-            return new MessageView(message.getId(), message.getRunId(), message.getRole(), message.getBody(), false, sources, message.getCreatedAt());
+            return new MessageView(message.getId(), message.getRunId(), message.getRole(), message.getBody(), false,
+                    sources, message.getCreatedAt(), null, null, false, message.getRunStatus());
         } catch (AgentFailure e) { return masked(message); }
     }
 
     private MessageView masked(Message message) {
-        return new MessageView(message.getId(), message.getRunId(), message.getRole(), "资料已更新或不可访问，原回答已隐藏。", true, List.of(), message.getCreatedAt());
+        return new MessageView(message.getId(), message.getRunId(), message.getRole(), "资料已更新或不可访问，原回答已隐藏。", true,
+                List.of(), message.getCreatedAt(), null, null, false, message.getRunStatus());
     }
     private Run ownedRun(Long spaceId, Long runId, LoginUser user) {
         Run run = mapper.run(runId);
@@ -158,7 +188,10 @@ public class AgentService {
             throw new BusinessException("运行不存在");
         requireSession(spaceId, run.getSessionId(), user);
         if (("QUEUED".equals(run.getStatus()) || "RUNNING".equals(run.getStatus())) && run.getDeadlineMs() <= System.currentTimeMillis()) {
-            if (mapper.endActive(runId, "TIMED_OUT", "RUN_TIMEOUT") == 1) events.publish(runId, "run_failed");
+            if (mapper.endActive(runId, "TIMED_OUT", "RUN_TIMEOUT") == 1) {
+                worker.cancelModel(runId);
+                events.publish(runId, "run_failed");
+            }
             return mapper.run(runId);
         }
         return run;

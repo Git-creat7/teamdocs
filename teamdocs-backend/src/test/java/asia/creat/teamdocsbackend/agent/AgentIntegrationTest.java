@@ -80,6 +80,7 @@ class AgentIntegrationTest {
     @Autowired ScriptedModel model;
     @Autowired DataSource dataSource;
     @Autowired DocumentService documents;
+    @Autowired AgentReasoningRegistry reasoningRegistry;
 
     @Autowired
     @Qualifier("agentWorkerExecutor")
@@ -158,6 +159,59 @@ class AgentIntegrationTest {
     @AfterEach
     void after() throws Exception {
         idle();
+    }
+
+    /** 思考只存在运行快照，结束和读取历史都不写入正文表。 */
+    @Test
+    void reasoningIsRuntimeOnlyAndNeverStoredWithMessages() {
+        Run run = reasoningRun("runtime-only");
+        assertTrue(reasoningRegistry.publish(run, new ReasoningProgress("runtime-only marker", 25L, false), List.of()));
+        assertEquals("runtime-only marker", service.run(1L, run.getId(), USER).reasoningContent());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM agent_message WHERE run_id=?", Integer.class, run.getId()));
+        assertTrue(store.finish(run, "SUCCEEDED", null, "完成", List.of(), List.of()));
+        assertTrue(service.messages(1L, run.getSessionId(), new PageQuery(), USER).getRecords().stream()
+                .allMatch(message -> message.reasoningContent() == null));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM agent_message WHERE body LIKE '%runtime-only marker%'", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() "
+                + "AND table_name='agent_message' AND column_name LIKE 'reasoning%'", Integer.class));
+        reasoningRegistry.forgetSession(run.getSessionId());
+        assertNull(service.run(1L, run.getId(), USER).reasoningContent());
+    }
+
+    /** 元数据来源变更也遮蔽尚未产生最终回答的思考。 */
+    @Test
+    void invalidSourceMasksTransientReasoningWithoutAnAnswerRow() {
+        Run run = reasoningRun("reasoning-source");
+        Dependency source = jdbc.queryForObject("SELECT * FROM document WHERE id=10", (row, number) ->
+                new Dependency(10L, row.getInt("parse_version"), row.getString("parse_status"),
+                        row.getString("name"), row.getTimestamp("updated_at").toLocalDateTime()));
+        assertTrue(reasoningRegistry.publish(run, new ReasoningProgress("来自文档的思考", 10L, false), List.of(source)));
+        jdbc.update("UPDATE document SET deleted=1 WHERE id=10");
+        RunView result = service.run(1L, run.getId(), USER);
+        assertNull(result.reasoningContent());
+        assertNull(result.reasoningDurationMs());
+        assertTrue(result.answer().masked());
+        assertNull(mapper.answer(run.getId()));
+    }
+
+    /** 取消后拒绝迟到思考，同时保留已合法发布的本页内容。 */
+    @Test
+    void cancelledRunRejectsLateReasoningWithoutPersistingIt() {
+        Run run = reasoningRun("reasoning-cancel");
+        assertTrue(reasoningRegistry.publish(run, new ReasoningProgress("取消前", 10L, false), List.of()));
+        assertEquals("CANCELLED", service.cancel(1L, run.getId(), USER).status());
+        assertFalse(reasoningRegistry.publish(run, new ReasoningProgress("迟到内容", 20L, false), List.of()));
+        assertEquals("取消前", service.run(1L, run.getId(), USER).reasoningContent());
+        assertNull(mapper.answer(run.getId()));
+        assertThrows(BusinessException.class, () -> service.run(1L, run.getId(), new LoginUser(8L, "bob")));
+    }
+
+    /** 建立已领取但不启动模型线程的隔离运行。 */
+    private Run reasoningRun(String key) {
+        Session session = store.createSession(1L, USER.getUserId(), "临时思考测试");
+        Run run = store.createRun(1L, session.getId(), USER.getUserId(), new NewRun(key, "合成问题")).run();
+        assertEquals(1, mapper.claim(run.getId(), System.currentTimeMillis()));
+        return mapper.run(run.getId());
     }
 
     @Test
@@ -351,7 +405,17 @@ class AgentIntegrationTest {
         CountDownLatch release = new CountDownLatch(1);
         model.reset((messages, specs) -> {
             entered.countDown();
-            awaitLatch(release);
+            // 模拟底层请求不能立即停止，确保测到“尚未退出”而非已取消完成。
+            boolean interrupted = false;
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+            while (release.getCount() > 0 && System.nanoTime() < deadline) {
+                try {
+                    release.await(100, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+            if (interrupted) Thread.currentThread().interrupt();
             return answer("取消后不能发布的结果");
         });
         long id = submit("delete-active");
@@ -363,6 +427,10 @@ class AgentIntegrationTest {
 
             service.cancel(1L, id, USER);
             assertEquals("CANCELLED", mapper.run(id).getStatus());
+            await(() -> ((ThreadPoolExecutor) executor).getActiveCount() == 0, 5000);
+            assertEquals(1, ((ThreadPoolExecutor) modelExecutor).getActiveCount());
+            assertTrue(worker.isExecuting(id), "the model still runs after the worker exits");
+            assertNull(mapper.answer(id));
             assertThrows(BusinessException.class, () -> service.deleteSession(1L, session, USER));
             assertNotNull(mapper.session(session, 1L, 7L));
         } finally {
@@ -370,6 +438,8 @@ class AgentIntegrationTest {
         }
 
         idle();
+        assertEquals("CANCELLED", mapper.run(id).getStatus());
+        assertNull(mapper.answer(id));
         service.deleteSession(1L, session, USER);
         assertNull(mapper.run(id));
         assertTrue(mapper.modelCalls(id).isEmpty());
@@ -988,6 +1058,7 @@ class AgentIntegrationTest {
         AgentWorker.class,
         AgentTools.class,
         AgentBudget.class,
+        AgentReasoningRegistry.class,
         AgentJson.class,
         AgentExecutionConfiguration.class,
         DocumentServiceImpl.class,

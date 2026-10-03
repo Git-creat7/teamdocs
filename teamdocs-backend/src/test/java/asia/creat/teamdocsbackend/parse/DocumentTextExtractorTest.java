@@ -68,7 +68,7 @@ class DocumentTextExtractorTest {
                 new ByteArrayInputStream(new byte[]{1, 2, 3})
         );
         assertTrue(image.isSkipped());
-        assertEquals("不支持解析该文件类型", image.getReason());
+        assertEquals("未配置图像理解服务", image.getReason());
     }
 
     @Test

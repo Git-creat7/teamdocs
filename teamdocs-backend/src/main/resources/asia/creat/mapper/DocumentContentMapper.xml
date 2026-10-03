@@ -13,6 +13,8 @@
         c.page_number,
         c.char_start,
         c.char_end,
+        c.image_ref,
+        c.image_label,
         c.content AS excerpt,
         d.name AS document_name,
         d.parse_version

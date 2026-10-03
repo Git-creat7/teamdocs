@@ -52,6 +52,39 @@ export function previewDocumentApi(spaceId, documentId) {
   return request.get(`/spaces/${spaceId}/documents/${documentId}/preview`)
 }
 
+/** 经后端鉴权读取分块对应原图，不使用持久化的预签名 URL。 */
+export async function previewChunkImageApi(spaceId, documentId, chunkId, parseVersion, signal) {
+  let blob
+  try {
+    blob = await request.get(`/spaces/${encodeURIComponent(spaceId)}/documents/${encodeURIComponent(documentId)}/chunks/${encodeURIComponent(chunkId)}/image`, {
+      params: { parseVersion }, responseType: 'blob', signal, silent: true
+    })
+  } catch (cause) {
+    if (cause.name === 'AbortError' || cause.code === 'ERR_CANCELED') throw cause
+    const detail = await imageFailure(cause.response?.data)
+    if (detail.msg) cause.message = detail.msg
+    const status = cause.response?.status
+    cause.code = detail.errorCode || (status === 401 ? 'ACCESS_REVOKED'
+      : [403, 404, 409, 410].includes(status) ? 'SOURCE_CHANGED' : 'IMAGE_UNAVAILABLE')
+    throw cause
+  }
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(blob?.type) || !blob.size || blob.size > 4 * 1024 * 1024) {
+    const detail = await imageFailure(blob)
+    const error = new Error(detail.msg || '原图加载失败，请重试')
+    error.code = detail.errorCode || 'IMAGE_UNAVAILABLE'
+    throw error
+  }
+  return blob
+}
+
+/** 只读取有界 JSON 错误，不把繁忙或网络异常误判为来源失效。 */
+async function imageFailure(body) {
+  if (body?.type?.includes('json') && body.size <= 65536) {
+    try { return JSON.parse(await body.text()) } catch { return {} }
+  }
+  return body && typeof body === 'object' && typeof body.msg === 'string' ? body : {}
+}
+
 /**
  * 文档详情 (含标签列表；后端同时记入最近浏览)
  * @param {number|string} spaceId

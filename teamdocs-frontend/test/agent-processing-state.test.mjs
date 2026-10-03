@@ -46,6 +46,16 @@ test('a completed zero-tool reply leaves no retrieval panel', async () => {
   assert.doesNotMatch(html, /agent-activity|检索|工具调用|<details/)
 })
 
+test('succeeded tools display a static checkmark and only running tools have the spin class', async () => {
+  const html = await render({
+    status: 'RUNNING',
+    toolCalls: 2,
+    tools: [tool(1, 'read_document_chunks', 'SUCCEEDED'), tool(2, 'search_documents', 'RUNNING')]
+  })
+  assert.match(html, /<svg[^>]*class="[^"]*tool-status-icon\s+is-ok[^"]*"/)
+  assert.match(html, /<svg[^>]*class="[^"]*agent-progress-spin\s+tool-status-icon\s+is-running[^"]*"/)
+})
+
 test('cancelled steps stop animating and never display raw reasoning or answer text', async () => {
   const html = await render({
     status: 'CANCELLED', toolCalls: 1, tools: [tool(1, 'read_document_chunks')], errorCode: 'USER_CANCELLED',

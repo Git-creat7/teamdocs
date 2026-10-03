@@ -23,6 +23,9 @@ public class DocumentContent {
     private Integer pageNumber;
     private Integer charStart;
     private Integer charEnd;
+    /** 原图在原文件内的稳定定位，不保存临时访问 URL。 */
+    private String imageRef;
+    private String imageLabel;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

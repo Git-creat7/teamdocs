@@ -10,6 +10,7 @@ export function useAgentChat(onSessionCreated) {
   const sessions = ref([])
   const messages = ref([])
   const snapshot = ref(null)
+  const reasoningByRun = ref(new Map())
   const draft = ref('')
   const pendingQuestion = ref(null)
   const pendingRequest = ref(null)
@@ -44,10 +45,77 @@ export function useAgentChat(onSessionCreated) {
   const deletingCurrent = computed(() => !!deletingSessionId.value && deletingSessionId.value === sessionId.value)
   const visibleMessages = computed(() => {
     const rows = [...messages.value]
-    if (pendingQuestion.value && !rows.some((row) => row.role === 'USER' && String(row.runId) === String(pendingQuestion.value.runId))) rows.push(pendingQuestion.value)
-    if (snapshot.value?.answer && !rows.some((row) => row.role === 'ASSISTANT' && String(row.runId) === activeRunId.value)) rows.push(snapshot.value.answer)
-    return rows
+    for (const [runId, reasoning] of reasoningByRun.value) {
+      if (!reasoning || rows.some((row) => row.role === 'ASSISTANT' && String(row.runId) === runId)) continue
+      const questionIndex = rows.findIndex((row) => row.role === 'USER' && String(row.runId) === runId)
+      // 缓存不能把已掉出当前历史页的旧轮次重新追加到末尾。
+      if (questionIndex < 0) continue
+      const message = { id: `pending-answer-${runId}`, runId, role: 'ASSISTANT', text: '', masked: false, citations: [] }
+      rows.splice(questionIndex + 1, 0, message)
+    }
+    if (pendingQuestion.value && !rows.some((row) => row.role === 'USER' && String(row.runId) === String(pendingQuestion.value.runId))) {
+      const answerIndex = rows.findIndex((row) => row.role === 'ASSISTANT' && String(row.runId) === String(pendingQuestion.value.runId))
+      rows.splice(answerIndex < 0 ? rows.length : answerIndex, 0, pendingQuestion.value)
+    }
+    if (activeRunId.value) {
+      const index = rows.findIndex((row) => row.role === 'ASSISTANT' && String(row.runId) === activeRunId.value)
+      const saved = rows[index]
+      const answer = saved?.masked ? saved : snapshot.value?.answer || saved || {
+        id: `pending-answer-${activeRunId.value}`, runId: activeRunId.value, role: 'ASSISTANT', text: '', masked: false, citations: []
+      }
+      const message = withReasoning(answer, snapshot.value || { status: answer.runStatus || 'QUEUED' })
+      if (index < 0) rows.push(message)
+      else rows[index] = message
+    }
+    return rows.map((message) => withReasoning(message))
   })
+
+  /** 只展示本页面收到且未被遮蔽的思考。 */
+  function withReasoning(message, run = null) {
+    const key = String(message.runId)
+    const blocked = message.role === 'ASSISTANT' && (message.masked || (reasoningByRun.value.has(key) && reasoningByRun.value.get(key) === null))
+    const cached = message.role === 'ASSISTANT' && !blocked ? reasoningByRun.value.get(key) : null
+    return {
+      ...message,
+      ...(blocked ? { masked: true, text: message.masked ? message.text : '资料已更新或不可访问，原回答已隐藏。', citations: [] } : {}),
+      reasoningContent: cached?.reasoningContent ?? null,
+      reasoningDurationMs: cached?.reasoningDurationMs ?? null,
+      reasoningTruncated: cached?.reasoningTruncated ?? false,
+      runStatus: run?.status ?? cached?.runStatus ?? message.runStatus ?? null
+    }
+  }
+
+  /** 暂存完整思考快照，null 标记已被权威答复遮蔽。 */
+  function rememberReasoning(value) {
+    const key = String(value.id)
+    if (value.answer?.masked) {
+      reasoningByRun.value.set(key, null)
+      return
+    }
+    if (reasoningByRun.value.has(key) && reasoningByRun.value.get(key) === null) return
+    const previous = reasoningByRun.value.get(key)
+    const content = value.reasoningContent ?? value.answer?.reasoningContent
+    const received = typeof content === 'string' && !!content.trim()
+    if (!received && !previous) return
+    reasoningByRun.value.set(key, {
+      reasoningContent: received ? content : previous.reasoningContent,
+      reasoningDurationMs: received
+        ? (value.reasoningDurationMs !== undefined ? value.reasoningDurationMs : value.answer?.reasoningDurationMs ?? null)
+        : previous?.reasoningDurationMs ?? null,
+      reasoningTruncated: received ? value.reasoningTruncated ?? value.answer?.reasoningTruncated ?? false : previous.reasoningTruncated,
+      runStatus: value.status
+    })
+  }
+
+  /** 同步清除快照中的脱敏思考投影。 */
+  function normalizeRun(value) {
+    const blocked = value.answer?.masked || (reasoningByRun.value.has(String(value.id)) && reasoningByRun.value.get(String(value.id)) === null)
+    return {
+      ...value,
+      ...(blocked ? { reasoningContent: null, reasoningDurationMs: null, reasoningTruncated: false } : {}),
+      answer: value.answer ? withReasoning({ ...value.answer, runId: value.answer.runId ?? value.id }, value) : null
+    }
+  }
 
   function stopObserving() {
     streamRevision++
@@ -77,6 +145,7 @@ export function useAgentChat(onSessionCreated) {
     loadingSessions.value = false
     cancelling.value = false
     messages.value = []
+    reasoningByRun.value.clear()
     snapshot.value = null
     pendingQuestion.value = null
     pendingRequest.value = null
@@ -126,6 +195,7 @@ export function useAgentChat(onSessionCreated) {
     sessionId.value = nextSession
     activeRunId.value = ''
     messages.value = []
+    reasoningByRun.value.clear()
     snapshot.value = null
     pendingQuestion.value = null
     pendingRequest.value = null
@@ -219,7 +289,12 @@ export function useAgentChat(onSessionCreated) {
       const result = await api.listAgentMessages(expected.spaceId, expected.sessionId, page, requests.signal)
       if (!current(expected) || requestId !== historyRequest) return
       const rows = append ? [...messages.value, ...result.records] : result.records
-      messages.value = [...new Map(rows.map((row) => [String(row.id), row])).values()].sort((a, b) => Number(a.id) - Number(b.id))
+      for (const row of result.records) {
+        if (row.role === 'ASSISTANT' && row.masked) reasoningByRun.value.set(String(row.runId), null)
+      }
+      messages.value = [...new Map(rows.map((row) => [String(row.id), withReasoning(row)])).values()].sort((a, b) => Number(a.id) - Number(b.id))
+      const maskedAnswer = messages.value.find((row) => row.role === 'ASSISTANT' && String(row.runId) === activeRunId.value && row.masked)
+      if (snapshot.value && maskedAnswer) snapshot.value = normalizeRun({ ...snapshot.value, answer: maskedAnswer })
       historyPage.value = page
       historyPages.value = result.pages
       if (pendingQuestion.value && messages.value.some((row) => row.role === 'USER' && String(row.runId) === String(pendingQuestion.value.runId))) pendingQuestion.value = null
@@ -244,8 +319,13 @@ export function useAgentChat(onSessionCreated) {
 
   function applySnapshot(value) {
     if (String(value.id) !== activeRunId.value || String(value.sessionId) !== sessionId.value) return
-    snapshot.value = value
-    messages.value = messages.value.map((message) => message.role === 'ASSISTANT' && String(message.runId) === String(value.id) && value.answer ? value.answer : message)
+    rememberReasoning(value)
+    snapshot.value = normalizeRun(value)
+    if (snapshot.value.answer?.id != null) {
+      const index = messages.value.findIndex((message) => message.role === 'ASSISTANT' && String(message.runId) === activeRunId.value)
+      if (index < 0) messages.value = [...messages.value, snapshot.value.answer]
+      else messages.value = messages.value.map((message, position) => position === index ? snapshot.value.answer : message)
+    }
     if (isTerminalRun(value.status)) {
       connection.value = 'idle'
       void loadMessages()
@@ -373,8 +453,11 @@ export function useAgentChat(onSessionCreated) {
   async function verifyCitations(runId, sourceIds) {
     const expected = ticket()
     try {
-      const value = await api.getAgentRun(expected.spaceId, runId, requests.signal)
+      const result = await api.getAgentRun(expected.spaceId, runId, requests.signal)
       if (!current(expected)) throw new DOMException('Aborted', 'AbortError')
+      if (!result.answer) reasoningByRun.value.set(String(runId), null)
+      rememberReasoning(result)
+      const value = normalizeRun(result)
       messages.value = messages.value.filter((row) => row.role !== 'ASSISTANT' || String(row.runId) !== String(runId) || value.answer)
         .map((row) => row.role === 'ASSISTANT' && String(row.runId) === String(runId) ? value.answer : row)
       if (String(runId) === activeRunId.value) snapshot.value = value
@@ -407,6 +490,11 @@ export function useAgentChat(onSessionCreated) {
 
   onBeforeUnmount(() => {
     disposed = true
+    reasoningByRun.value.clear()
+    messages.value = []
+    snapshot.value = null
+    pendingQuestion.value = null
+    activeRunId.value = ''
     stopDeleting()
     generation++
     requests.abort()

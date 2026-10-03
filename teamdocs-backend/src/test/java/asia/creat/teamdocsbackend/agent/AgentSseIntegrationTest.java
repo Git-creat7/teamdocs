@@ -88,6 +88,7 @@ class AgentSseIntegrationTest {
     @Autowired AgentStore store;
     @Autowired AgentWorker worker;
     @Autowired AgentEventHub events;
+    @Autowired AgentReasoningRegistry reasoning;
     @Autowired ObjectMapper json;
     @Autowired @Qualifier("agentEventExecutor") ExecutorService sender;
     @MockitoSpyBean AgentService service;
@@ -174,6 +175,78 @@ class AgentSseIntegrationTest {
             release.countDown();
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
             while (worker.isExecuting(run.getId()) && System.nanoTime() < deadline) Thread.sleep(20);
+        }
+    }
+
+    /** 不调用模型也能验证累计思考先于最终答案到达。 */
+    @Test
+    void reasoningSnapshotsArriveBeforeAnswerWithoutCallingModel() throws Exception {
+        Run run = running();
+        try (InputStream body = open(url(run.getId()))) {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8));
+            String initial = readEvent(reader, "snapshot");
+            assertTrue(reasoning.publish(run, new ReasoningProgress("临时思考", null, false), List.of()));
+            String first = readEvent(reader, "reasoning_updated");
+            JsonNode progress = snapshot(first);
+            assertEquals("RUNNING", progress.path("status").asText());
+            assertEquals("临时思考", progress.path("reasoningContent").asText());
+            assertTrue(progress.path("reasoningDurationMs").isNull());
+            assertTrue(progress.path("answer").path("id").isNull());
+            assertEquals("", progress.path("answer").path("text").asText());
+            assertNull(mapper.answer(run.getId()), "reasoning must arrive before the answer row exists");
+            assertEquals(1, mapper.countMessages(run.getSessionId()));
+
+            assertTrue(reasoning.publish(run, new ReasoningProgress("临时思考，继续核对", null, true), List.of()));
+            String second = readEvent(reader, "reasoning_updated");
+            progress = snapshot(second);
+            assertEquals("临时思考，继续核对", progress.path("reasoningContent").asText());
+            assertTrue(progress.path("reasoningDurationMs").isNull());
+            assertTrue(progress.path("reasoningTruncated").asBoolean());
+            assertNull(mapper.answer(run.getId()));
+
+            assertTrue(store.finish(run, "SUCCEEDED", null, "最终答案", List.of(), List.of()));
+            String tail = readRest(reader);
+            assertTrue(tail.contains("event:answer_ready"));
+            assertTrue(tail.contains("event:run_finished"));
+            assertTrue(tail.contains("最终答案"));
+            assertOrderedIds(initial + first + second + tail);
+            assertEquals("最终答案", mapper.answer(run.getId()).getBody());
+            assertEquals(2, mapper.countMessages(run.getSessionId()));
+            assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM agent_message WHERE run_id=? AND body LIKE ?",
+                    Integer.class, run.getId(), "%临时思考%"));
+            verify(model, never()).generate(anyList(), anyList());
+        }
+    }
+
+    /** 排队的思考通知在发送时重新核对来源，不泄露已删除资料。 */
+    @Test
+    void queuedReasoningIsReauthorizedBeforeSendingWithoutAnswerRow() throws Exception {
+        Run run = running();
+        jdbc.update("INSERT INTO document(id,space_id,name,file_path,upload_by,parse_status,parse_version) VALUES(10,1,'思考来源','unused',7,'READY',1)");
+        var document = documents.selectById(10L);
+        Dependency dependency = new Dependency(10L, 1, "READY", document.getName(), document.getUpdatedAt());
+        try (InputStream body = open(url(run.getId()))) {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8));
+            readEvent(reader, "snapshot");
+            CountDownLatch occupied = new CountDownLatch(2), release = new CountDownLatch(1);
+            for (int i = 0; i < 2; i++) sender.execute(() -> { occupied.countDown(); waitLatch(release); });
+            try {
+                assertTrue(occupied.await(5, TimeUnit.SECONDS));
+                assertTrue(reasoning.publish(run, new ReasoningProgress("PRIVATE-REASONING", 15L, false), List.of(dependency)));
+                jdbc.update("UPDATE document SET deleted=1 WHERE id=10");
+            } finally { release.countDown(); }
+            String frame = readEvent(reader, "reasoning_updated");
+            JsonNode progress = snapshot(frame);
+            assertTrue(progress.path("answer").path("masked").asBoolean());
+            assertTrue(progress.path("reasoningContent").isNull());
+            assertTrue(progress.path("reasoningDurationMs").isNull());
+            assertFalse(frame.contains("PRIVATE-REASONING"));
+            assertNull(mapper.answer(run.getId()));
+            service.cancel(1L, run.getId(), USER);
+            String tail = readRest(reader);
+            assertTrue(tail.contains("event:run_finished"));
+            assertFalse(tail.contains("PRIVATE-REASONING"));
+            assertFalse(tail.contains("event:answer_ready"));
         }
     }
 
@@ -269,10 +342,16 @@ class AgentSseIntegrationTest {
             readFrame(reader);
             HttpResponse<String> limited = HttpClient.newHttpClient().send(request(url(run.getId()), token), HttpResponse.BodyHandlers.ofString());
             assertEquals(0, json.readTree(limited.body()).get("code").intValue());
-            jdbc.update("DELETE FROM space_member WHERE space_id=1 AND user_id=7");
-            events.publish(run.getId(), "tool_finished");
+            CountDownLatch occupied = new CountDownLatch(2), release = new CountDownLatch(1);
+            for (int i = 0; i < 2; i++) sender.execute(() -> { occupied.countDown(); waitLatch(release); });
+            try {
+                assertTrue(occupied.await(5, TimeUnit.SECONDS));
+                assertTrue(reasoning.publish(run, new ReasoningProgress("PRIVATE-MEMBERSHIP-REASONING", null, false), List.of()));
+                jdbc.update("DELETE FROM space_member WHERE space_id=1 AND user_id=7");
+            } finally { release.countDown(); }
             String tail = readRest(reader);
             assertTrue(tail.contains("ACCESS_REVOKED"));
+            assertFalse(tail.contains("PRIVATE-MEMBERSHIP-REASONING"));
             assertFalse(tail.contains("answer_ready"));
         }
     }
@@ -349,6 +428,26 @@ class AgentSseIntegrationTest {
         HttpResponse<InputStream> response = HttpClient.newHttpClient().send(request(endpoint, token), HttpResponse.BodyHandlers.ofInputStream());
         assertEquals(200, response.statusCode());
         return response.body();
+    }
+    /** 在现有读超时内等待指定事件，忽略定时快照。 */
+    private String readEvent(BufferedReader reader, String event) throws Exception {
+        return timedRead(() -> {
+            StringBuilder frame = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!line.isEmpty()) frame.append(line).append('\n');
+                else {
+                    if (frame.toString().contains("event:" + event + "\n")) return frame.toString();
+                    frame.setLength(0);
+                }
+            }
+            throw new AssertionError("stream ended before " + event);
+        });
+    }
+    /** 读取事件中的实际 JSON 快照。 */
+    private JsonNode snapshot(String frame) throws Exception {
+        String data = frame.lines().filter(line -> line.startsWith("data:")).findFirst().orElseThrow();
+        return json.readTree(data.substring(5)).path("snapshot");
     }
     private String readFrame(BufferedReader reader) throws Exception {
         return timedRead(() -> {

@@ -14,6 +14,8 @@ import asia.creat.mapper.DocumentMapper;
 import asia.creat.parse.DocumentTextExtractor;
 import asia.creat.parse.ExtractedText;
 import asia.creat.parse.TextChunker;
+import asia.creat.retrieval.RetrievalContext;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
 import asia.creat.service.DocumentContentService;
@@ -122,8 +124,10 @@ public class DocumentParseServiceImpl implements DocumentParseService {
             markSkipped(document, "不支持解析该文件类型");
             return;
         }
+        long deadline = System.currentTimeMillis() + Math.max(1, parseProperties.getTimeoutSeconds()) * 1000L;
         ExtractedText extracted;
-        try (InputStream input = fileStorageService.open(BucketType.PRIVATE, document.getFilePath())) {
+        try (InputStream input = fileStorageService.open(BucketType.PRIVATE, document.getFilePath());
+             RetrievalContext ignored = RetrievalContext.open(deadline, () -> requireCurrentParse(document), hit -> { })) {
             extracted = textExtractor.extract(document.getName(), document.getFileType(), input);
         } catch (Exception e) {
             log.warn("文档 {} 读取或提取失败: {}", document.getId(), e.getClass().getSimpleName());
@@ -152,6 +156,17 @@ public class DocumentParseServiceImpl implements DocumentParseService {
         documentIndexSync.afterCommit(document.getId());
     }
 
+    /** 每次视觉请求前后检查任务版本，失效后不继续发送下一幅图。 */
+    private void requireCurrentParse(Document document) {
+        if (Thread.currentThread().isInterrupted() || documentMapper.selectCount(new LambdaQueryWrapper<Document>()
+                .eq(Document::getId, document.getId())
+                .eq(Document::getParseVersion, document.getParseVersion())
+                .eq(Document::getParseStatus, ParseStatus.PARSING)
+                .exists("SELECT 1 FROM space s WHERE s.id = document.space_id AND s.deleted = 0")) != 1) {
+            throw new IllegalStateException("解析任务已失效");
+        }
+    }
+
     private List<DocumentContent> chunk(ExtractedText extracted) {
         List<DocumentContent> chunks = new ArrayList<>();
         int index = 0;
@@ -164,6 +179,8 @@ public class DocumentParseServiceImpl implements DocumentParseService {
             );
             for (DocumentContent part : parts) {
                 part.setChunkIndex(index++);
+                part.setImageRef(segment.imageRef());
+                part.setImageLabel(segment.imageLabel());
                 chunks.add(part);
             }
         }

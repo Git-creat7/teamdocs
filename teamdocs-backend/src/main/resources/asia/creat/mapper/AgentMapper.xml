@@ -110,10 +110,10 @@
     </insert>
 
     <select id="messages" resultType="asia.creat.agent.AgentData$Message">
-        SELECT *
-        FROM agent_message
-        WHERE session_id = #{sessionId}
-        ORDER BY id DESC
+        SELECT m.*, r.status AS run_status
+        FROM agent_message m INNER JOIN agent_run r ON r.id = m.run_id
+        WHERE m.session_id = #{sessionId}
+        ORDER BY m.id DESC
         LIMIT #{limit} OFFSET #{offset}
     </select>
 
@@ -121,10 +121,10 @@
                                                  FROM agent_message
                                                  WHERE session_id = #{sessionId}</select>
     <select id="answer" resultType="asia.creat.agent.AgentData$Message">
-        SELECT *
-        FROM agent_message
-        WHERE run_id = #{runId}
-          AND role = 'ASSISTANT'
+        SELECT m.*, r.status AS run_status
+        FROM agent_message m INNER JOIN agent_run r ON r.id = m.run_id
+        WHERE m.run_id = #{runId}
+          AND m.role = 'ASSISTANT'
     </select>
 
     <select id="history" resultType="asia.creat.agent.AgentData$Message">

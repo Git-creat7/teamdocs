@@ -564,6 +564,8 @@ const SIDEBAR_FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])'
 ].join(',')
 const detailSidebarExpanded = ref(false)
+const agentSidebarExpanded = ref(false)
+const isAgentPage = computed(() => route.name === 'SpaceAgent')
 const hasDocumentDetail = computed(() =>
   route.name === 'SpaceWorkbench' && Number(route.query.doc) > 0
 )
@@ -573,8 +575,16 @@ const automaticDetailCollapse = computed(() =>
   && !detailSidebarExpanded.value
   && !isMobile.value
 )
+const automaticAgentCollapse = computed(() =>
+  isAgentPage.value
+  && !agentSidebarExpanded.value
+  && !isMobile.value
+)
+const automaticSidebarCollapse = computed(() =>
+  automaticDetailCollapse.value || automaticAgentCollapse.value
+)
 const effectiveCollapsed = computed(() =>
-  (collapsed.value || automaticDetailCollapse.value) && !isMobile.value
+  (collapsed.value || automaticSidebarCollapse.value) && !isMobile.value
 )
 
 function getSidebarFocusableElements() {
@@ -646,11 +656,29 @@ function toggleSidebar() {
     closeMobileSidebar()
     return
   }
-  if (automaticDetailCollapse.value && !collapsed.value) {
+  if (effectiveCollapsed.value) {
+    if (automaticAgentCollapse.value && !collapsed.value) {
+      agentSidebarExpanded.value = true
+      return
+    }
+    if (automaticDetailCollapse.value && !collapsed.value) {
+      detailSidebarExpanded.value = true
+      return
+    }
+    collapsed.value = false
+    agentSidebarExpanded.value = true
     detailSidebarExpanded.value = true
     return
   }
-  collapsed.value = !collapsed.value
+  if (isAgentPage.value && agentSidebarExpanded.value && !collapsed.value) {
+    agentSidebarExpanded.value = false
+    return
+  }
+  if (hasDocumentDetail.value && detailSidebarExpanded.value && !collapsed.value) {
+    detailSidebarExpanded.value = false
+    return
+  }
+  collapsed.value = true
 }
 
 watch([effectiveCollapsed, isMobile], ([isCollapsed, mobile]) => {
@@ -662,8 +690,11 @@ watch(() => route.fullPath, () => {
 })
 
 watch(
-  [() => route.name, () => route.query.doc, autoCollapseSidebar],
-  () => { detailSidebarExpanded.value = false },
+  [() => route.name, () => route.params.spaceId, () => route.query.doc, autoCollapseSidebar],
+  () => {
+    detailSidebarExpanded.value = false
+    agentSidebarExpanded.value = false
+  },
   { immediate: true }
 )
 

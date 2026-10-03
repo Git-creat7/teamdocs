@@ -1,6 +1,7 @@
 package asia.creat.agent;
 
 import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,6 +24,8 @@ public class AgentJson {
         if (text == null || text.length() > 16000) throw new AgentFailure("INVALID_JSON");
         try (JsonParser parser = mapper.getFactory().createParser(text)) {
             parser.enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
+            parser.enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS.mappedFeature());
+            parser.enable(JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER.mappedFeature());
             JsonNode node = mapper.readTree(parser);
             if (node == null || !node.isObject() || parser.nextToken() != null) throw new AgentFailure("INVALID_JSON");
             var names = node.fieldNames();
