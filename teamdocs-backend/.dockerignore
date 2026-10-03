@@ -1,7 +1,6 @@
 target/
 .git/
 .idea/
-.mvn/
 *.iml
 *.log
 .env
@@ -9,5 +8,3 @@ target/
 !.env.example
 http_api_test/
 src/test/
-mvnw
-mvnw.cmd

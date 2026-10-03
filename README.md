@@ -109,8 +109,6 @@ Agent、Embedding、Reranker 和 MCP 根据各自配置的有效 Key 自动启�
 
 每用户同时最多一个 Agent 运行，每轮最多 6 次聊天模型调用、8 次工具调用、90 秒。内置文档工具只读；外部 MCP 工具的能力由所配置服务器决定，应单独审查，不能一概视为只读。
 
-模型接入与 API 见 [后端说明](docs/AGENT_BACKEND.md)，页面与 SSE 见 [前端说明](docs/AGENT_FRONTEND.md)，关键词索引见 [Elasticsearch 说明](docs/ELASTICSEARCH.md)，向量同步、重排和验证命令见 [混合检索说明](docs/HYBRID_RETRIEVAL.md)。
-
 ## 质量与验证
 
 2026-10-01 已完成以下分组验证。各组可能重复覆盖用例，不能相加当作一次全量测试：
@@ -128,7 +126,7 @@ Agent、Embedding、Reranker 和 MCP 根据各自配置的有效 Key 自动启�
 
 临时测试容器已清理，Milvus 及依赖镜像已缓存，原有业务容器保持运行。**这些结果不代表完整 Compose 部署、混合检索下从上传到问答的应用全链路或真实语料质量已经验收。**
 
-既有固定评测集包含 24 份合成文档、40 个问题。在 34 个有标准来源的问题中，MySQL Top 6 找齐证据为 29/34，ES + MySQL 路径为 33/34；这是关键词检索基线，不能当作新增 Milvus/Reranker 的成绩。完整在线回答评测、人工评分及四路检索对照尚未完成。数据与口径见 [固定评测说明](docs/AGENT_EVALUATION.md)，实际接口与容器测试记录见 [混合检索说明](docs/HYBRID_RETRIEVAL.md)。
+既有固定评测集包含 24 份合成文档、40 个问题。在 34 个有标准来源的问题中，MySQL Top 6 找齐证据为 29/34，ES + MySQL 路径为 33/34；这是关键词检索基线，不能当作新增 Milvus/Reranker 的成绩。完整在线回答评测、人工评分及四路检索对照尚未完成。
 
 ### JMeter 并发限流验证
 
@@ -155,7 +153,7 @@ Agent、Embedding、Reranker 和 MCP 根据各自配置的有效 Key 自动启�
 docker build -t teamdocs-elasticsearch:8.15.3 docker/elasticsearch
 
 cd teamdocs-backend
-sh ./mvnw '-Dtest=*,!AgentEvaluationTest' -Dteamdocs.test.vector-sql=true test
+mvn '-Dtest=*,!AgentEvaluationTest' -Dteamdocs.test.vector-sql=true test
 
 cd ../teamdocs-frontend
 npm ci
@@ -208,7 +206,7 @@ docker compose --profile semantic up -d --wait milvus
 docker compose --profile semantic up -d --wait
 ```
 
-模型服务故障不会自动切换到其他供应商；向量召回和重排可以降级到现有关键词或融合结果。配置、资源限制和索引维护详见 [混合检索说明](docs/HYBRID_RETRIEVAL.md)。
+模型服务故障不会自动切换到其他供应商；向量召回和重排可以降级到现有关键词或融合结果。
 
 ### CI/CD 与更新
 
@@ -232,7 +230,7 @@ TeamDocs/
 ├── teamdocs-frontend/   Vue 3 工作台与文档问答页面
 ├── sql/                 init.sql 空库入口及分项初始化/测试脚本
 ├── docker/elasticsearch/ Elasticsearch 与 IK 镜像
-├── docs/                部署、Agent、混合检索、流式交互与评测说明
+├── docs/                部署说明与运行截图
 ├── docker-compose.yaml
 ├── .env.example
 └── README.md
