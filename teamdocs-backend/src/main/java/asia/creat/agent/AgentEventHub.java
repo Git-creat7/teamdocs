@@ -147,7 +147,10 @@ public class AgentEventHub {
                     if (signal == null) break;
                     RunView view = loader.get();
                     if (terminal(view)) {
-                        if (view.answer() != null && !view.answer().masked()) emit("answer_ready", view, null);
+                        if (view.answer() != null && !view.answer().masked()
+                                && view.answer().text() != null && !view.answer().text().isBlank()) {
+                            emit("answer_ready", view, null);
+                        }
                         emit(Set.of("FAILED", "TIMED_OUT").contains(view.status()) ? "run_failed" : "run_finished", view, null);
                         close(true);
                         return;

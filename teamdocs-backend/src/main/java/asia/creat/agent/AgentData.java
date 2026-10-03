@@ -58,6 +58,7 @@ public final class AgentData {
         private String body;
         private String dependencies;
         private String sources;
+        private String runStatus;
         private LocalDateTime createdAt;
     }
 
@@ -92,10 +93,38 @@ public final class AgentData {
                              String documentName, LocalDateTime updatedAt) { }
     public record Source(String id, Long documentId, Long chunkId, Integer parseVersion) { }
     public record Citation(String id, Long documentId, Long chunkId, Integer chunkIndex, Integer parseVersion, String documentName,
-                           Integer pageNumber, Integer charStart, Integer charEnd, String excerpt, String url) { }
+                           Integer pageNumber, Integer charStart, Integer charEnd, String excerpt, String url,
+                           boolean imageSource, String imageLabel) {
+        /** 兼容普通文本来源，不要求旧调用提供图片信息。 */
+        public Citation(String id, Long documentId, Long chunkId, Integer chunkIndex, Integer parseVersion, String documentName,
+                        Integer pageNumber, Integer charStart, Integer charEnd, String excerpt, String url) {
+            this(id, documentId, chunkId, chunkIndex, parseVersion, documentName, pageNumber, charStart, charEnd,
+                    excerpt, url, false, null);
+        }
+    }
+    public record ReasoningProgress(String content, Long durationMs, boolean truncated) { }
     public record MessageView(Long id, Long runId, String role, String text, boolean masked,
-                              List<Citation> citations, LocalDateTime createdAt) { }
+                              List<Citation> citations, LocalDateTime createdAt, String reasoningContent,
+                              Long reasoningDurationMs, boolean reasoningTruncated, String runStatus) {
+        /** 兼容无思考字段的消息与旧测试夹具。 */
+        public MessageView(Long id, Long runId, String role, String text, boolean masked,
+                           List<Citation> citations, LocalDateTime createdAt) {
+            this(id, runId, role, text, masked, citations, createdAt, null, null, false, null);
+        }
+    }
     public record RunView(Long id, Long sessionId, String status, String errorCode, int modelCalls, int toolCalls,
                           long inputTokens, long outputTokens, boolean usageUnknown,
-                          MessageView answer, List<Trace> tools, LocalDateTime createdAt, Long deadlineMs) { }
+                          MessageView answer, List<Trace> tools, LocalDateTime createdAt, Long deadlineMs,
+                          String reasoningContent, Long reasoningDurationMs, boolean reasoningTruncated) {
+        /** 思考进度从已完成可见性检查的同一消息投影，不另存一份文本。 */
+        public RunView(Long id, Long sessionId, String status, String errorCode, int modelCalls, int toolCalls,
+                       long inputTokens, long outputTokens, boolean usageUnknown,
+                       MessageView answer, List<Trace> tools, LocalDateTime createdAt, Long deadlineMs) {
+            this(id, sessionId, status, errorCode, modelCalls, toolCalls, inputTokens, outputTokens, usageUnknown,
+                    answer, tools, createdAt, deadlineMs,
+                    answer == null || answer.masked() ? null : answer.reasoningContent(),
+                    answer == null || answer.masked() ? null : answer.reasoningDurationMs(),
+                    answer != null && !answer.masked() && answer.reasoningTruncated());
+        }
+    }
 }

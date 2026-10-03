@@ -151,7 +151,7 @@
             <div role="log" aria-label="问答历史" aria-live="polite">
               <div
                 v-for="message in chat.visibleMessages.value"
-                :key="`${message.runId}:${message.role}`"
+                :key="messageKey(message)"
                 :class="['agent-turn', message.role === 'USER' ? 'is-user' : 'is-assistant']"
               >
                 <!-- 头像 -->
@@ -176,12 +176,17 @@
                     <ShieldCheck v-if="message.masked" :size="13" class="shield-icon" title="隐私脱敏内容" />
                   </div>
 
+                  <AgentReasoningPanel
+                    v-if="message.role === 'ASSISTANT'"
+                    :message="message"
+                    :run-key="messageKey(message)"
+                  />
                   <AgentProcessingState
-                    v-if="message.role === 'ASSISTANT' && String(message.runId) === chat.activeRunId.value"
+                    v-if="message.role === 'ASSISTANT' && (!hasReasoning(message) || chat.snapshot.value?.tools?.length || chat.snapshot.value?.errorCode) && !message.masked && String(message.runId) === chat.activeRunId.value"
                     :run="chat.snapshot.value"
                   />
 
-                  <article :class="['agent-message', message.role === 'USER' ? 'is-user' : 'is-assistant', { 'is-masked': message.masked }]">
+                  <article v-if="message.role !== 'ASSISTANT' || message.text?.trim()" :class="['agent-message', message.role === 'USER' ? 'is-user' : 'is-assistant', { 'is-masked': message.masked }]">
                     <!-- 消息正文 -->
                     <div class="message-content">
                       <div
@@ -212,13 +217,6 @@
                       </button>
                     </div>
                   </article>
-                </div>
-              </div>
-              <div v-if="showPendingProcess" class="agent-turn is-assistant" aria-label="助手处理过程">
-                <div class="turn-avatar"><div class="chat-avatar bot-avatar" aria-hidden="true"><Bot :size="20" /></div></div>
-                <div class="turn-body">
-                  <div class="message-meta"><span class="sender-name">文档助手</span></div>
-                  <AgentProcessingState :run="chat.snapshot.value" />
                 </div>
               </div>
             </div>
@@ -361,6 +359,8 @@
       </aside>
     </div>
     <AgentCitationEvidence
+      :key="`${chat.spaceId.value}:${chat.sessionId.value}`"
+      :space-id="chat.spaceId.value"
       :open="citationEvidence.open"
       :loading="citationEvidence.loading"
       :anchor="citationAnchor"
@@ -368,6 +368,7 @@
       :sources="citationEvidence.sources"
       @close="closeCitationEvidence()"
       @preview="previewEvidence"
+      @invalid="invalidateCitationEvidence"
     />
   </section>
 </template>
@@ -398,6 +399,7 @@ import {
 import { useSpacesStore, useUserStore } from '@/stores'
 import { useAgentChat } from '@/composables/useAgentChat'
 import AgentProcessingState from '@/components/AgentProcessingState.vue'
+import AgentReasoningPanel from '@/components/AgentReasoningPanel.vue'
 import AgentCitationEvidence from '@/components/AgentCitationEvidence.vue'
 import { isSendKey } from '@/utils/agentStream'
 import { renderMarkdown } from '@/utils/markdown'
@@ -415,6 +417,9 @@ const hasNewContent = ref(false)
 const citationAnchor = shallowRef(null)
 const citationEvidence = ref({ open: false, loading: false, number: 1, runId: '', sourceIds: [], sources: [] })
 let citationRequest = 0
+let disposed = false
+let reconnectTimer = null
+const copyTimers = new Set()
 
 const isMobile = ref(typeof window !== 'undefined' && window.innerWidth <= 820)
 const rightSidebarOpen = ref(typeof window !== 'undefined' && window.innerWidth > 960)
@@ -462,20 +467,34 @@ async function handleManualReconnect() {
   try {
     await chat.reconnect()
   } finally {
-    setTimeout(() => {
-      isReconnectingManual.value = false
-    }, 1200)
+    if (!disposed) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = setTimeout(() => {
+        isReconnectingManual.value = false
+      }, 1200)
+    }
   }
 }
 
-const showPendingProcess = computed(() => Boolean(chat.activeRunId.value)
-  && !chat.denied.value
-  && !chat.visibleMessages.value.some((message) => message.role === 'ASSISTANT'
-    && String(message.runId) === chat.activeRunId.value))
+/** 按空间、会话和轮次保持消息节点稳定。 */
+function messageKey(message) {
+  return `${chat.spaceId.value}:${chat.sessionId.value}:${message.runId ?? message.id}:${message.role}`
+}
+
+/** 仅把真实且未脱敏的思考作为过程展示。 */
+function hasReasoning(message) {
+  return !message.masked && typeof message.reasoningContent === 'string' && !!message.reasoningContent.trim()
+}
 
 watch(() => chat.visibleMessages.value, (messages) => {
   if (!citationEvidence.value.open) return
-  const valid = citationEvidence.value.sourceIds.every((id) => findMessageCitation(messages, citationEvidence.value.runId, id))
+  const valid = citationEvidence.value.sourceIds.every((id, index) => {
+    const source = findMessageCitation(messages, citationEvidence.value.runId, id)
+    if (!source) return false
+    if (citationEvidence.value.loading) return true
+    const previous = citationEvidence.value.sources[index]
+    return previous && ['documentId', 'chunkId', 'parseVersion', 'imageSource', 'imageLabel', 'excerpt'].every((key) => source[key] === previous[key])
+  })
   if (!valid) closeCitationEvidence(false)
 })
 
@@ -486,8 +505,11 @@ watch(() => [route.params.spaceId, route.params.sessionId], ([spaceId, sessionId
   void chat.setContext(spaceId, sessionId)
 }, { immediate: true })
 
-watch(() => [chat.visibleMessages.value.length, chat.snapshot.value?.status, chat.snapshot.value?.toolCalls, chat.snapshot.value?.tools?.map((tool) => tool.status).join(',')], async () => {
+watch(() => [chat.visibleMessages.value.length, chat.visibleMessages.value.map((message) => `${message.text?.length || 0}:${message.reasoningContent?.length || 0}`).join(','), chat.snapshot.value?.status, chat.snapshot.value?.toolCalls, chat.snapshot.value?.tools?.map((tool) => tool.status).join(',')], async () => {
+  const spaceId = chat.spaceId.value
+  const sessionId = chat.sessionId.value
   await nextTick()
+  if (disposed || spaceId !== chat.spaceId.value || sessionId !== chat.sessionId.value) return
   if (following.value) scrollToEnd()
   else hasNewContent.value = true
 })
@@ -588,12 +610,15 @@ function scrollToEnd() {
   hasNewContent.value = false
 }
 async function loadOlder() {
+  const spaceId = chat.spaceId.value
+  const sessionId = chat.sessionId.value
   const el = transcript.value
   const before = el?.scrollHeight || 0
   const top = el?.scrollTop || 0
   following.value = false
   await chat.loadMessages(true)
   await nextTick()
+  if (disposed || spaceId !== chat.spaceId.value || sessionId !== chat.sessionId.value) return
   if (el) el.scrollTop = top + el.scrollHeight - before
   hasNewContent.value = false
 }
@@ -627,13 +652,16 @@ async function handleMessageContentClick(event, runId) {
     if (code) {
       try {
         await navigator.clipboard.writeText(code)
+        if (disposed || !copyBtn.isConnected) return
         const originalText = copyBtn.textContent
         copyBtn.textContent = '已复制'
         copyBtn.classList.add('copied')
-        setTimeout(() => {
+        const timer = setTimeout(() => {
+          copyTimers.delete(timer)
           copyBtn.textContent = originalText
           copyBtn.classList.remove('copied')
         }, 1500)
+        copyTimers.add(timer)
       } catch {
         ElMessage.error('复制失败')
       }
@@ -665,6 +693,12 @@ async function handleMessageContentClick(event, runId) {
   }
 }
 
+/** 图片失权或过期时关闭旧证据并重新核验回答。 */
+function invalidateCitationEvidence() {
+  closeCitationEvidence(false)
+  void chat.refresh()
+}
+
 function previewEvidence(source) {
   const runId = citationEvidence.value.runId
   closeCitationEvidence(false)
@@ -683,6 +717,10 @@ onMounted(() => {
   window.addEventListener('resize', handleResize)
 })
 onBeforeUnmount(() => {
+  disposed = true
+  clearTimeout(reconnectTimer)
+  for (const timer of copyTimers) clearTimeout(timer)
+  copyTimers.clear()
   closeCitationEvidence(false)
   window.removeEventListener('focus', onFocus)
   window.removeEventListener('resize', handleResize)

@@ -175,7 +175,8 @@ public class AgentTools {
             String excerpt = shorten(hit.getExcerpt(), 200);
             Integer end = hit.getCharStart() == null ? hit.getCharEnd() : hit.getCharStart() + excerpt.length();
             result.add(new Citation(source.id(), source.documentId(), source.chunkId(), hit.getChunkIndex(), source.parseVersion(), hit.getDocumentName(),
-                    hit.getPageNumber(), hit.getCharStart(), end, excerpt, "/preview/" + spaceId + "/" + source.documentId()));
+                    hit.getPageNumber(), hit.getCharStart(), end, excerpt, "/preview/" + spaceId + "/" + source.documentId(),
+                    hit.isImageSource(), hit.getImageLabel()));
         }
         return result;
     }

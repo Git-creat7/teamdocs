@@ -11,6 +11,8 @@ CREATE TABLE document_content (
     page_number INT        DEFAULT NULL COMMENT 'PDF 页码，从 1 开始',
     char_start  INT        DEFAULT NULL COMMENT '块在提取文本中的起始偏移',
     char_end    INT        DEFAULT NULL COMMENT '块在提取文本中的结束偏移',
+    image_ref   VARCHAR(255) DEFAULT NULL COMMENT '原图稳定定位，不存访问URL',
+    image_label VARCHAR(255) DEFAULT NULL COMMENT '图像来源位置',
     created_at  DATETIME   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),

@@ -30,6 +30,8 @@ public class AgentProperties {
      * 请求超时时间（秒），默认 60 秒
      */
     private int timeoutSeconds = 60;
+    /** 请求流式响应；不支持流的兼容接口可显式关闭，不自动重放。 */
+    private boolean streaming = true;
     /** 可显式覆盖；未配置时，填写有效 Key 即确认问答资料出站。 */
     private Boolean allowDocumentEgress;
     private int maxModelCalls = 6;

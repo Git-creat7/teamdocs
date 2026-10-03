@@ -33,7 +33,7 @@
 
         <details v-if="progress.steps.length" class="activity-technical">
           <summary>技术详情</summary>
-          <p class="activity-count">工具调用 {{ run.toolCalls ?? progress.steps.length }} 次</p>
+          <p class="activity-count">工具调用 {{ run?.toolCalls ?? progress.steps.length }} 次</p>
           <ul class="activity-metrics" aria-label="工具技术详情">
             <li v-for="step in progress.steps" :key="step.sequence">
               <span>{{ step.label }}</span>
@@ -44,7 +44,7 @@
         </details>
 
         <p v-if="progress.emptyRead" class="agent-parse-note">本次未读到可用正文，可前往文件列表检查解析状态。</p>
-        <p v-if="run.errorCode" class="agent-run-reason">{{ agentError(run.errorCode) }}</p>
+        <p v-if="run?.errorCode" class="agent-run-reason">{{ agentError(run?.errorCode) }}</p>
       </div>
     </details>
 
@@ -106,6 +106,10 @@ function durationLabel(step) {
 }
 .agent-run-indicator.live {
   background: #10b981;
+  animation: agent-indicator-pulse 1.6s ease-in-out infinite;
+}
+@keyframes agent-indicator-pulse {
+  50% { opacity: 0.35; }
 }
 .activity-label {
   font-weight: 500;
@@ -138,6 +142,9 @@ details[open] > .activity-summary .activity-arrow {
   gap: 6px;
   font-size: .8125rem;
 }
+.tool-status-icon {
+  flex-shrink: 0;
+}
 .tool-status-icon.is-ok { color: #10b981; }
 .tool-status-icon.is-running { color: var(--app-accent); }
 .tool-status-icon.is-err { color: #ef4444; }
@@ -153,10 +160,18 @@ details[open] > .activity-summary .activity-arrow {
 .activity-summary:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 3px; }
 .activity-count { margin: 0 0 8px; font-size: .75rem; color: var(--app-text-muted); }
 .tool-desc { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.tool-status-icon, .agent-progress-spin { animation: agent-progress-spin 1s linear infinite; }
-@keyframes agent-progress-spin { to { transform: rotate(360deg); } }
+.agent-progress-spin {
+  display: inline-block;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: agent-progress-spin 1s linear infinite;
+}
+@keyframes agent-progress-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .agent-progress-spin { animation: none; }
+  .agent-run-indicator.live { animation: none; }
   .activity-summary, .activity-arrow { transition: none; }
 }
 

@@ -8,7 +8,7 @@ import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.openai.OpenAiChatModel;
+import asia.creat.agent.model.OpenAiReasoningChatModel;
 import dev.langchain4j.model.output.TokenUsage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -59,7 +59,7 @@ class LangChain4jCandidateVerificationTest {
     }
 
     @Test
-    @DisplayName("验证 AI 开启且配置完整时，成功装配 OpenAiChatModel，并严格遵守重试与日志约束")
+    @DisplayName("验证 AI 开启且配置完整时，成功装配 OpenAiReasoningChatModel，并严格遵守重试与日志约束")
     void testAiEnabledWithValidConfig() {
         contextRunner
                 .withPropertyValues(
@@ -74,7 +74,7 @@ class LangChain4jCandidateVerificationTest {
                     assertTrue(context.containsBean("chatLanguageModel"));
                     ChatLanguageModel model = context.getBean(ChatLanguageModel.class);
                     assertNotNull(model);
-                    assertInstanceOf(OpenAiChatModel.class, model);
+                    assertInstanceOf(OpenAiReasoningChatModel.class, model);
                 });
     }
 
@@ -138,7 +138,7 @@ class LangChain4jCandidateVerificationTest {
     @DisplayName("验证 OpenAiChatModel Builder 超时与非空安全约束")
     void testOpenAiChatModelBuilderConstraints() {
         assertDoesNotThrow(() -> {
-            OpenAiChatModel model = OpenAiChatModel.builder()
+            var model = dev.langchain4j.model.openai.OpenAiChatModel.builder()
                     .apiKey("mock-key")
                     .modelName("generic-model")
                     .baseUrl("https://localhost:9999/v1")

@@ -74,6 +74,7 @@ teamdocs:
     api-key: ${AGENT_API_KEY:}
     model-name: ${AGENT_MODEL_NAME:}
     timeout-seconds: ${AGENT_TIMEOUT_SECONDS:60}
+    streaming: ${AGENT_STREAMING:true}
     max-input-tokens: 500000
     max-output-tokens: 4096
     # MCP: 联网搜索与外部工具扩展
@@ -114,6 +115,16 @@ teamdocs:
     api-key: ${RERANK_API_KEY:}
     model-name: ${RERANK_MODEL:}
     timeout-seconds: ${RERANK_TIMEOUT_SECONDS:10}
+  vision:
+    base-url: ${VISION_BASE_URL:}
+    api-key: ${VISION_API_KEY:}
+    model-name: ${VISION_MODEL:}
+    timeout-seconds: ${VISION_TIMEOUT_SECONDS:20}
+    max-images: ${VISION_MAX_IMAGES:8}
+    max-image-bytes: ${VISION_MAX_IMAGE_BYTES:2097152}
+    max-pixels: ${VISION_MAX_PIXELS:16000000}
+    max-dimension: ${VISION_MAX_DIMENSION:1600}
+    max-output-tokens: ${VISION_MAX_OUTPUT_TOKENS:4096}
   milvus:
     url: ${MILVUS_URL:http://127.0.0.1:19530}
     token: ${MILVUS_TOKEN:}

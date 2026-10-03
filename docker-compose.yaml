@@ -62,7 +62,7 @@ services:
     restart: unless-stopped
 
   minio-init:
-    image: minio/mc@sha256:3e9666a093d0a8fcbbac606346c415ae9277a0ca96989a6bdddd3d03e90a21b4
+    image: ${MINIO_MC_IMAGE:-minio/mc:latest}
     depends_on:
       minio:
         condition: service_started
@@ -94,6 +94,9 @@ services:
 
   elasticsearch:
     image: ${IMAGE_REPOSITORY:-ghcr.io/git-creat7/teamdocs}/elasticsearch:${IMAGE_TAG:?IMAGE_TAG must be a published commit SHA}
+    build:
+      context: ./docker/elasticsearch
+      dockerfile: Dockerfile
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
@@ -179,6 +182,9 @@ services:
 
   backend:
     image: ${IMAGE_REPOSITORY:-ghcr.io/git-creat7/teamdocs}/backend:${IMAGE_TAG:?IMAGE_TAG must be a published commit SHA}
+    build:
+      context: ./teamdocs-backend
+      dockerfile: Dockerfile
     depends_on:
       mysql:
         condition: service_healthy
@@ -208,6 +214,7 @@ services:
       AGENT_API_KEY: ${AGENT_API_KEY:-}
       AGENT_MODEL_NAME: ${AGENT_MODEL_NAME:-}
       AGENT_TIMEOUT_SECONDS: ${AGENT_TIMEOUT_SECONDS:-60}
+      AGENT_STREAMING: ${AGENT_STREAMING:-true}
       MCP_STEP_URL: ${MCP_STEP_URL:-}
       MCP_STEP_API_KEY: ${MCP_STEP_API_KEY:-}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
@@ -219,6 +226,15 @@ services:
       RERANK_API_KEY: ${RERANK_API_KEY:-}
       RERANK_MODEL: ${RERANK_MODEL:-}
       RERANK_TIMEOUT_SECONDS: ${RERANK_TIMEOUT_SECONDS:-10}
+      VISION_BASE_URL: ${VISION_BASE_URL:-}
+      VISION_API_KEY: ${VISION_API_KEY:-}
+      VISION_MODEL: ${VISION_MODEL:-}
+      VISION_TIMEOUT_SECONDS: ${VISION_TIMEOUT_SECONDS:-20}
+      VISION_MAX_IMAGES: ${VISION_MAX_IMAGES:-8}
+      VISION_MAX_IMAGE_BYTES: ${VISION_MAX_IMAGE_BYTES:-2097152}
+      VISION_MAX_PIXELS: ${VISION_MAX_PIXELS:-16000000}
+      VISION_MAX_DIMENSION: ${VISION_MAX_DIMENSION:-1600}
+      VISION_MAX_OUTPUT_TOKENS: ${VISION_MAX_OUTPUT_TOKENS:-4096}
       MILVUS_URL: http://milvus:19530
       MILVUS_TOKEN: ${MILVUS_TOKEN:-}
       MILVUS_COLLECTION: ${MILVUS_COLLECTION:-teamdocs_qwen3_8b_d1024_v1}
@@ -247,6 +263,9 @@ services:
 
   frontend:
     image: ${IMAGE_REPOSITORY:-ghcr.io/git-creat7/teamdocs}/frontend:${IMAGE_TAG:?IMAGE_TAG must be a published commit SHA}
+    build:
+      context: ./teamdocs-frontend
+      dockerfile: Dockerfile
     depends_on:
       backend:
         condition: service_healthy
