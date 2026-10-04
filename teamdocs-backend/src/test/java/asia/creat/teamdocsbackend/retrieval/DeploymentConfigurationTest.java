@@ -64,7 +64,8 @@ class DeploymentConfigurationTest {
         assertFalse(workflow.contains("Build pinned MinIO"));
         String mirror = Files.readString(Path.of("../.github/workflows/mirror-minio.yml"));
         assertTrue(mirror.contains("workflow_dispatch:"));
-        assertTrue(mirror.contains("--prefer-index=false"));
+        assertTrue(mirror.contains("--preserve-digests"));
+        assertTrue(mirror.contains("sha256sum --check"));
         assertTrue(mirror.contains("packages: write"));
         assertTrue(mirror.contains(server));
         assertFalse(mirror.contains(":latest"));

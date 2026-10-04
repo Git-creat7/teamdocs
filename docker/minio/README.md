@@ -17,12 +17,13 @@
 
 ## 同步流程
 
-1. 在 GitHub Actions 手动执行 [Mirror MinIO images](../../.github/workflows/mirror-minio.yml)。它仅复制固定摘要，不接收任意地址输入、不部署服务。
-2. workflow 用本仓库临时 `GITHUB_TOKEN` 的 `packages:write` 权限同步，之后从 GHCR 按原摘要拉取并检查版本；不在仓库保存长期令牌。
-3. 如需匿名部署或接受 Fork PR，在 GitHub Packages 中将这两个包设为 Public；否则部署机器需要 GHCR 只读权限。仓库自身 CI 使用 `packages:read` 和临时 Token。
-4. 手动触发 CI（不勾选检索评估）或正常提交代码；日常测试只拉 GHCR 摘要，不重复同步镜像，也不编译 MinIO。
+1. 已把本机按上述摘要拉取的镜像导出为包含原始manifest与layer的目录归档，放在仓库的 `minio-mirror-seed-20261004` 预发布附件中作为一次性中转；这不是应用版本。GitHub runner 访问 DaoCloud 被403拒绝，因此从GitHub中转下载，不再依赖镜像源对runner的访问策略。workflow固定校验归档和manifest的SHA-256。
+2. 在 GitHub Actions 手动执行 [Mirror MinIO images](../../.github/workflows/mirror-minio.yml)。它仅复制固定摘要，不接收任意地址输入、不部署服务。
+3. workflow 用本仓库临时 `GITHUB_TOKEN` 的 `packages:write` 权限同步，之后从 GHCR 按原摘要拉取并检查版本；不在仓库保存长期令牌。
+4. 如需匿名部署或接受 Fork PR，在 GitHub Packages 中将这两个包设为 Public；否则部署机器需要 GHCR 只读权限。仓库自身 CI 使用 `packages:read` 和临时 Token。
+5. 手动触发 CI（不勾选检索评估）或正常提交代码；日常测试只拉 GHCR 摘要，不重复同步镜像，也不编译 MinIO。
 
-镜像标签仅辅助识别，例如 `RELEASE.2024-05-28T17-19-04Z-amd64`；应用和测试实际引用摘要。同步命令使用 `docker buildx imagetools create --prefer-index=false`，保留源平台 manifest，而非重新打包容器。
+镜像标签仅辅助识别，例如 `RELEASE.2024-05-28T17-19-04Z-amd64`；应用和测试实际引用摘要。同步命令使用 `skopeo copy --preserve-digests`，保留源平台 manifest 和压缩层，而非重新打包容器；目标manifest可由原摘要直接拉取。中转附件约83MiB，不放入Git历史。
 
 ## 本地验证
 
