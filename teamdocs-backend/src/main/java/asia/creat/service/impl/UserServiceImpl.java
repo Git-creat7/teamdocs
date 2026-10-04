@@ -278,14 +278,14 @@ public class UserServiceImpl implements UserService {
     }
 
     private UserProfileVO toProfileVO(User user) {
-        UserProfileVO vo = new UserProfileVO();
-        vo.setUserId(user.getId());
-        vo.setUsername(user.getUsername());
-        vo.setNickname(user.getNickname());
-        vo.setEmail(user.getEmail());
-        vo.setAvatar(user.getAvatar());
-        vo.setStatus(user.getStatus());
-        vo.setCreatedAt(user.getCreatedAt());
-        return vo;
+        return UserProfileVO.builder()
+                .userId(user.getId())
+                .username(user.getUsername())
+                .nickname(user.getNickname())
+                .email(user.getEmail())
+                .avatar(user.getAvatar())
+                .status(user.getStatus())
+                .createdAt(user.getCreatedAt())
+                .build();
     }
 }

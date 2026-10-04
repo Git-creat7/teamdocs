@@ -81,10 +81,14 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -149,11 +153,79 @@ class DocumentLifecycleIntegrationTest {
         jdbc = new JdbcTemplate(dataSource);
         jdbc.update("DELETE FROM document_content");
         jdbc.update("DELETE FROM document");
+        jdbc.update("DELETE FROM folder");
         jdbc.update("DELETE FROM space_member");
         jdbc.update("DELETE FROM space");
         jdbc.update("INSERT INTO space (id,name,owner_id) VALUES (1,'解析测试',7)");
         jdbc.update("INSERT INTO space_member (space_id,user_id,role) VALUES (1,7,'OWNER'),(1,8,'MEMBER')");
         index.rebuild();
+    }
+
+    @Test
+    void duplicateUploadsAreNumberedWithoutReplacingExistingObjects() throws Exception {
+        List<String> names = List.of("需求.pdf", "需求(1).pdf", "需求(2).pdf");
+        Set<String> objectKeys = new HashSet<>();
+        for (int i = 0; i < names.size(); i++) {
+            Long id = upload("需求.pdf", "body-" + i);
+            Document document = documentMapper.selectById(id);
+            assertEquals(names.get(i), document.getName());
+            assertTrue(objectKeys.add(document.getFilePath()));
+            try (InputStream stream = storage.open(asia.creat.common.BucketType.PRIVATE, document.getFilePath())) {
+                assertEquals("body-" + i, new String(stream.readAllBytes(), StandardCharsets.UTF_8));
+            }
+        }
+        assertEquals(3, jdbc.queryForObject("SELECT COUNT(*) FROM document WHERE deleted=0", Integer.class));
+    }
+
+    @Test
+    void uploadNamesAreScopedToActiveFilesInTheSameSpaceAndFolder() {
+        Long original = upload("Report.txt", "original");
+        assertEquals("report(1).txt", documentMapper.selectById(upload("report.txt", "case duplicate")).getName());
+        jdbc.update("INSERT INTO folder (id,space_id,parent_id,name,created_by) VALUES (50,1,0,'nested',7)");
+        Long nested = documents.upload(1L, 50L,
+                new MockMultipartFile("file", "Report.txt", "text/plain", new byte[]{1}), OWNER);
+        assertEquals("Report.txt", documentMapper.selectById(nested).getName());
+
+        jdbc.update("INSERT INTO space (id,name,owner_id) VALUES (2,'other',7)");
+        jdbc.update("INSERT INTO space_member (space_id,user_id,role) VALUES (2,7,'OWNER')");
+        Long otherSpace = documents.upload(2L, 0L,
+                new MockMultipartFile("file", "Report.txt", "text/plain", new byte[]{2}), OWNER);
+        assertEquals("Report.txt", documentMapper.selectById(otherSpace).getName());
+
+        jdbc.update("UPDATE document SET deleted=1 WHERE id=?", original);
+        assertEquals("Report.txt", documentMapper.selectById(upload("Report.txt", "replacement name only")).getName());
+        assertEquals(1, jdbc.queryForObject("SELECT deleted FROM document WHERE id=?", Integer.class, original));
+    }
+
+    @Test
+    void concurrentUploadsChooseDistinctNamesInRootAndNestedFolders() throws Exception {
+        jdbc.update("INSERT INTO folder (id,space_id,parent_id,name,created_by) VALUES (51,1,0,'nested',7)");
+        for (Long folderId : List.of(0L, 51L)) {
+            ExecutorService executor = Executors.newFixedThreadPool(4);
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<Long>> results = new ArrayList<>();
+            try {
+                for (int i = 0; i < 4; i++) {
+                    results.add(executor.submit(() -> {
+                        assertTrue(start.await(10, TimeUnit.SECONDS));
+                        return documents.upload(1L, folderId,
+                                new MockMultipartFile("file", "parallel.txt", "text/plain", new byte[]{1}), OWNER);
+                    }));
+                }
+                start.countDown();
+                Set<String> names = new HashSet<>();
+                Set<String> objectKeys = new HashSet<>();
+                for (Future<Long> result : results) {
+                    Document document = documentMapper.selectById(result.get(30, TimeUnit.SECONDS));
+                    names.add(document.getName());
+                    assertTrue(objectKeys.add(document.getFilePath()));
+                }
+                assertEquals(Set.of("parallel.txt", "parallel(1).txt", "parallel(2).txt", "parallel(3).txt"), names);
+            } finally {
+                executor.shutdownNow();
+                assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
+            }
+        }
     }
 
     @Test

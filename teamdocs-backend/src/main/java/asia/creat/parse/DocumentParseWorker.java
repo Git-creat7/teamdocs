@@ -8,12 +8,16 @@ import asia.creat.service.DocumentParseService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Ticker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.concurrent.Executor;
 
@@ -25,6 +29,18 @@ public class DocumentParseWorker {
     private final DocumentParseService documentParseService;
     private final ParseProperties properties;
     private final Executor documentParseExecutor;
+
+    // 保留原件用于缓存泄漏修复实验；限制总字节权重，不是 JVM 峰值内存上限。
+    public static final Cache<String, byte[]> SOURCE_CACHE = newSourceCache(Ticker.systemTicker());
+
+    static Cache<String, byte[]> newSourceCache(Ticker ticker) {
+        return Caffeine.newBuilder()
+                .maximumWeight(32L * 1024 * 1024)
+                .weigher((String key, byte[] value) -> Math.max(1, value.length))
+                .expireAfterWrite(Duration.ofMinutes(10))
+                .ticker(ticker)
+                .build();
+    }
 
     public DocumentParseWorker(DocumentMapper documentMapper,
                                DocumentParseService documentParseService,

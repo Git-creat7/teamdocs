@@ -55,9 +55,13 @@ public class AgentBudget {
             log.warn("AgentBudget 模型调用次数已达上限: runId={}, currentCalls={}, maxCalls={}", run.getId(), run.getModelCalls(), run.getMaxModelCalls());
             throw new AgentFailure("MODEL_CALL_LIMIT");
         }
-        ModelCall call = new ModelCall();
-        call.setRunId(run.getId()); call.setUserId(run.getUserId()); call.setSequence(run.getModelCalls() + 1);
-        call.setEstimatedInput(input); call.setMaxOutput(run.getMaxOutputTokens());
+        ModelCall call = ModelCall.builder()
+                .runId(run.getId())
+                .userId(run.getUserId())
+                .sequence(run.getModelCalls() + 1)
+                .estimatedInput(input)
+                .maxOutput(run.getMaxOutputTokens())
+                .build();
         if (mapper.nextModel(run.getId(), System.currentTimeMillis()) != 1) throw new AgentFailure("RUN_STOPPED");
         mapper.insertModelCall(call);
         log.debug("AgentBudget 开启模型调用: runId={}, sequence={}, estimatedInput={}", run.getId(), call.getSequence(), input);

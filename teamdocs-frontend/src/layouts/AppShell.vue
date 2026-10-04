@@ -359,6 +359,7 @@
         :model="createForm"
         :rules="createRules"
         label-position="top"
+        @submit.prevent="handleCreateSpace"
       >
         <el-form-item label="空间名称" prop="name">
           <el-input
@@ -843,14 +844,12 @@ const createRules = {
 }
 
 async function handleCreateSpace() {
-  if (!createFormRef.value) return
-  try {
-    await createFormRef.value.validate()
-  } catch (err) {
-    return
-  }
+  if (!createFormRef.value || creatingSpace.value) return
+
   creatingSpace.value = true
   try {
+    await createFormRef.value.validate()
+
     await createSpaceApi({
       name: createForm.name.trim(),
       description: createForm.description ? createForm.description.trim() : ''

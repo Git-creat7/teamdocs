@@ -365,7 +365,7 @@
         :model="createFolderForm"
         :rules="createFolderRules"
         label-position="top"
-        @keyup.enter="handleCreateFolder"
+        @submit.prevent="handleCreateFolder"
       >
         <el-form-item label="文件夹名称" prop="name">
           <el-input
@@ -1746,15 +1746,12 @@ function openCreateFolderDialog() {
 }
 
 async function handleCreateFolder() {
-  if (!createFolderFormRef.value) return
-  try {
-    await createFolderFormRef.value.validate()
-  } catch (err) {
-    return
-  }
+  if (!createFolderFormRef.value || submittingFolder.value) return
 
   submittingFolder.value = true
   try {
+    await createFolderFormRef.value.validate()
+
     await createFolderApi(spaceId.value, {
       name: createFolderForm.name.trim(),
       parentId: currentFolderId.value

@@ -12,6 +12,7 @@ import asia.creat.entity.SpaceMember;
 import asia.creat.helper.ResourcePermissionHelper;
 import asia.creat.mapper.DocumentMapper;
 import asia.creat.parse.DocumentTextExtractor;
+import asia.creat.parse.DocumentImageReader;
 import asia.creat.parse.ExtractedText;
 import asia.creat.parse.TextChunker;
 import asia.creat.retrieval.RetrievalContext;
@@ -32,6 +33,8 @@ import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+
+import static asia.creat.parse.DocumentParseWorker.SOURCE_CACHE;
 
 @Service
 @Slf4j
@@ -127,8 +130,11 @@ public class DocumentParseServiceImpl implements DocumentParseService {
         long deadline = System.currentTimeMillis() + Math.max(1, parseProperties.getTimeoutSeconds()) * 1000L;
         ExtractedText extracted;
         try (InputStream input = fileStorageService.open(BucketType.PRIVATE, document.getFilePath());
-             RetrievalContext ignored = RetrievalContext.open(deadline, () -> requireCurrentParse(document), hit -> { })) {
-            extracted = textExtractor.extract(document.getName(), document.getFileType(), input);
+            RetrievalContext ignored = RetrievalContext.open(deadline, () -> requireCurrentParse(document), hit -> { })) {
+            byte[] source = DocumentImageReader.readLimited(input, parseProperties.getMaxBytes());
+            SOURCE_CACHE.put(document.getId() + ":" + document.getParseVersion(), source);
+            // 缓存和提取器复用同一份原件，避免再包装成流后完整复制一次
+            extracted = textExtractor.extractSource(document.getName(), document.getFileType(), source);
         } catch (Exception e) {
             log.warn("文档 {} 读取或提取失败: {}", document.getId(), e.getClass().getSimpleName());
             markFailed(document, "文件读取或解析失败，请检查文件后重试");
@@ -224,13 +230,13 @@ public class DocumentParseServiceImpl implements DocumentParseService {
     }
 
     private DocumentParseStatusVO toStatus(Document document) {
-        DocumentParseStatusVO vo = new DocumentParseStatusVO();
-        vo.setDocumentId(document.getId());
-        vo.setParseStatus(document.getParseStatus());
-        vo.setChunkCount(document.getChunkCount());
-        vo.setParseError(document.getParseError());
-        vo.setParsedAt(document.getParsedAt());
-        vo.setParseVersion(document.getParseVersion());
-        return vo;
+        return DocumentParseStatusVO.builder()
+                .documentId(document.getId())
+                .parseStatus(document.getParseStatus())
+                .chunkCount(document.getChunkCount())
+                .parseError(document.getParseError())
+                .parsedAt(document.getParsedAt())
+                .parseVersion(document.getParseVersion())
+                .build();
     }
 }

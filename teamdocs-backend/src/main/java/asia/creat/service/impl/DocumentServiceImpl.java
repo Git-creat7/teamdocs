@@ -37,7 +37,9 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.net.URLEncoder;
@@ -61,6 +63,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final TagMapper tagMapper;
     private final DocumentContentService documentContentService;
     private final DocumentIndexSync documentIndexSync;
+    private final PlatformTransactionManager transactionManager;
 
     @Override
     @OperationLog(
@@ -89,22 +92,29 @@ public class DocumentServiceImpl implements DocumentService {
         );
 
         fileStorageService.upload(file, BucketType.PRIVATE, objectKey);
-        Document doc = new Document();
-        doc.setSpaceId(spaceId);
-        doc.setFolderId(folderId);
-        doc.setName(originalName);
-        doc.setFilePath(objectKey);
-        doc.setFileSize(file.getSize());
-        doc.setFileType(file.getContentType());
-        doc.setUploadBy(loginUser.getUserId());
-        doc.setParseStatus(ParseStatus.PENDING);
-        doc.setChunkCount(0);
-        doc.setParseVersion(0);
+        Document doc = Document.builder()
+                .spaceId(spaceId)
+                .folderId(folderId)
+                .name(originalName)
+                .filePath(objectKey)
+                .fileSize(file.getSize())
+                .fileType(file.getContentType())
+                .uploadBy(loginUser.getUserId())
+                .parseStatus(ParseStatus.PENDING)
+                .chunkCount(0)
+                .parseVersion(0)
+                .build();
         try {
-            int inserted = documentMapper.insert(doc);
-            if (inserted != 1) {
-                throw new BusinessException("文件信息保存失败");
-            }
+            // 文件流已上传完成，只在分配名称和写入记录期间锁定目标目录。
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                if (documentMapper.lockUploadDirectory(doc.getSpaceId(), doc.getFolderId()) == null) {
+                    throw new BusinessException("目标目录不存在或已删除");
+                }
+                doc.setName(availableUploadName(doc.getSpaceId(), doc.getFolderId(), originalName));
+                if (documentMapper.insert(doc) != 1) {
+                    throw new BusinessException("文件信息保存失败");
+                }
+            });
         } catch (RuntimeException e) {
             try {
                 fileStorageService.delete(BucketType.PRIVATE, objectKey);
@@ -247,13 +257,13 @@ public class DocumentServiceImpl implements DocumentService {
 
         recentDocumentService.recordRecentDocument(loginUser.getUserId(), documentId);
 
-        DocumentPreviewVO vo = new DocumentPreviewVO();
-        vo.setDocumentId(doc.getId());
-        vo.setName(doc.getName());
-        vo.setFileType(doc.getFileType());
-        vo.setFileSize(doc.getFileSize());
-        vo.setUrl(url);
-        return vo;
+        return DocumentPreviewVO.builder()
+                .documentId(doc.getId())
+                .name(doc.getName())
+                .fileType(doc.getFileType())
+                .fileSize(doc.getFileSize())
+                .url(url)
+                .build();
     }
 
     @Override
@@ -376,6 +386,26 @@ public class DocumentServiceImpl implements DocumentService {
         String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8)
                 .replace("+", "%20");
         return type + "; filename*=UTF-8''" + encodedFilename;
+    }
+
+    private String availableUploadName(Long spaceId, Long folderId, String originalName) {
+        int dot = originalName.lastIndexOf('.');
+        String extension = dot > 0 ? originalName.substring(dot) : "";
+        String stem = dot > 0 ? originalName.substring(0, dot) : originalName;
+        int stemLength = stem.codePointCount(0, stem.length());
+        int extensionLength = extension.codePointCount(0, extension.length());
+        String candidate = originalName;
+
+        for (int number = 1; documentMapper.existsActiveName(spaceId, folderId, candidate); number++) {
+            String suffix = "(" + number + ")";
+            int available = 255 - extensionLength - suffix.length();
+            if (available < 1) {
+                throw new BusinessException("文件名过长，无法添加重名编号");
+            }
+            int end = stem.offsetByCodePoints(0, Math.min(stemLength, available));
+            candidate = stem.substring(0, end) + suffix + extension;
+        }
+        return candidate;
     }
 
     private Long requireFolderInSpace(Long spaceId, Long folderId) {

@@ -61,7 +61,9 @@ public class AgentWorker {
                - 空间文档优先：对于涉及团队空间、具体业务、项目设计的问题，必须先通过工具检索正文分块并提供依据和 [C1] 引用。
                - 通用常识兜底：当用户询问与空间文档无关的通用技术问题（如编程语言原理、系统设计、算法、通用常识等），若空间内未检索到相关文档，允许利用你的通用专业知识或系统环境时间直接解答。
                  重要格式要求：必须同样且严格封装在 JSON 的 answer 字段中（严禁脱离 JSON 直接输出裸露的 Markdown 文本！），并在 answer 正文开头明确标注提示（纯问候或时间常识简短回答可不加此提示前缀，直接回答即可）：
-                 “【当前空间暂时未收录相关内部资料，以下基于通用技术知识为您解答】\n\n……”
+                 “【当前空间暂时未收录相关内部资料，以下基于通用技术知识为您解答】
+            
+            ……”
                - 通用知识或时间问答时，citations 必须为空数组 []，严禁虚构引用编号。
             8. 检索后没有资料或证据不足时明确说明，不虚构结论、文档或引用。
             9. sourceId 由后端分配，例如 C1。最终严格输出一个合法的 JSON 对象，严禁输出任何“收到要求”、“遵照规范”等确认套话，严禁直接输出未被 JSON 包裹的 Markdown，必须针对用户的实际问题直接作答：
@@ -82,7 +84,7 @@ public class AgentWorker {
     public static final String SYSTEM = SYSTEM_TEMPLATE;
 
     private static final Pattern REFERENCE = Pattern.compile("\\[(C[0-9]+)]");
-    private static final Pattern JSON_EXTRACT_PATTERN = Pattern.compile("(?s)\\{.*\\}");
+    private static final Pattern JSON_EXTRACT_PATTERN = Pattern.compile("(?s)\\{.*}");
 
     record CachedDocMeta(Long id, String name, Integer parseVersion, String parseStatus, LocalDateTime updatedAt) {}
     record CachedSpaceMeta(Long spaceId, String name, String description, List<CachedDocMeta> documents) {}
@@ -277,14 +279,16 @@ public class AgentWorker {
                         if (mapper.nextTool(runId, System.currentTimeMillis()) != 1)
                             throw new AgentFailure("TOOL_CALL_LIMIT");
                         long start = System.nanoTime();
-                        Trace trace = new Trace();
-                        trace.setRunId(runId);
-                        trace.setSequence(mapper.run(runId).getToolCalls());
-                        trace.setToolName(AgentTools.NAMES.contains(request.name()) || tools.isMcpTool(request.name()) ? request.name() : "UNRECOGNIZED");
-                        trace.setArgumentSummary(
-                                "argumentChars=" + (request.arguments() == null ? 0 : request.arguments().length()));
-                        trace.setResultSummary("records=0");
-                        trace.setStatus("RUNNING");
+                        Trace trace = Trace.builder()
+                                .runId(runId)
+                                .sequence(mapper.run(runId).getToolCalls())
+                                .toolName(AgentTools.NAMES.contains(request.name()) || tools.isMcpTool(request.name())
+                                        ? request.name() : "UNRECOGNIZED")
+                                .argumentSummary("argumentChars="
+                                        + (request.arguments() == null ? 0 : request.arguments().length()))
+                                .resultSummary("records=0")
+                                .status("RUNNING")
+                                .build();
                         mapper.insertTrace(trace);
                         events.publish(runId, "tool_started");
                         log.info("Agent [runId={}] 开始调用工具: name={}, args={}", runId, request.name(), request.arguments());

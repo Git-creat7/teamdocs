@@ -138,20 +138,20 @@ public class OperationLogAspect {
                 }
                 log.debug("操作日志: 操作名称={}, 资源类型={}, 耗时={}ms", operationName, resourceType, duration);
 
-                OperationLogRecord operationLogRecord = new OperationLogRecord();
-                operationLogRecord.setOperationName(operationName);
-                operationLogRecord.setResourceType(resourceType);
-                operationLogRecord.setUserId(userId);
-                operationLogRecord.setSpaceId(spaceId);
-                operationLogRecord.setResourceId(resourceId);
-                operationLogRecord.setResourceName(resourceName);
-                operationLogRecord.setMethodName(methodName);
-                operationLogRecord.setRequestMethod(requestMethod);
-                operationLogRecord.setRequestUri(requestUri);
-                operationLogRecord.setDurationMs(duration);
-                operationLogRecord.setSuccess(success);
-
-                operationLogRecord.setErrorMessage(errorMessage);
+                OperationLogRecord operationLogRecord = OperationLogRecord.builder()
+                        .operationName(operationName)
+                        .resourceType(resourceType)
+                        .userId(userId)
+                        .spaceId(spaceId)
+                        .resourceId(resourceId)
+                        .resourceName(resourceName)
+                        .methodName(methodName)
+                        .requestMethod(requestMethod)
+                        .requestUri(requestUri)
+                        .durationMs(duration)
+                        .success(success)
+                        .errorMessage(errorMessage)
+                        .build();
 
                 try {
                     operationLogService.saveLog(operationLogRecord);

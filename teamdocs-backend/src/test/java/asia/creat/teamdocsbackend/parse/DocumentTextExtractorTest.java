@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -39,6 +40,25 @@ class DocumentTextExtractorTest {
         assertEquals(1, extracted.getSegments().size());
         assertEquals("上线检查\n清单", extracted.getSegments().get(0).text());
         assertEquals(null, extracted.getSegments().get(0).pageNumber());
+    }
+
+    @Test
+    void readsAlreadyLoadedBytesWithoutChangingTheSource() throws IOException {
+        byte[] source = "原件缓存测试".getBytes(StandardCharsets.UTF_8);
+        byte[] before = source.clone();
+
+        ExtractedText result = extractor.extractSource("notes.txt", "text/plain", source);
+
+        assertEquals("原件缓存测试", result.getSegments().get(0).text());
+        assertArrayEquals(before, source);
+    }
+
+    @Test
+    void byteArrayEntryPointAlsoEnforcesTheConfiguredLimit() {
+        properties.setMaxBytes(32);
+        assertThrows(IOException.class, () -> extractor.extractSource("notes.txt", "text/plain", new byte[33]));
+        properties.setMaxBytes(0);
+        assertThrows(IOException.class, () -> extractor.extractSource("notes.txt", "text/plain", new byte[0]));
     }
 
     @Test

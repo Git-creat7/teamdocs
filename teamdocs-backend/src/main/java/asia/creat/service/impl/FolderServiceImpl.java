@@ -48,11 +48,12 @@ public class FolderServiceImpl implements FolderService {
             checkParentSpaceId(parentId, spaceId);
         }
 
-        Folder folder = new Folder();
-        folder.setName(dto.getName());
-        folder.setParentId(parentId);
-        folder.setSpaceId(spaceId);
-        folder.setCreatedBy(loginUser.getUserId());
+        Folder folder = Folder.builder()
+                .name(dto.getName())
+                .parentId(parentId)
+                .spaceId(spaceId)
+                .createdBy(loginUser.getUserId())
+                .build();
         folderMapper.insert(folder);
         log.info("{} 创建了文件夹：{}", loginUser.getUsername(), folder.getName());
     }

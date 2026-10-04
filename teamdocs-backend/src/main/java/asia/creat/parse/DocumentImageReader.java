@@ -76,7 +76,7 @@ public class DocumentImageReader {
     }
 
     /** 在内存中读取限定字节数。 */
-    static byte[] readLimited(InputStream input, long maxBytes) throws IOException {
+    public static byte[] readLimited(InputStream input, long maxBytes) throws IOException {
         if (maxBytes < 1) throw new IOException("字节上限配置无效");
         long limit = Math.min(maxBytes, Integer.MAX_VALUE - 1L);
         ByteArrayOutputStream out = new ByteArrayOutputStream();

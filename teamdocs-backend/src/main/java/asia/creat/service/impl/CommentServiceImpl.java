@@ -50,11 +50,12 @@ public class CommentServiceImpl implements CommentService {
                 throw new BusinessException("该评论不存在或已被删除，无法回复");
             }
         }
-        Comment comment = new Comment();
-        comment.setDocumentId(documentId);
-        comment.setUserId(loginUser.getUserId());
-        comment.setContent(dto.getContent().strip());
-        comment.setReplyToId(dto.getReplyToId());
+        Comment comment = Comment.builder()
+                .documentId(documentId)
+                .userId(loginUser.getUserId())
+                .content(dto.getContent().strip())
+                .replyToId(dto.getReplyToId())
+                .build();
         commentMapper.insert(comment);
     }
 

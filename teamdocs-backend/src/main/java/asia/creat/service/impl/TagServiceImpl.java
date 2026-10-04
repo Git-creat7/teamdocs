@@ -161,11 +161,12 @@ public class TagServiceImpl implements TagService {
             result.put(docId, new ArrayList<>());
         }
         for (DocumentTagRelVO rel : rels) {
-            Tag tag = new Tag();
-            tag.setId(rel.getId());
-            tag.setSpaceId(rel.getSpaceId());
-            tag.setName(rel.getName());
-            tag.setCreatedAt(rel.getCreatedAt());
+            Tag tag = Tag.builder()
+                    .id(rel.getId())
+                    .spaceId(rel.getSpaceId())
+                    .name(rel.getName())
+                    .createdAt(rel.getCreatedAt())
+                    .build();
             List<Tag> list = result.get(rel.getDocumentId());
             if (list != null) {
                 list.add(tag);

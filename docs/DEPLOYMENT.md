@@ -22,9 +22,11 @@ Fork 后 CI 会发布到自己的仓库命名空间，需要同步修改 `.env` 
 
 ## MinIO 镜像来源
 
-MinIO 社区预编译镜像的上游拉取已反复失败。项目将 DaoCloud 缓存中的指定 MinIO/mc 镜像原样同步至本仓库 GHCR，Compose 和测试均固定到已验证摘要，见 [来源、版本与复现方法](../docker/minio/README.md)。**这不是源码构建，也不使用 latest。**
+MinIO 社区预编译镜像的上游拉取已反复失败。项目将 DaoCloud 缓存中的指定 MinIO/mc 镜像原样同步至本仓库 GHCR，Compose 和测试均固定到已验证摘要。**不编译 MinIO 源码，也不使用 latest。**
 
-先在 main 手动运行 `Mirror MinIO images` workflow，成功后再运行日常 CI。首次创建的 GHCR `minio`、`mc` 包可能默认为私有；建议在 GitHub Packages 中设为 Public，使外部 PR 和部署机器可匿名拉取，或在服务器执行 `docker login ghcr.io`，使用只读包权限。仓库内 CI 通过 GITHUB_TOKEN 读取包，不需要把 PAT 放进配置。
+当前镜像为 Linux amd64：MinIO `RELEASE.2024-05-28T17-19-04Z`、mc `RELEASE.2025-08-13T08-35-41Z`。DaoCloud 是第三方缓存，已核对二进制版本及同步前后的摘要一致性，不代表已验证上游供应链签名。
+
+先在 main 手动运行 [Mirror MinIO images](../.github/workflows/mirror-minio.yml)，成功后再运行日常 CI。该 workflow 从 `minio-mirror-seed-20261004` 预发布附件读取原始镜像归档，校验归档和 manifest 的 SHA-256，再通过 `skopeo copy --preserve-digests` 原样同步；日常 CI 不重复同步镜像。首次创建的 GHCR `minio`、`mc` 包可能默认为私有；建议在 GitHub Packages 中设为 Public，使外部 PR 和部署机器可匿名拉取，或在服务器执行 `docker login ghcr.io`，使用只读包权限。仓库内 CI 通过 GITHUB_TOKEN 读取包，不需要把 PAT 放进配置。
 
 存储镜像不跟随应用 `IMAGE_TAG` 更新，只有修改 Compose 中的摘要才会更换存储版本。Fork 若要使用自己的镜像仓库，需要同步修改镜像同步 workflow 和 Compose/测试中的 GHCR 地址，而不仅是 `IMAGE_REPOSITORY`。
 

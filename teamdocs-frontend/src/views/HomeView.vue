@@ -388,6 +388,7 @@
         :model="editForm"
         :rules="editRules"
         label-position="top"
+        @submit.prevent="handleSubmit"
       >
         <el-form-item label="空间名称" prop="name">
           <el-input v-model.trim="editForm.name" maxlength="64" clearable />
@@ -624,14 +625,12 @@ function handleSpaceCommand(cmd, space) {
 }
 
 async function handleSubmit() {
-  if (!editFormRef.value) return
-  try {
-    await editFormRef.value.validate()
-  } catch (err) {
-    return
-  }
+  if (!editFormRef.value || submitting.value) return
+
   submitting.value = true
   try {
+    await editFormRef.value.validate()
+
     const payload = {
       name: editForm.name.trim(),
       description: editForm.description ? editForm.description.trim() : ''

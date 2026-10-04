@@ -34,6 +34,12 @@ public interface DocumentMapper extends BaseMapper<Document> {
     String selectNameIncludingDeleted(@Param("spaceId") Long spaceId,
                                       @Param("documentId") Long documentId);
 
+    Long lockUploadDirectory(@Param("spaceId") Long spaceId, @Param("folderId") Long folderId);
+
+    boolean existsActiveName(@Param("spaceId") Long spaceId,
+                             @Param("folderId") Long folderId,
+                             @Param("name") String name);
+
     // 逻辑删除会滤掉回收站记录，FOR UPDATE 也写不进 Wrapper
     Document lockById(@Param("id") Long id);
 }

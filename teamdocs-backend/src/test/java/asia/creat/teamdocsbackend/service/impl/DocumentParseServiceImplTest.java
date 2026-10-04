@@ -25,6 +25,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import asia.creat.service.DocumentIndexSync;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -34,15 +37,21 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static asia.creat.parse.DocumentParseWorker.SOURCE_CACHE;
 
 @ExtendWith(MockitoExtension.class)
 class DocumentParseServiceImplTest {
@@ -70,6 +79,8 @@ class DocumentParseServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        SOURCE_CACHE.invalidateAll();
+        SOURCE_CACHE.cleanUp();
         properties = new ParseProperties();
         properties.setMaxBytes(10);
         properties.setChunkSize(1000);
@@ -88,6 +99,8 @@ class DocumentParseServiceImplTest {
     @AfterEach
     void tearDown() {
         SpaceContext.clear();
+        SOURCE_CACHE.invalidateAll();
+        SOURCE_CACHE.cleanUp();
     }
 
     @Test
@@ -113,6 +126,61 @@ class DocumentParseServiceImplTest {
     }
 
     @Test
+    void extractorReusesTheSameBytesHeldByTheBoundedCache() throws IOException {
+        Document document = document(4L);
+        document.setName("notes.txt");
+        document.setFileType("text/plain");
+        byte[] original = new byte[]{1, 2, 3, 4};
+        ByteArrayInputStream input = new ByteArrayInputStream(original);
+        when(documentMapper.selectById(9L)).thenReturn(document);
+        when(documentMapper.update(isNull(), any())).thenReturn(1);
+        when(fileStorageService.open(BucketType.PRIVATE, document.getFilePath())).thenReturn(input);
+        when(textExtractor.extractSource(eq("notes.txt"), eq("text/plain"), any()))
+                .thenReturn(ExtractedText.skipped("没有可提取文本"));
+
+        service.parseDocument(9L);
+
+        ArgumentCaptor<byte[]> bytes = ArgumentCaptor.forClass(byte[].class);
+        verify(textExtractor).extractSource(eq("notes.txt"), eq("text/plain"), bytes.capture());
+        assertArrayEquals(original, bytes.getValue());
+        assertSame(SOURCE_CACHE.getIfPresent("9:2"), bytes.getValue());
+        assertEquals(0, input.available());
+        verify(textExtractor, never()).extract(any(), any(), any());
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(longs = 4)
+    void actualStreamLimitAppliesWhenFileSizeIsMissingOrInaccurate(Long declaredSize) throws IOException {
+        properties.setMaxBytes(32);
+        Document document = document(declaredSize);
+        document.setName("notes.txt");
+        document.setFileType("text/plain");
+        AtomicBoolean closed = new AtomicBoolean();
+        ByteArrayInputStream input = new ByteArrayInputStream(new byte[4096]) {
+            @Override
+            public void close() {
+                closed.set(true);
+            }
+        };
+        when(documentMapper.selectById(9L)).thenReturn(document);
+        when(documentMapper.update(isNull(), any())).thenReturn(1);
+        when(fileStorageService.open(BucketType.PRIVATE, document.getFilePath())).thenReturn(input);
+        service = new DocumentParseServiceImpl(documentMapper, documentContentService, fileStorageService,
+                new DocumentTextExtractor(properties), properties, new ResourcePermissionHelper(), documentIndexSync);
+
+        service.parseDocument(9L);
+
+        assertEquals(4096 - 33, input.available(), "Stop after maxBytes plus one overflow-detection byte");
+        assertTrue(closed.get());
+        assertNull(SOURCE_CACHE.getIfPresent("9:2"), "Oversized sources must not enter the cache");
+        verify(documentContentService).discardIfParsing(
+                9L, 1L, 2, ParseStatus.FAILED, "文件读取或解析失败，请检查文件后重试");
+        verify(documentContentService, never()).publishIfParsing(any(), any(), any(), any());
+        verify(documentIndexSync, never()).afterCommit(any());
+    }
+
+    @Test
     void extractFailureIsRecordedAsFailed() throws IOException {
         Document document = document(4L);
         document.setName("notes.txt");
@@ -121,7 +189,7 @@ class DocumentParseServiceImplTest {
         when(documentMapper.selectById(9L)).thenReturn(document);
         when(fileStorageService.open(BucketType.PRIVATE, "space/1/notes.txt"))
                 .thenReturn(new ByteArrayInputStream(new byte[0]));
-        when(textExtractor.extract(eq("notes.txt"), eq("text/plain"), any()))
+        when(textExtractor.extractSource(eq("notes.txt"), eq("text/plain"), any()))
                 .thenThrow(new IOException("不是有效的 UTF-8 文本"));
 
         service.parseDocument(9L);
@@ -139,7 +207,7 @@ class DocumentParseServiceImplTest {
         when(documentMapper.update(isNull(), any())).thenReturn(1);
         when(documentMapper.selectById(9L)).thenReturn(document);
         when(fileStorageService.open(any(), any())).thenReturn(new ByteArrayInputStream(new byte[0]));
-        when(textExtractor.extract(any(), any(), any())).thenReturn(ExtractedText.of(List.of(
+        when(textExtractor.extractSource(any(), any(), any())).thenReturn(ExtractedText.of(List.of(
                 new ExtractedText.Segment(1, "第一页"),
                 new ExtractedText.Segment(2, "第二页")
         )));
@@ -162,7 +230,7 @@ class DocumentParseServiceImplTest {
         when(documentMapper.update(isNull(), any())).thenReturn(1);
         when(documentMapper.selectById(9L)).thenReturn(document);
         when(fileStorageService.open(any(), any())).thenReturn(new ByteArrayInputStream(new byte[0]));
-        when(textExtractor.extract(any(), any(), any()))
+        when(textExtractor.extractSource(any(), any(), any()))
                 .thenReturn(ExtractedText.of(List.of(new ExtractedText.Segment(null, "正文"))));
         when(documentContentService.publishIfParsing(any(), any(), any(), any())).thenReturn(false);
 

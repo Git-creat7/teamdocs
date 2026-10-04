@@ -67,7 +67,15 @@ public class DocumentTextExtractor {
     public ExtractedText extract(String fileName, String contentType, InputStream input) throws IOException {
         Kind kind = detect(fileName, contentType);
         if (kind == Kind.UNSUPPORTED) return ExtractedText.skipped("不支持解析该文件类型");
-        byte[] source = DocumentImageReader.readLimited(input, properties.getMaxBytes());
+        return extractSource(fileName, contentType, DocumentImageReader.readLimited(input, properties.getMaxBytes()));
+    }
+
+    /** 复用已读取的原件，不复制或修改数组；直接调用仍须校验字节上限。 */
+    public ExtractedText extractSource(String fileName, String contentType, byte[] source) throws IOException {
+        Kind kind = detect(fileName, contentType);
+        if (kind == Kind.UNSUPPORTED) return ExtractedText.skipped("不支持解析该文件类型");
+        if (properties.getMaxBytes() < 1) throw new IOException("字节上限配置无效");
+        if (source.length > properties.getMaxBytes()) throw new IOException("内容超过字节上限");
         try (TikaInputStream stream = TikaInputStream.get(new ByteArrayInputStream(source))) {
             String actualType = new DefaultDetector().detect(stream, new Metadata()).toString();
             if (kind == Kind.IMAGE) {

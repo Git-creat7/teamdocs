@@ -23,15 +23,21 @@ import asia.creat.vo.DocumentPreviewVO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import asia.creat.service.DocumentIndexSync;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -78,6 +84,9 @@ class DocumentServiceImplTest {
     @Mock
     private DocumentIndexSync documentIndexSync;
 
+    @Mock
+    private PlatformTransactionManager transactionManager;
+
     private DocumentServiceImpl service;
 
     @BeforeEach
@@ -91,7 +100,8 @@ class DocumentServiceImplTest {
                 documentTagMapper,
                 tagMapper,
                 documentContentService,
-                documentIndexSync
+                documentIndexSync,
+                transactionManager
         );
         SpaceMember member = new SpaceMember();
         member.setRole(SpaceRole.MEMBER);
@@ -106,6 +116,7 @@ class DocumentServiceImplTest {
     // Upload stores the binary first and then writes metadata owned by the current user.
     @Test
     void uploadShouldPersistDocumentMetadata() {
+        prepareUpload(0L);
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "notes.txt",
@@ -136,6 +147,7 @@ class DocumentServiceImplTest {
 
     @Test
     void uploadShouldDeleteObjectWhenMetadataInsertFails() {
+        prepareUpload(0L);
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "notes.txt",
@@ -156,6 +168,7 @@ class DocumentServiceImplTest {
 
     @Test
     void uploadShouldTreatZeroInsertedRowsAsFailure() {
+        prepareUpload(0L);
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "notes.txt",
@@ -192,6 +205,7 @@ class DocumentServiceImplTest {
 
     @Test
     void uploadShouldAcceptFolderInCurrentSpace() {
+        prepareUpload(20L);
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "notes.txt",
@@ -207,6 +221,90 @@ class DocumentServiceImplTest {
         verify(documentMapper).insert(documentCaptor.capture());
         assertEquals(20L, documentCaptor.getValue().getFolderId());
         verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), any(String.class));
+    }
+
+    private void prepareUpload(Long folderId) {
+        when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+        when(documentMapper.lockUploadDirectory(SPACE_ID, folderId)).thenReturn(folderId == 0 ? SPACE_ID : folderId);
+    }
+
+    static Stream<Arguments> duplicateNames() {
+        return Stream.of(
+                Arguments.of("需求.pdf", "需求(1).pdf"),
+                Arguments.of("README", "README(1)"),
+                Arguments.of(".env", ".env(1)"),
+                Arguments.of("archive.tar.gz", "archive.tar(1).gz"),
+                Arguments.of("a".repeat(251) + ".pdf", "a".repeat(248) + "(1).pdf"),
+                Arguments.of("😀".repeat(251) + ".pdf", "😀".repeat(248) + "(1).pdf")
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("duplicateNames")
+    void duplicateUploadShouldNumberTheStemAndPreserveTheExtension(String original, String expected) {
+        prepareUpload(0L);
+        when(documentMapper.existsActiveName(SPACE_ID, 0L, original)).thenReturn(true);
+        when(documentMapper.insert(any(Document.class))).thenReturn(1);
+
+        service.upload(SPACE_ID, 0L, new MockMultipartFile("file", original, "text/plain", new byte[]{1}), LOGIN_USER);
+
+        ArgumentCaptor<Document> captured = ArgumentCaptor.forClass(Document.class);
+        verify(documentMapper).insert(captured.capture());
+        assertEquals(expected, captured.getValue().getName());
+    }
+
+    @Test
+    void duplicateUploadShouldSkipNumbersAlreadyInUse() {
+        prepareUpload(0L);
+        when(documentMapper.existsActiveName(SPACE_ID, 0L, "notes.txt")).thenReturn(true);
+        when(documentMapper.existsActiveName(SPACE_ID, 0L, "notes(1).txt")).thenReturn(true);
+        when(documentMapper.existsActiveName(SPACE_ID, 0L, "notes(2).txt")).thenReturn(true);
+        when(documentMapper.insert(any(Document.class))).thenReturn(1);
+        MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", new byte[]{1});
+
+        service.upload(SPACE_ID, 0L, file, LOGIN_USER);
+
+        ArgumentCaptor<Document> captured = ArgumentCaptor.forClass(Document.class);
+        verify(documentMapper).insert(captured.capture());
+        assertEquals("notes(3).txt", captured.getValue().getName());
+        var order = inOrder(fileStorageService, transactionManager, documentMapper);
+        order.verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), any(String.class));
+        order.verify(transactionManager).getTransaction(any());
+        order.verify(documentMapper).lockUploadDirectory(SPACE_ID, 0L);
+        order.verify(documentMapper).existsActiveName(SPACE_ID, 0L, "notes.txt");
+        order.verify(documentMapper).insert(any(Document.class));
+        order.verify(transactionManager).commit(any());
+    }
+
+    @Test
+    void uploadShouldDeleteObjectIfTheDirectoryDisappearsBeforeMetadataWrite() {
+        when(documentMapper.lockUploadDirectory(SPACE_ID, 0L)).thenReturn(null);
+        when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+        MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", new byte[]{1});
+
+        assertThrows(BusinessException.class, () -> service.upload(SPACE_ID, 0L, file, LOGIN_USER));
+
+        verify(documentMapper, never()).insert(any(Document.class));
+        verify(transactionManager).rollback(any());
+        ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
+        verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), key.capture());
+        verify(fileStorageService).delete(BucketType.PRIVATE, key.getValue());
+    }
+
+    @Test
+    void uploadShouldDeleteObjectWhenMetadataCommitFails() {
+        prepareUpload(0L);
+        when(documentMapper.insert(any(Document.class))).thenReturn(1);
+        RuntimeException failure = new RuntimeException("commit failed");
+        doThrow(failure).when(transactionManager).commit(any());
+        MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", new byte[]{1});
+
+        assertSame(failure, assertThrows(RuntimeException.class,
+                () -> service.upload(SPACE_ID, 0L, file, LOGIN_USER)));
+
+        ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
+        verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), key.capture());
+        verify(fileStorageService).delete(BucketType.PRIVATE, key.getValue());
     }
 
     @Test

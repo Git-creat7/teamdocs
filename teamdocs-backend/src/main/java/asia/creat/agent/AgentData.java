@@ -3,7 +3,11 @@ package asia.creat.agent;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -26,6 +30,9 @@ public final class AgentData {
     }
 
     @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
     public static class Run {
         private Long id;
         private Long sessionId;
@@ -50,6 +57,9 @@ public final class AgentData {
     }
 
     @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
     public static class Message {
         private Long id;
         private Long sessionId;
@@ -63,6 +73,9 @@ public final class AgentData {
     }
 
     @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
     public static class Trace {
         private Long id;
         private Long runId;
@@ -77,6 +90,9 @@ public final class AgentData {
     }
 
     @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
     public static class ModelCall {
         private Long id;
         private Long runId;

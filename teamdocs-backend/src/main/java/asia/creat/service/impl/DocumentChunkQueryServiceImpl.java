@@ -105,11 +105,12 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
         if (document == null || !spaceId.equals(document.getSpaceId())) {
             throw new BusinessException("文件不存在");
         }
-        ChunkReadVO page = new ChunkReadVO();
-        page.setParseStatus(document.getParseStatus());
-        page.setParseVersion(document.getParseVersion());
-        page.setDocumentName(document.getName());
-        page.setChunks(List.of());
+        ChunkReadVO page = ChunkReadVO.builder()
+                .parseStatus(document.getParseStatus())
+                .parseVersion(document.getParseVersion())
+                .documentName(document.getName())
+                .chunks(List.of())
+                .build();
         if (document.getParseStatus() != ParseStatus.READY) {
             return page;
         }

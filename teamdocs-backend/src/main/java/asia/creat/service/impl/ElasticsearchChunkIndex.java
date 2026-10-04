@@ -17,7 +17,11 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpHost;
 import org.elasticsearch.client.RestClient;
@@ -146,13 +150,14 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
         }
         List<BulkOperation> operations = new ArrayList<>();
         for (ChunkHitVO row : rows) {
-            IndexedChunk source = new IndexedChunk();
-            source.setSpaceId(row.getSpaceId());
-            source.setDocumentId(row.getDocumentId());
-            source.setChunkId(row.getChunkId());
-            source.setChunkIndex(row.getChunkIndex());
-            source.setParseVersion(row.getParseVersion());
-            source.setContent(row.getExcerpt());
+            IndexedChunk source = IndexedChunk.builder()
+                    .spaceId(row.getSpaceId())
+                    .documentId(row.getDocumentId())
+                    .chunkId(row.getChunkId())
+                    .chunkIndex(row.getChunkIndex())
+                    .parseVersion(row.getParseVersion())
+                    .content(row.getExcerpt())
+                    .build();
             operations.add(BulkOperation.of(op -> op.index(index -> index.index(properties.getIndex())
                     .id(row.getDocumentId() + "_" + row.getChunkIndex()).document(source))));
         }
@@ -186,6 +191,9 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
     }
 
     @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class IndexedChunk {
         @JsonProperty("space_id")

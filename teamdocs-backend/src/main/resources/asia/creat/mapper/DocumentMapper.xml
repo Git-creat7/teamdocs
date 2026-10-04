@@ -155,6 +155,27 @@
         AND space_id = #{spaceId}
     </select>
 
+    <select id="lockUploadDirectory" resultType="java.lang.Long">
+        <choose>
+            <when test="folderId == 0">
+                SELECT id FROM space WHERE id = #{spaceId} AND deleted = 0 FOR UPDATE
+            </when>
+            <otherwise>
+                SELECT id FROM folder WHERE id = #{folderId} AND space_id = #{spaceId} FOR UPDATE
+            </otherwise>
+        </choose>
+    </select>
+
+    <select id="existsActiveName" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM document
+            WHERE space_id = #{spaceId}
+              AND folder_id = #{folderId}
+              AND deleted = 0
+              AND name = #{name}
+        )
+    </select>
+
     <select id="lockById" resultType="asia.creat.entity.Document">
         SELECT id,
                space_id,

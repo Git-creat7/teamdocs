@@ -44,18 +44,28 @@ public class AgentStore {
         }
         AgentBudget.requireConfigured(properties);
         if (mapper.activeRuns(userId) != 0) throw new BusinessException("当前用户已有运行中的 AI 请求");
-        Run run = new Run();
-        run.setSpaceId(spaceId); run.setUserId(userId); run.setSessionId(sessionId);
-        run.setClientRequestId(request.clientRequestId()); run.setRequestHash(hash); run.setModelName(properties.getModelName());
-        run.setMaxModelCalls(Math.min(6, Math.max(1, properties.getMaxModelCalls())));
-        run.setMaxToolCalls(Math.min(8, Math.max(1, properties.getMaxToolCalls())));
-        run.setMaxInputTokens(Math.max(1, properties.getMaxInputTokens()));
-        run.setMaxOutputTokens(Math.min(4096, Math.max(1, properties.getMaxOutputTokens())));
-        run.setDeadlineMs(System.currentTimeMillis() + Math.min(90, Math.max(1, properties.getRunTimeoutSeconds())) * 1000L);
+        Run run = Run.builder()
+                .spaceId(spaceId)
+                .userId(userId)
+                .sessionId(sessionId)
+                .clientRequestId(request.clientRequestId())
+                .requestHash(hash)
+                .modelName(properties.getModelName())
+                .maxModelCalls(Math.min(6, Math.max(1, properties.getMaxModelCalls())))
+                .maxToolCalls(Math.min(8, Math.max(1, properties.getMaxToolCalls())))
+                .maxInputTokens(Math.max(1, properties.getMaxInputTokens()))
+                .maxOutputTokens(Math.min(4096, Math.max(1, properties.getMaxOutputTokens())))
+                .deadlineMs(System.currentTimeMillis() + Math.min(90, Math.max(1, properties.getRunTimeoutSeconds())) * 1000L)
+                .build();
         mapper.insertRun(run);
-        Message message = new Message();
-        message.setSessionId(sessionId); message.setRunId(run.getId()); message.setRole("USER");
-        message.setBody(question); message.setDependencies("[]"); message.setSources("[]");
+        Message message = Message.builder()
+                .sessionId(sessionId)
+                .runId(run.getId())
+                .role("USER")
+                .body(question)
+                .dependencies("[]")
+                .sources("[]")
+                .build();
         mapper.insertMessage(message); mapper.touchSession(sessionId);
         return new Created(mapper.run(run.getId()), true);
     }
@@ -63,9 +73,14 @@ public class AgentStore {
     @Transactional
     public boolean finish(Run run, String status, String error, String answer, List<Dependency> dependencies, List<Source> sources) {
         if (mapper.finish(run.getId(), status, error, System.currentTimeMillis()) != 1) return false;
-        Message message = new Message();
-        message.setSessionId(run.getSessionId()); message.setRunId(run.getId()); message.setRole("ASSISTANT");
-        message.setBody(answer); message.setDependencies(json.write(dependencies)); message.setSources(json.write(sources));
+        Message message = Message.builder()
+                .sessionId(run.getSessionId())
+                .runId(run.getId())
+                .role("ASSISTANT")
+                .body(answer)
+                .dependencies(json.write(dependencies))
+                .sources(json.write(sources))
+                .build();
         mapper.insertMessage(message); mapper.touchSession(run.getSessionId());
         events.afterCommit(run.getId(), "SUCCEEDED".equals(status) ? "run_finished" : "run_failed");
         return true;

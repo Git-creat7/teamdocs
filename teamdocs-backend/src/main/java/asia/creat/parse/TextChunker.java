@@ -35,13 +35,15 @@ public final class TextChunker {
                     end = Math.min(start + 2, normalized.length());
                 }
             }
-            DocumentContent chunk = new DocumentContent();
-            chunk.setChunkIndex(index++);
-            chunk.setContent(normalized.substring(start, end));
-            chunk.setTokenCount(estimateTokens(chunk.getContent()));
-            chunk.setPageNumber(pageNumber);
-            chunk.setCharStart(start);
-            chunk.setCharEnd(end);
+            String content = normalized.substring(start, end);
+            DocumentContent chunk = DocumentContent.builder()
+                    .chunkIndex(index++)
+                    .content(content)
+                    .tokenCount(estimateTokens(content))
+                    .pageNumber(pageNumber)
+                    .charStart(start)
+                    .charEnd(end)
+                    .build();
             chunks.add(chunk);
             if (end >= normalized.length()) {
                 break;
