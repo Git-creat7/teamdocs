@@ -35,7 +35,7 @@ class MilvusContainerIntegrationTest {
                              "--listen-client-urls=http://0.0.0.0:2379", "--data-dir=/etcd")
                      .withCreateContainerCmdModifier(cmd -> cmd.getHostConfig().withMemory(256L * 1024 * 1024))
                      .waitingFor(Wait.forLogMessage(".*ready to serve client requests.*", 1));
-             GenericContainer<?> storage = new GenericContainer<>("minio/minio:RELEASE.2024-05-28T17-19-04Z")
+             GenericContainer<?> storage = new GenericContainer<>(System.getProperty("teamdocs.test.minio-image", "ghcr.io/git-creat7/teamdocs/minio@sha256:648817f3b321ec7a2f86c594ba468fa19eff8ee3ac17a07c03acf7a8a35fda33"))
                      .withNetwork(network).withNetworkAliases("storage")
                      .withEnv("MINIO_ROOT_USER", "test-vector-user")
                      .withEnv("MINIO_ROOT_PASSWORD", "test-vector-password")

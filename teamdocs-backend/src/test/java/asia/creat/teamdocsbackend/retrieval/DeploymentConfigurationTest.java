@@ -46,6 +46,30 @@ class DeploymentConfigurationTest {
         assertFalse(source.contains("build-init-sql.py"));
     }
 
+    /** CI 与部署使用固定镜像摘要；手动同步独立于日常应用发布。 */
+    @Test
+    void minioMirrorsArePinnedAndSeparateFromApplicationBuilds() throws Exception {
+        String composeText = Files.readString(Path.of("../docker-compose.yaml"));
+        Map<?, ?> services = (Map<?, ?>) new Yaml().loadAs(composeText, Map.class).get("services");
+        String server = ((Map<?, ?>) services.get("minio")).get("image").toString();
+        String client = ((Map<?, ?>) services.get("minio-init")).get("image").toString();
+        assertEquals(server, ((Map<?, ?>) services.get("milvus-storage")).get("image"));
+        assertTrue(server.startsWith("ghcr.io/git-creat7/teamdocs/minio@sha256:"));
+        assertTrue(client.contains("ghcr.io/git-creat7/teamdocs/mc@sha256:"));
+        assertFalse(composeText.contains("image: minio/minio:"));
+        assertFalse(client.contains(":latest"));
+
+        String workflow = Files.readString(Path.of("../.github/workflows/ci.yml"));
+        assertFalse(workflow.contains("context: ./docker/minio"));
+        assertFalse(workflow.contains("Build pinned MinIO"));
+        String mirror = Files.readString(Path.of("../.github/workflows/mirror-minio.yml"));
+        assertTrue(mirror.contains("workflow_dispatch:"));
+        assertTrue(mirror.contains("--prefer-index=false"));
+        assertTrue(mirror.contains("packages: write"));
+        assertTrue(mirror.contains(server));
+        assertFalse(mirror.contains(":latest"));
+    }
+
     /** 单一初始化入口包含全部表，全文索引依赖顺序不被打乱。 */
     @Test
     void mergedBootstrapContainsAllTablesInDependencyOrder() throws Exception {

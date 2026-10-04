@@ -113,7 +113,7 @@ class DocumentLifecycleIntegrationTest {
             .waitingFor(Wait.forHttp("/").forPort(9200).withStartupTimeout(Duration.ofMinutes(3)));
     @Container
     static final GenericContainer<?> MINIO = new GenericContainer<>(DockerImageName.parse(System.getProperty(
-            "teamdocs.test.minio-image", "minio/minio:RELEASE.2023-09-20T22-49-55Z")))
+            "teamdocs.test.minio-image", "ghcr.io/git-creat7/teamdocs/minio@sha256:648817f3b321ec7a2f86c594ba468fa19eff8ee3ac17a07c03acf7a8a35fda33")))
             .withEnv("MINIO_ROOT_USER", "test-access-key")
             .withEnv("MINIO_ROOT_PASSWORD", "test-secret-key")
             .withCommand("server", "/data")

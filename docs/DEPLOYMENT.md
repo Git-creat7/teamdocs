@@ -20,9 +20,15 @@ ghcr.io/git-creat7/teamdocs/elasticsearch:<完整提交 SHA>
 
 Fork 后 CI 会发布到自己的仓库命名空间，需要同步修改 `.env` 中的 `IMAGE_REPOSITORY`；仓库路径使用小写。
 
-## 当前待解决的镜像依赖
+## MinIO 镜像来源
 
-2026-09-29 的 P5 空库启动准备中，固定的 `minio/mc` 客户端镜像未能从所用镜像源拉取（代理 403、直连未成功）。因此**本轮没有完成完整 Compose 启动验收**。先确认可用且可信的固定镜像来源，再部署；不要跳过 `minio-init` 或删除现有数据卷来规避。
+MinIO 社区预编译镜像的上游拉取已反复失败。项目将 DaoCloud 缓存中的指定 MinIO/mc 镜像原样同步至本仓库 GHCR，Compose 和测试均固定到已验证摘要，见 [来源、版本与复现方法](../docker/minio/README.md)。**这不是源码构建，也不使用 latest。**
+
+先在 main 手动运行 `Mirror MinIO images` workflow，成功后再运行日常 CI。首次创建的 GHCR `minio`、`mc` 包可能默认为私有；建议在 GitHub Packages 中设为 Public，使外部 PR 和部署机器可匿名拉取，或在服务器执行 `docker login ghcr.io`，使用只读包权限。仓库内 CI 通过 GITHUB_TOKEN 读取包，不需要把 PAT 放进配置。
+
+存储镜像不跟随应用 `IMAGE_TAG` 更新，只有修改 Compose 中的摘要才会更换存储版本。Fork 若要使用自己的镜像仓库，需要同步修改镜像同步 workflow 和 Compose/测试中的 GHCR 地址，而不仅是 `IMAGE_REPOSITORY`。
+
+**这是旧版镜像的可获取性修复，不是安全升级。** 固定服务器版本为2024年版本，不包含后续全部安全修复；公网或生产使用前应单独评估维护风险和 AGPLv3 许可义务。已有数据卷应先备份并在副本上验证，不要删卷重装；本次操作不更换正在运行的存储服务。
 
 ## 准备与启动
 

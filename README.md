@@ -159,7 +159,7 @@ npm run build
 
 前置条件：Docker 与 Docker Compose v2，以及已由 GitHub Actions 成功发布、当前机器可拉取的镜像。服务器不需要安装 Java、Node.js 或 Maven。
 
-**部署验收边界：**Milvus、etcd 和向量专用 MinIO 镜像已拉取并在隔离测试中运行通过，但完整 Compose 尚未验收。业务桶初始化使用的固定 `minio/mc` 镜像在 2026-09-29 验证中曾拉取失败，本轮没有复验该镜像；首次部署前仍需确认所有镜像可获取，见 [部署文档](docs/DEPLOYMENT.md)。
+**部署验收边界：**Milvus、etcd 和向量专用 MinIO 镜像已拉取并在隔离测试中运行通过，但完整 Compose 尚未验收。MinIO 和 mc 使用 [缓存镜像原样同步到 GHCR 的固定摘要](docker/minio/README.md)，不再从已失效的上游仓库直接拉取；完整 Compose 和已有数据卷兼容性仍须独立验收，见 [部署文档](docs/DEPLOYMENT.md)。
 
 以下命令在仓库根目录执行；已有 `.env` 不要覆盖：
 

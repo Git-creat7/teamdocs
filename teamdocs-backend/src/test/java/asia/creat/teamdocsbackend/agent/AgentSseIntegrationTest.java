@@ -74,7 +74,7 @@ class AgentSseIntegrationTest {
     @Container static final MySQLContainer<?> MYSQL = mysql();
     @Container static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
     @Container static final GenericContainer<?> MINIO = new GenericContainer<>(DockerImageName.parse(System.getProperty(
-            "teamdocs.test.minio-image", "minio/minio:RELEASE.2023-09-20T22-49-55Z")))
+            "teamdocs.test.minio-image", "ghcr.io/git-creat7/teamdocs/minio@sha256:648817f3b321ec7a2f86c594ba468fa19eff8ee3ac17a07c03acf7a8a35fda33")))
             .withEnv("MINIO_ROOT_USER", "p4-test-access").withEnv("MINIO_ROOT_PASSWORD", "p4-test-secret")
             .withEnv("MINIO_API_CORS_ALLOW_ORIGIN", "*").withCommand("server", "/data").withExposedPorts(9000)
             .waitingFor(Wait.forHttp("/minio/health/live").forPort(9000));

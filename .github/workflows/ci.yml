@@ -23,6 +23,9 @@ concurrency:
 jobs:
   backend:
     name: Backend tests
+    permissions:
+      contents: read
+      packages: read
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -47,6 +50,14 @@ jobs:
 
       - name: Build Elasticsearch with matching IK plugin for integration tests
         run: docker build -t teamdocs-elasticsearch:8.15.3 docker/elasticsearch
+
+      - name: Log in to GHCR for pinned test images
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run backend tests
         run: mvn -B -ntp -f teamdocs-backend/pom.xml '-Dtest=*,!AgentEvaluationTest' -Dteamdocs.test.vector-sql=true test

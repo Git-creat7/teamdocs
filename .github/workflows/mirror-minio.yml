@@ -1,0 +1,48 @@
+name: Mirror MinIO images
+
+# One-time / explicit synchronization only; ordinary CI consumes the GHCR digests.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: mirror-minio-images
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mirror fixed linux-amd64 manifests without rebuilding
+        run: |
+          set -eu
+          docker buildx imagetools create --prefer-index=false \
+            --tag ghcr.io/git-creat7/teamdocs/minio:RELEASE.2024-05-28T17-19-04Z-amd64 \
+            docker.m.daocloud.io/minio/minio@sha256:648817f3b321ec7a2f86c594ba468fa19eff8ee3ac17a07c03acf7a8a35fda33
+          docker buildx imagetools create --prefer-index=false \
+            --tag ghcr.io/git-creat7/teamdocs/mc:RELEASE.2025-08-13T08-35-41Z-amd64 \
+            docker.m.daocloud.io/minio/mc@sha256:eb4ea9884b77704230e2423e9004d2fa738dc272876b9cc41a297d29443b8780
+
+      - name: Verify the exact mirrored digests and binary versions
+        run: |
+          set -eu
+          docker pull ghcr.io/git-creat7/teamdocs/minio@sha256:648817f3b321ec7a2f86c594ba468fa19eff8ee3ac17a07c03acf7a8a35fda33
+          docker pull ghcr.io/git-creat7/teamdocs/mc@sha256:eb4ea9884b77704230e2423e9004d2fa738dc272876b9cc41a297d29443b8780
+          docker run --rm --entrypoint minio ghcr.io/git-creat7/teamdocs/minio@sha256:648817f3b321ec7a2f86c594ba468fa19eff8ee3ac17a07c03acf7a8a35fda33 --version | grep 'RELEASE.2024-05-28T17-19-04Z'
+          docker run --rm --entrypoint mc ghcr.io/git-creat7/teamdocs/mc@sha256:eb4ea9884b77704230e2423e9004d2fa738dc272876b9cc41a297d29443b8780 --version | grep 'RELEASE.2025-08-13T08-35-41Z'
+          echo 'Mirrored images preserve the pinned linux/amd64 manifest digests; no storage containers were deployed.' >> "$GITHUB_STEP_SUMMARY"
