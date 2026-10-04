@@ -1,6 +1,8 @@
 package asia.creat.parse;
 
 import asia.creat.config.ParseProperties;
+import asia.creat.retrieval.RetrievalContext;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -39,6 +41,7 @@ import java.util.List;
 import java.util.Locale;
 
 @Component
+@Slf4j
 public class DocumentTextExtractor {
     private final ParseProperties properties;
     private final ImageUnderstandingService vision;
@@ -165,8 +168,16 @@ public class DocumentTextExtractor {
                 totalChars += text.length();
                 if (totalChars > properties.getMaxChars()) return ExtractedText.skipped("正文超过解析长度上限");
                 if (!text.isEmpty()) segments.add(new ExtractedText.Segment(page, text));
-                if (visionEnabled() && (DocumentImageReader.hasImages(document.getPage(page - 1), vision.limits()) || text.isEmpty())) {
-                    segments.add(new ExtractedText.Segment(page, "", "pdf:" + page, "PDF 第 " + page + " 页"));
+                if (visionEnabled()) {
+                    boolean imagePage = text.isEmpty();
+                    try {
+                        imagePage |= DocumentImageReader.hasImages(document.getPage(page - 1), vision.limits());
+                    } catch (IOException | RuntimeException imageFailure) {
+                        RetrievalContext.check();
+                        // 交给逐图阶段隔离失败，不能丢掉已经提取的页面文本。
+                        imagePage = true;
+                    }
+                    if (imagePage) segments.add(new ExtractedText.Segment(page, "", "pdf:" + page, "PDF 第 " + page + " 页"));
                 }
             }
             return describeImages(segments, ref -> DocumentImageReader.render(document,
@@ -226,8 +237,8 @@ public class DocumentTextExtractor {
                     List<XWPFPicture> pictures = paragraph.getRuns().get(run).getEmbeddedPictures();
                     for (int image = 0; image < pictures.size(); image++) {
                         XWPFPictureData data = pictures.get(image).getPictureData();
-                        if (data == null) throw new IOException("DOCX 内嵌图片关系无效");
-                        segments.add(new ExtractedText.Segment(null, "", "docx:" + data.getPackagePart().getPartName().getName(),
+                        segments.add(new ExtractedText.Segment(null, "", data == null ? null
+                                        : "docx:" + data.getPackagePart().getPartName().getName(),
                                 location + " 段落 / run " + (run + 1) + " / 图 " + (image + 1)));
                     }
                 }
@@ -242,27 +253,60 @@ public class DocumentTextExtractor {
         }
     }
 
-    /** 先检查数量、正文和全部图像，再逐幅调用模型。 */
+    /** 只尝试前 N 幅图片，单图失败不丢弃正文或已成功的图像描述。 */
     private ExtractedText describeImages(List<ExtractedText.Segment> segments, ImageLoader loader) throws IOException {
-        long count = segments.stream().filter(segment -> segment.imageRef() != null).count();
-        if (count > 0 && count > vision.limits().getMaxImages()) return ExtractedText.skipped("图片数量超过图像理解上限");
-        long chars = segments.stream().mapToLong(segment -> segment.text().length()).sum();
+        long chars = segments.stream().filter(segment -> !imageCandidate(segment)).mapToLong(segment -> segment.text().length()).sum();
         if (chars > properties.getMaxChars()) return ExtractedText.skipped("正文超过解析长度上限");
-        List<DocumentImageReader.Preview> images = new ArrayList<>();
-        for (var segment : segments) {
-            if (segment.imageRef() != null) images.add(loader.read(segment.imageRef()));
-        }
+        int limit = visionEnabled() ? Math.max(0, vision.limits().getMaxImages()) : 0;
+        int attempted = 0, failed = 0, limited = 0, oversized = 0;
         List<ExtractedText.Segment> result = new ArrayList<>();
-        int index = 0;
         for (var segment : segments) {
-            if (segment.imageRef() == null) { result.add(segment); continue; }
-            var image = images.get(index++);
-            String description = "图像描述（模型生成） · " + segment.imageLabel() + "\n\n" + vision.describe(image.content(), image.contentType());
-            chars += description.length();
-            if (chars > properties.getMaxChars()) return ExtractedText.skipped("正文超过解析长度上限");
-            result.add(new ExtractedText.Segment(segment.pageNumber(), description, segment.imageRef(), segment.imageLabel()));
+            if (!imageCandidate(segment)) {
+                if (!segment.text().isBlank()) result.add(segment);
+                continue;
+            }
+            if (attempted >= limit) {
+                limited++;
+                continue;
+            }
+            attempted++;
+            RetrievalContext.check();
+            try {
+                if (segment.imageRef() == null) throw new IOException("DOCX 内嵌图片关系无效");
+                var image = loader.read(segment.imageRef());
+                String description = "图像描述（模型生成） · " + segment.imageLabel() + "\n\n"
+                        + vision.describe(image.content(), image.contentType());
+                if (chars + description.length() > properties.getMaxChars()) {
+                    oversized++;
+                    continue;
+                }
+                chars += description.length();
+                result.add(new ExtractedText.Segment(segment.pageNumber(), description, segment.imageRef(), segment.imageLabel()));
+            } catch (IOException | RuntimeException error) {
+                // 运行已失效时不能降级后继续发图；普通单图错误则隔离。
+                RetrievalContext.check();
+                if (Thread.currentThread().isInterrupted()) throw new java.io.InterruptedIOException("图片解析已中断");
+                failed++;
+                log.warn("跳过失败图片: exceptionType={}", error.getClass().getSimpleName());
+            }
         }
-        return result.isEmpty() ? ExtractedText.skipped("没有可提取文本") : ExtractedText.of(result);
+        if (failed + limited + oversized > 0) {
+            log.warn("图片部分解析: attempted={}, failed={}, countLimited={}, charLimited={}", attempted, failed, limited, oversized);
+        }
+        if (result.isEmpty()) {
+            return ExtractedText.skipped(attempted + limited > 0 ? "没有可用正文，图片理解失败或受限" : "没有可提取文本");
+        }
+        if (failed + limited + oversized > 0) {
+            String notice = "图像解析说明：" + failed + " 幅图片解析失败，" + limited
+                    + " 幅超出数量上限，" + oversized + " 幅描述超出正文预算；这些图片内容未纳入检索。";
+            if (chars + notice.length() <= properties.getMaxChars()) result.add(new ExtractedText.Segment(null, notice));
+        }
+        return ExtractedText.of(result);
+    }
+
+    /** 关系损坏的图片仍以位置标记识别，不能被当作正常正文。 */
+    private static boolean imageCandidate(ExtractedText.Segment segment) {
+        return segment.imageRef() != null || segment.imageLabel() != null;
     }
 
     private interface ImageLoader {

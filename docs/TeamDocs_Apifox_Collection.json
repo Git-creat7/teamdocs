@@ -1,0 +1,348 @@
+{
+  "info": {
+    "_postman_id": "teamdocs-apifox-collection-001",
+    "name": "TeamDocs 常用接口集合 (Apifox 一键导入)",
+    "description": "包含用户、空间、文档和 AI Agent 的常用核心接口，已内置 Bearer Token 与默认环境变量",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "spaceId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "runId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. 用户模块 (User)",
+      "item": [
+        {
+          "name": "获取当前用户信息",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/user/info",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", "info"]
+            }
+          }
+        },
+        {
+          "name": "获取最近浏览文档",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/user/recent-documents",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", "recent-documents"]
+            }
+          }
+        },
+        {
+          "name": "退出登录",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/user/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["user", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. 空间模块 (Space)",
+      "item": [
+        {
+          "name": "获取我的空间列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/space/list",
+              "host": ["{{baseUrl}}"],
+              "path": ["space", "list"]
+            }
+          }
+        },
+        {
+          "name": "获取指定空间详情",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/space/{{spaceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["space", "{{spaceId}}"]
+            }
+          }
+        },
+        {
+          "name": "获取空间成员列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/space/{{spaceId}}/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["space", "{{spaceId}}", "members"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. 文档与检索模块 (Document)",
+      "item": [
+        {
+          "name": "获取空间文档列表 (根目录)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/documents?folderId=0&current=1&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "documents"],
+              "query": [
+                { "key": "folderId", "value": "0" },
+                { "key": "current", "value": "1" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "获取文档详情",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/documents/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "documents", "1"]
+            }
+          }
+        },
+        {
+          "name": "获取文档在线预览 URL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/documents/1/preview",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "documents", "1", "preview"]
+            }
+          }
+        },
+        {
+          "name": "获取文档下载 URL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/documents/1/download",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "documents", "1", "download"]
+            }
+          }
+        },
+        {
+          "name": "全文搜索文档 (文档名+标签)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/documents/search?keyword=规范&current=1&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "documents", "search"],
+              "query": [
+                { "key": "keyword", "value": "规范" },
+                { "key": "current", "value": "1" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "查询文档解析状态与分块数",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/documents/1/parse-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "documents", "1", "parse-status"]
+            }
+          }
+        },
+        {
+          "name": "手动触发文档重新解析",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/documents/1/reparse",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "documents", "1", "reparse"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. AI Agent 对话模块 (Agent)",
+      "item": [
+        {
+          "name": "1. 创建 Agent 对话会话",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"项目文档助手会话\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/agent/sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "agent", "sessions"]
+            }
+          }
+        },
+        {
+          "name": "2. 获取 Agent 会话列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/agent/sessions?current=1&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "agent", "sessions"],
+              "query": [
+                { "key": "current", "value": "1" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "3. 获取会话历史问答消息",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/agent/sessions/{{sessionId}}/messages?current=1&size=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "agent", "sessions", "{{sessionId}}", "messages"],
+              "query": [
+                { "key": "current", "value": "1" },
+                { "key": "size", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "4. 提交问题 (启动 Agent Run)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientRequestId\": \"req-20260929-001\",\n  \"question\": \"空间里有哪些核心文档？请列举并简要概括其内容。\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/agent/sessions/{{sessionId}}/runs",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "agent", "sessions", "{{sessionId}}", "runs"]
+            }
+          }
+        },
+        {
+          "name": "5. 查询 Run 执行状态与最终答案",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/agent/runs/{{runId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "agent", "runs", "{{runId}}"]
+            }
+          }
+        },
+        {
+          "name": "6. SSE 流式状态与工具事件监听",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/agent/runs/{{runId}}/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "agent", "runs", "{{runId}}", "events"]
+            }
+          }
+        },
+        {
+          "name": "7. 取消正在运行的 Agent 任务",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/agent/runs/{{runId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "agent", "runs", "{{runId}}", "cancel"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -26,6 +26,8 @@ import okhttp3.ResponseBody;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,7 +68,7 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
                     .encodedPath((path.isEmpty() ? "/v1" : path) + "/chat/completions").build();
             int seconds = Math.min(90, Math.max(1, properties.getTimeoutSeconds()));
             this.client = new OkHttpClient.Builder()
-                    .callTimeout(seconds, TimeUnit.SECONDS)
+                    .callTimeout(0, TimeUnit.SECONDS)
                     .connectTimeout(seconds, TimeUnit.SECONDS)
                     .readTimeout(seconds, TimeUnit.SECONDS)
                     .writeTimeout(seconds, TimeUnit.SECONDS)
@@ -78,13 +80,13 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
                         // 在 OkHttp 跟进响应前终止，包含 503 Retry-After:0。
                         if (!response.isSuccessful()) {
                             response.close();
-                            throw new IOException(FAILURE);
+                            throw new HttpFailure(response.code());
                         }
                         return response;
                     })
                     .build();
         } catch (Exception ignored) {
-            throw new RuntimeException(FAILURE);
+            throw new CallFailure(FailureCategory.CONFIGURATION, null);
         }
     }
 
@@ -121,12 +123,14 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
                     .header("Accept", streaming ? "text/event-stream, application/json" : "application/json")
                     .post(RequestBody.create(mapper.writeValueAsBytes(payload), JSON)).build();
             call = client.newCall(request);
+            // 流式只限制读写空闲时间；整轮截止时间仍由 AgentWorker 负责。
+            if (!streaming) call.timeout().timeout(Math.min(90, Math.max(1, properties.getTimeoutSeconds())), TimeUnit.SECONDS);
             requestControl.register(call);
             requestControl.checkCancelled();
             try (okhttp3.Response response = call.execute()) {
                 ResponseBody body = response.body();
                 if (!response.isSuccessful() || body == null) {
-                    throw new IOException(FAILURE);
+                    throw new ProtocolFailure();
                 }
                 Completion completion = new Completion(observer, requestControl);
                 MediaType contentType = body.contentType();
@@ -134,24 +138,22 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
                         && "json".equals(contentType.subtype())) {
                     byte[] bytes = body.byteStream().readNBytes(MAX_RESPONSE_BYTES + 1);
                     if (bytes.length > MAX_RESPONSE_BYTES) {
-                        throw new IOException(FAILURE);
+                        throw new ProtocolFailure();
                     }
                     completion.accept(reader.readTree(bytes), false);
                 } else if (streaming && contentType != null && "text".equals(contentType.type())
                         && "event-stream".equals(contentType.subtype())) {
                     readStream(body.byteStream(), completion, requestControl);
                 } else {
-                    throw new IOException(FAILURE);
+                    throw new ProtocolFailure();
                 }
                 requestControl.checkCancelled();
                 return completion.finish();
             }
-        } catch (Exception ignored) {
-            if (call != null) {
-                call.cancel();
-            }
-            // 不保留 cause，避免异常链携带正文、凭据或 URL 查询参数。
-            throw new RuntimeException(FAILURE);
+        } catch (Exception error) {
+            if (call != null) call.cancel();
+            // 分类仅供内部日志使用，不保留正文、凭据、URL 或原始异常链。
+            throw classify(error, requestControl.cancelled.get());
         } finally {
             if (call != null) {
                 requestControl.activeCall.compareAndSet(call, null);
@@ -171,7 +173,7 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
         while ((next = input.read()) != -1) {
             control.checkCancelled();
             if (++totalBytes > MAX_RESPONSE_BYTES || ++frameBytes > MAX_FRAME_BYTES) {
-                throw new IOException(FAILURE);
+                throw new ProtocolFailure();
             }
             if (next == '\n' && previousCr) {
                 previousCr = false;
@@ -197,7 +199,7 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
             }
         }
         // EOF 不是完整结束标志，不能将未闭合尾帧提升为可执行工具调用。
-        throw new IOException(FAILURE);
+        throw new ProtocolFailure();
     }
 
     /** 合并同一事件的多行 data 字段。 */
@@ -231,7 +233,7 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
             return "";
         }
         if (!value.isTextual()) {
-            throw new IOException(FAILURE);
+            throw new ProtocolFailure();
         }
         return value.textValue();
     }
@@ -243,9 +245,64 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
             return null;
         }
         if (!value.isIntegralNumber() || !value.canConvertToInt() || value.intValue() < 0) {
-            throw new IOException(FAILURE);
+            throw new ProtocolFailure();
         }
         return value.intValue();
+    }
+
+    /** 内部诊断类别，不作为模型正文或客户端错误详情返回。 */
+    public enum FailureCategory {
+        CONFIGURATION, RATE_LIMIT, AUTHENTICATION, SERVER, HTTP_CLIENT, TIMEOUT, NETWORK, PROTOCOL, CANCELLED, INTERNAL
+    }
+
+    /** 对外保持脱敏消息，对内保留可记录的类别与 HTTP 状态。 */
+    public static final class CallFailure extends RuntimeException {
+        private final FailureCategory category;
+        private final Integer httpStatus;
+
+        /** 创建不携带原始异常链的诊断信息。 */
+        private CallFailure(FailureCategory category, Integer httpStatus) {
+            super(FAILURE);
+            this.category = category;
+            this.httpStatus = httpStatus;
+        }
+
+        /** 返回内部错误类别。 */
+        public FailureCategory category() { return category; }
+
+        /** 返回实际 HTTP 状态，非 HTTP 错误为空。 */
+        public Integer httpStatus() { return httpStatus; }
+    }
+
+    private static final class HttpFailure extends IOException {
+        private final int status;
+
+        /** 保留状态码，不读取或保存错误响应正文。 */
+        private HttpFailure(int status) {
+            super(FAILURE);
+            this.status = status;
+        }
+    }
+
+    private static final class ProtocolFailure extends IOException {
+        /** 标识格式、分片或大小约束不符合协议。 */
+        private ProtocolFailure() { super(FAILURE); }
+    }
+
+    /** 分类时不检查原始错误文本，避免把供应商响应混入日志。 */
+    private static CallFailure classify(Exception error, boolean cancelled) {
+        if (cancelled) return new CallFailure(FailureCategory.CANCELLED, null);
+        if (error instanceof HttpFailure http) {
+            FailureCategory category = http.status == 429 ? FailureCategory.RATE_LIMIT
+                    : http.status == 401 || http.status == 403 ? FailureCategory.AUTHENTICATION
+                    : http.status >= 500 ? FailureCategory.SERVER : FailureCategory.HTTP_CLIENT;
+            return new CallFailure(category, http.status);
+        }
+        if (error instanceof InterruptedIOException) return new CallFailure(FailureCategory.TIMEOUT, null);
+        if (error instanceof ProtocolFailure || error instanceof JsonProcessingException)
+            return new CallFailure(FailureCategory.PROTOCOL, null);
+        if (error instanceof IOException) return new CallFailure(FailureCategory.NETWORK, null);
+        return new CallFailure(FailureCategory.INTERNAL, null);
     }
 
     @FunctionalInterface
@@ -271,7 +328,7 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
         /** 注册后复查标志，关闭取消竞态窗口。 */
         private void register(Call call) throws IOException {
             if (!activeCall.compareAndSet(null, call)) {
-                throw new IOException(FAILURE);
+                throw new ProtocolFailure();
             }
             if (cancelled.get()) {
                 call.cancel();
@@ -281,7 +338,7 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
         /** 即使响应已缓冲，也不在取消后返回成功。 */
         private void checkCancelled() throws IOException {
             if (cancelled.get()) {
-                throw new IOException(FAILURE);
+                throw new ProtocolFailure();
             }
         }
     }
@@ -308,12 +365,12 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
         private void accept(JsonNode root, boolean streaming) throws IOException {
             control.checkCancelled();
             if (root == null || !root.isObject() || root.hasNonNull("error")) {
-                throw new IOException(FAILURE);
+                throw new ProtocolFailure();
             }
             JsonNode reportedUsage = root.get("usage");
             if (reportedUsage != null && !reportedUsage.isNull()) {
                 if (!reportedUsage.isObject()) {
-                    throw new IOException(FAILURE);
+                    throw new ProtocolFailure();
                 }
                 usage = new TokenUsage(tokens(reportedUsage, "prompt_tokens"),
                         tokens(reportedUsage, "completion_tokens"), tokens(reportedUsage, "total_tokens"));
@@ -323,7 +380,7 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
                 return;
             }
             if (choices == null || !choices.isArray()) {
-                throw new IOException(FAILURE);
+                throw new ProtocolFailure();
             }
             for (JsonNode choice : choices) {
                 if (choice.hasNonNull("index") && choice.path("index").asInt(-1) != 0) {
@@ -340,21 +397,21 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
                     continue;
                 }
                 if (!message.isObject()) {
-                    throw new IOException(FAILURE);
+                    throw new ProtocolFailure();
                 }
                 appendReasoning(text(message, "reasoning_content"), streaming);
                 content.append(text(message, "content"));
                 JsonNode calls = message.get("tool_calls");
                 if (calls != null && !calls.isNull()) {
                     if (!calls.isArray()) {
-                        throw new IOException(FAILURE);
+                        throw new ProtocolFailure();
                     }
                     for (int i = 0; i < calls.size(); i++) {
                         JsonNode tool = calls.get(i);
                         JsonNode index = tool.get("index");
                         if (streaming && (index == null || !index.isIntegralNumber()
                                 || !index.canConvertToInt() || index.intValue() < 0)) {
-                            throw new IOException(FAILURE);
+                            throw new ProtocolFailure();
                         }
                         int key = streaming ? index.intValue() : i;
                         tools.computeIfAbsent(key, ignored -> new ToolParts()).append(tool);
@@ -395,13 +452,13 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
         /** 完整接收后才生成可交给工具循环的消息。 */
         private Response<AiMessage> finish() throws IOException {
             if (!hasChoice || finishReason == null) {
-                throw new IOException(FAILURE);
+                throw new ProtocolFailure();
             }
             for (ToolParts tool : tools.values()) {
                 JsonNode arguments = reader.readTree(tool.arguments.toString());
                 if (tool.id.toString().isBlank() || tool.name.toString().isBlank()
                         || arguments == null || !arguments.isObject()) {
-                    throw new IOException(FAILURE);
+                    throw new ProtocolFailure();
                 }
             }
             List<ToolExecutionRequest> requests = new ArrayList<>();
@@ -431,13 +488,13 @@ public class OpenAiReasoningChatModel implements ChatLanguageModel {
         private void append(JsonNode tool) throws IOException {
             String type = text(tool, "type");
             if (!type.isEmpty() && !"function".equals(type)) {
-                throw new IOException(FAILURE);
+                throw new ProtocolFailure();
             }
             id.append(text(tool, "id"));
             JsonNode function = tool.get("function");
             if (function != null && !function.isNull()) {
                 if (!function.isObject()) {
-                    throw new IOException(FAILURE);
+                    throw new ProtocolFailure();
                 }
                 name.append(text(function, "name"));
                 arguments.append(text(function, "arguments"));

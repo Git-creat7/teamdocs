@@ -543,6 +543,25 @@ class AgentIntegrationTest {
     }
 
     @Test
+    void missingCitationsCanBeRepairedUsingAlreadyReadEvidence() throws Exception {
+        model.reset((messages, specs) -> switch (model.calls.get()) {
+            case 1 -> tool("read_document_chunks", "{\"documentId\":10}");
+            case 2 -> answer("上线前先备份数据库。");
+            default -> answer("上线前先备份数据库。[C1]", "C1");
+        });
+        RunView run = waitRun(submit("repair-missing-source"));
+
+        assertEquals("SUCCEEDED", run.status(), run.errorCode());
+        assertEquals(3, run.modelCalls());
+        assertEquals(1, run.toolCalls());
+        assertFalse(run.answer().masked());
+        assertEquals("C1", run.answer().citations().get(0).id());
+        assertEquals(10L, run.answer().citations().get(0).documentId());
+        String repairPrompt = ChatMessageSerializer.messagesToJson(model.received.get(2));
+        assertTrue(repairPrompt.contains("本轮已读取内部正文时"));
+    }
+
+    @Test
     void missingEvidenceIsExplicitAndDoesNotInventReferences() throws Exception {
         model.reset(
                 (messages, specs) ->
@@ -709,6 +728,65 @@ class AgentIntegrationTest {
         String prompt = ChatMessageSerializer.messagesToJson(model.received.get(0));
         assertFalse(prompt.contains("unique-private-answer"));
         assertFalse(prompt.contains("unique-private-question"));
+    }
+
+    /** 预热缓存后发生更新/删除/新正文发布，新运行只携带当前资料和有效历史。 */
+    @Test
+    void newRunRefreshesCachedMetadataAfterDocumentChanges() throws Exception {
+        long session = session();
+        long firstId = service.submit(1L, session, new NewRun("cache-before", "CACHE_OLD_QUESTION"), USER);
+        RunView first = waitRun(firstId);
+        assertEquals("SUCCEEDED", first.status(), first.errorCode());
+        idle();
+
+        String oldPrompt = ChatMessageSerializer.messagesToJson(model.received.get(0));
+        assertTrue(oldPrompt.contains("上线手册.md"));
+        assertTrue(oldPrompt.contains("会议室.md"));
+        assertFalse(oldPrompt.contains("CACHE_NEW_DOCUMENT"));
+
+        jdbc.update("UPDATE document SET name='CACHE_UPDATED_DOCUMENT', parse_version=parse_version+1 WHERE id=10");
+        jdbc.update("UPDATE document SET deleted=1 WHERE id=15");
+        jdbc.update("UPDATE document SET name='CACHE_NEW_DOCUMENT', parse_status='READY', parse_version=parse_version+1 WHERE id=13");
+        jdbc.update("UPDATE space SET name='CACHE_UPDATED_SPACE', description='CACHE_UPDATED_DESCRIPTION' WHERE id=1");
+        assertTrue(service.run(1L, firstId, USER).answer().masked());
+
+        model.reset((messages, specs) -> model.calls.get() == 1
+                ? tool("read_document_chunks", "{\"documentId\":10}")
+                : answer("按最新资料，先备份数据库。[C1]", "C1"));
+        long nextId = service.submit(1L, session, new NewRun("cache-after", "读取最新上线资料"), USER);
+        RunView next = waitRun(nextId);
+
+        assertEquals("SUCCEEDED", next.status(), next.errorCode());
+        assertEquals(2, next.modelCalls());
+        assertEquals(1, next.toolCalls());
+        assertFalse(next.answer().masked());
+        assertEquals(4, next.answer().citations().get(0).parseVersion());
+        assertEquals("CACHE_UPDATED_DOCUMENT", next.answer().citations().get(0).documentName());
+
+        String newPrompt = ChatMessageSerializer.messagesToJson(model.received.get(0));
+        assertTrue(newPrompt.contains("CACHE_UPDATED_DOCUMENT"));
+        assertTrue(newPrompt.contains("CACHE_NEW_DOCUMENT"));
+        assertTrue(newPrompt.contains("CACHE_UPDATED_SPACE"));
+        assertTrue(newPrompt.contains("CACHE_UPDATED_DESCRIPTION"));
+        assertFalse(newPrompt.contains("上线手册.md"));
+        assertFalse(newPrompt.contains("会议室.md"));
+        assertFalse(newPrompt.contains("CACHE_OLD_QUESTION"));
+    }
+
+    /** 只在新运行开始刷新；本轮已传入模型的元数据随后变化仍必须阻断发布。 */
+    @Test
+    void refreshingCacheDoesNotHideSourceChangesDuringTheRun() throws Exception {
+        model.reset((messages, specs) -> {
+            jdbc.update("UPDATE document SET parse_version=parse_version+1 WHERE id=15");
+            return answer("不能发布的旧上下文回答");
+        });
+        RunView run = waitRun(submit("cache-mid-run-change"));
+
+        assertEquals("FAILED", run.status());
+        assertEquals("SOURCE_CHANGED", run.errorCode());
+        assertEquals(1, run.modelCalls());
+        assertEquals(0, run.toolCalls());
+        assertNull(run.answer());
     }
 
     @Test

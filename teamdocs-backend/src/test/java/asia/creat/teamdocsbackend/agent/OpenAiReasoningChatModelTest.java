@@ -349,7 +349,14 @@ class OpenAiReasoningChatModelTest {
             exchange.sendResponseHeaders(status, bytes.length);
             exchange.getResponseBody().write(bytes);
         });
-        assertSanitized(assertThrows(RuntimeException.class, () -> model().generate(MESSAGES)));
+        OpenAiReasoningChatModel.CallFailure error = assertThrows(OpenAiReasoningChatModel.CallFailure.class,
+                () -> model().generate(MESSAGES));
+        assertSanitized(error);
+        assertEquals(status, error.httpStatus());
+        assertEquals(status == 429 ? OpenAiReasoningChatModel.FailureCategory.RATE_LIMIT
+                : status == 401 || status == 403 ? OpenAiReasoningChatModel.FailureCategory.AUTHENTICATION
+                : status >= 500 ? OpenAiReasoningChatModel.FailureCategory.SERVER
+                : OpenAiReasoningChatModel.FailureCategory.HTTP_CLIENT, error.category());
         assertEquals(1, requests.size());
     }
 
@@ -559,6 +566,62 @@ class OpenAiReasoningChatModelTest {
         } finally {
             releaseServer.countDown();
             worker.shutdownNow();
+        }
+    }
+
+    /** 活跃流可以超过单次总超时，普通 JSON 请求仍保留端到端超时。 */
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void streamingUsesReadIdleTimeoutRatherThanCallTimeout(boolean streaming) throws Exception {
+        properties.setTimeoutSeconds(1);
+        properties.setStreaming(streaming);
+        String ending = streaming ? delta(Map.of("content", "回答")) + finish("stop") + DONE
+                : json("回答", null, "stop", null);
+        handler.set(exchange -> {
+            exchange.getResponseHeaders().set("Content-Type", streaming ? "text/event-stream" : "application/json");
+            exchange.sendResponseHeaders(200, 0);
+            try {
+                for (int i = 0; i < 7; i++) {
+                    exchange.getResponseBody().write((streaming ? ": active\n\n" : " ").getBytes(StandardCharsets.UTF_8));
+                    exchange.getResponseBody().flush();
+                    Thread.sleep(200);
+                }
+                exchange.getResponseBody().write(ending.getBytes(StandardCharsets.UTF_8));
+                exchange.getResponseBody().flush();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (IOException ignored) {
+                // 非流式用例应在一秒后主动关闭连接。
+            }
+        });
+        if (streaming) {
+            assertEquals("回答", model().generate(MESSAGES).content().text());
+        } else {
+            var error = assertThrows(OpenAiReasoningChatModel.CallFailure.class, () -> model().generate(MESSAGES));
+            assertSanitized(error);
+            assertEquals(OpenAiReasoningChatModel.FailureCategory.TIMEOUT, error.category());
+        }
+        assertEquals(1, requests.size());
+    }
+
+    /** 读空闲超时仍生效，并提供可诊断的内部分类。 */
+    @Test
+    void stalledStreamIsClassifiedAsTimeout() {
+        properties.setTimeoutSeconds(1);
+        CountDownLatch release = new CountDownLatch(1);
+        handler.set(exchange -> {
+            exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, 0);
+            exchange.getResponseBody().write(": waiting\n\n".getBytes(StandardCharsets.UTF_8));
+            exchange.getResponseBody().flush();
+            awaitServer(release);
+        });
+        try {
+            var error = assertThrows(OpenAiReasoningChatModel.CallFailure.class, () -> model().generate(MESSAGES));
+            assertSanitized(error);
+            assertEquals(OpenAiReasoningChatModel.FailureCategory.TIMEOUT, error.category());
+        } finally {
+            release.countDown();
         }
     }
 

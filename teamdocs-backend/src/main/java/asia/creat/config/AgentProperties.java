@@ -27,7 +27,7 @@ public class AgentProperties {
     private String modelName;
 
     /**
-     * 请求超时时间（秒），默认 60 秒
+     * 连接及读写空闲超时；非流式请求也用作单次总超时，默认60秒
      */
     private int timeoutSeconds = 60;
     /** 请求流式响应；不支持流的兼容接口可显式关闭，不自动重放。 */
@@ -39,7 +39,10 @@ public class AgentProperties {
     private int runTimeoutSeconds = 90;
     private int maxInputTokens = 16000;
     private int maxOutputTokens = 1024;
-    private int historyTurns = 3;
+    /** 最多保留的近期完整问答轮数，实际数量还受输入预算限制。 */
+    private int historyTurns = 50;
+    /** 历史输入预算，沿用 AgentBudget 的保守 Token 估算口径。 */
+    private int historyMaxInputTokens = 100000;
 
     /** 根据显式开关或有效 Key 判断是否启用问答。 */
     public boolean isEnabled() {

@@ -209,20 +209,20 @@ class DocumentImageReaderTest {
         verify(model, times(2)).describe(any(), eq("image/png"));
     }
 
-    /** 图片数量上限在任何模型请求之前拒绝整篇解析。 */
+    /** 超出图片数量上限时保留文本和上限内已成功的图片。 */
     @Test
-    void rejectsImageCountsBeforeCalls() throws Exception {
+    void limitsImageAttemptsWithoutDiscardingDocumentText() throws Exception {
         ImageUnderstandingService model = model();
         vision.setMaxImages(1);
         DocumentTextExtractor extractor = new DocumentTextExtractor(parse, model);
         for (ExtractedText result : List.of(
                 extractor.extract("scan.pdf", "application/pdf", input(pdf(2, true, false))),
                 extractor.extract("spec.docx", DOCX, input(docx(true, false))))) {
-            assertTrue(result.isSkipped());
-            assertEquals("图片数量超过图像理解上限", result.getReason());
-            assertTrue(result.getSegments().isEmpty());
+            assertFalse(result.isSkipped());
+            assertEquals(1, result.getSegments().stream().filter(segment -> segment.imageRef() != null).count());
+            assertTrue(result.getSegments().stream().anyMatch(segment -> segment.text().contains("数量上限")));
         }
-        verify(model, never()).describe(any(), anyString());
+        verify(model, times(2)).describe(any(), anyString());
     }
 
     /** 已知正文超限不调用模型，描述超限也不发布部分结果。 */
@@ -236,7 +236,7 @@ class DocumentImageReaderTest {
         verify(model, never()).describe(any(), anyString());
         ExtractedText description = extractor.extract("photo.png", "image/png", input(image("png")));
         assertTrue(description.isSkipped());
-        assertEquals("正文超过解析长度上限", description.getReason());
+        assertEquals("没有可用正文，图片理解失败或受限", description.getReason());
         assertTrue(description.getSegments().isEmpty());
         verify(model).describe(any(), anyString());
     }
@@ -286,6 +286,140 @@ class DocumentImageReaderTest {
         assertEquals(2, labels.size());
         assertTrue(labels.stream().anyMatch(label -> label.contains("页眉")));
         assertTrue(labels.stream().anyMatch(label -> label.contains("页脚")));
+    }
+
+    /** 九张配图的普通文档仍能检索正文，模型最多处理前八张。 */
+    @Test
+    void ninePicturesKeepTextAndOnlyAnalyzeEight() throws Exception {
+        ImageUnderstandingService model = model();
+        var result = new DocumentTextExtractor(parse, model).extract("many.docx", DOCX, input(docxWithImages(9)));
+        assertFalse(result.isSkipped());
+        assertTrue(result.getSegments().stream().anyMatch(segment -> segment.text().contains("Hello TeamDocs")));
+        assertEquals(8, result.getSegments().stream().filter(segment -> segment.imageRef() != null).count());
+        verify(model, times(8)).describe(any(), anyString());
+    }
+
+    /** 单个视觉请求失败后继续处理其余图片，不丢原有文字。 */
+    @Test
+    void oneModelFailureDoesNotDiscardOtherImages() throws Exception {
+        ImageUnderstandingService model = model();
+        java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(call -> {
+            if (attempts.getAndIncrement() == 0) throw new IllegalStateException("模拟图像请求失败");
+            return "成功的图像描述";
+        }).when(model).describe(any(), anyString());
+        var result = new DocumentTextExtractor(parse, model).extract("mixed.docx", DOCX, input(docxWithImages(3)));
+        assertFalse(result.isSkipped());
+        assertTrue(result.getSegments().stream().anyMatch(segment -> segment.text().contains("Hello TeamDocs")));
+        assertEquals(2, result.getSegments().stream().filter(segment -> segment.imageRef() != null).count());
+        assertTrue(result.getSegments().stream().anyMatch(segment -> segment.text().contains("1 幅图片解析失败")));
+        assertEquals(3, attempts.get());
+    }
+
+    /** 图片全失败时仍保留文档文字，但纯图片不能以警告充当正文。 */
+    @Test
+    void allImagesFailWithoutPretendingEmptyContentIsReady() throws Exception {
+        ImageUnderstandingService model = model();
+        doThrow(new IllegalStateException("模拟失败")).when(model).describe(any(), anyString());
+        DocumentTextExtractor extractor = new DocumentTextExtractor(parse, model);
+        var document = extractor.extract("text.docx", DOCX, input(docxWithImages(2)));
+        assertFalse(document.isSkipped());
+        assertTrue(document.getSegments().stream().anyMatch(segment -> segment.text().contains("Hello TeamDocs")));
+        var onlyImage = extractor.extract("image.png", "image/png", input(image("png")));
+        assertTrue(onlyImage.isSkipped());
+        assertTrue(onlyImage.getSegments().isEmpty());
+    }
+
+    /** 图片描述超预算只跳过该描述，不能清空普通正文。 */
+    @Test
+    void oversizedImageDescriptionsKeepOrdinaryText() throws Exception {
+        ImageUnderstandingService model = model();
+        parse.setMaxChars(80);
+        doReturn("x".repeat(200)).when(model).describe(any(), anyString());
+        var result = new DocumentTextExtractor(parse, model).extract("text.docx", DOCX, input(docxWithImages(2)));
+        assertFalse(result.isSkipped());
+        assertTrue(result.getSegments().stream().anyMatch(segment -> segment.text().contains("Hello TeamDocs")));
+        assertTrue(result.getSegments().stream().noneMatch(segment -> segment.imageRef() != null));
+    }
+
+    /** 单个图片像素异常也只跳过该图，其他内嵌图和文字仍保留。 */
+    @Test
+    void invalidEmbeddedImageKeepsTextAndOtherPictures() throws Exception {
+        byte[] bad = image("png");
+        ByteBuffer.wrap(bad).putInt(16, 100000).putInt(20, 100000);
+        CRC32 crc = new CRC32();
+        crc.update(bad, 12, 17);
+        ByteBuffer.wrap(bad).putInt(29, (int) crc.getValue());
+        byte[] bytes;
+        try (XWPFDocument document = new XWPFDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            document.createParagraph().createRun().setText("Hello TeamDocs");
+            for (byte[] picture : List.of(bad, image("png"))) {
+                document.createParagraph().createRun().addPicture(input(picture), XWPFDocument.PICTURE_TYPE_PNG,
+                        "picture.png", Units.toEMU(16), Units.toEMU(8));
+            }
+            document.write(output);
+            bytes = output.toByteArray();
+        }
+        ImageUnderstandingService model = model();
+        var result = new DocumentTextExtractor(parse, model).extract("mixed.docx", DOCX, input(bytes));
+        assertFalse(result.isSkipped());
+        assertTrue(result.getSegments().stream().anyMatch(segment -> segment.text().contains("Hello TeamDocs")));
+        assertEquals(1, result.getSegments().stream().filter(segment -> segment.imageRef() != null).count());
+        verify(model, times(1)).describe(any(), anyString());
+    }
+
+    /** PDF 页面上的坏图不能丢掉已经提取的页面文字。 */
+    @Test
+    void invalidPdfImageKeepsPageText() throws Exception {
+        byte[] bytes;
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                content.beginText();
+                content.setFont(PDType1Font.HELVETICA, 12);
+                content.newLineAtOffset(30, 700);
+                content.showText("Hello TeamDocs");
+                content.endText();
+                content.appendRawCommands("BI /W 100000 /H 100000 /BPC 8 /CS /RGB /F /FlateDecode ID invalid EI\n");
+            }
+            document.save(output);
+            bytes = output.toByteArray();
+        }
+        ImageUnderstandingService model = model();
+        var result = new DocumentTextExtractor(parse, model).extract("mixed.pdf", "application/pdf", input(bytes));
+        assertFalse(result.isSkipped());
+        assertTrue(result.getSegments().stream().anyMatch(segment -> segment.text().contains("Hello TeamDocs")));
+        verify(model, never()).describe(any(), anyString());
+    }
+
+    /** 运行版本或期限失效不是单图降级，必须立即停止后续外发。 */
+    @Test
+    void invalidatedParseDoesNotContinueAfterAnImageFailure() throws Exception {
+        ImageUnderstandingService model = model();
+        java.util.concurrent.atomic.AtomicBoolean invalid = new java.util.concurrent.atomic.AtomicBoolean();
+        doAnswer(call -> { invalid.set(true); throw new IllegalStateException("模拟失败"); })
+                .when(model).describe(any(), anyString());
+        try (var context = asia.creat.retrieval.RetrievalContext.open(Long.MAX_VALUE, () -> {
+            if (invalid.get()) throw new IllegalStateException("解析版本已失效");
+        }, hit -> { })) {
+            assertThrows(IllegalStateException.class, () -> new DocumentTextExtractor(parse, model)
+                    .extract("text.docx", DOCX, input(docxWithImages(3))));
+        }
+        verify(model, times(1)).describe(any(), anyString());
+    }
+
+    /** 生成含文字及指定数量配图的 DOCX。 */
+    private static byte[] docxWithImages(int count) throws Exception {
+        try (XWPFDocument document = new XWPFDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            document.createParagraph().createRun().setText("Hello TeamDocs");
+            for (int index = 0; index < count; index++) {
+                document.createParagraph().createRun().addPicture(input(image("png")), XWPFDocument.PICTURE_TYPE_PNG,
+                        "image" + index + ".png", Units.toEMU(16), Units.toEMU(8));
+            }
+            document.write(output);
+            return output.toByteArray();
+        }
     }
 
     /** 创建只模拟描述输出的视觉服务。 */

@@ -71,7 +71,7 @@ public class AgentWorker {
             11. 不输出 HTML、外部链接或私有推理过程。历史答复用于理解追问，不得复用历史引用编号，应重新检索需要引用的正文。
             12. 上下文已提供当前空间名称、描述及已有文档清单。当用户询问空间整体情况时，可直接结合空间描述与文档清单作答；若需深入阅读某篇文档，可直接使用文档清单中的 文档ID 调用 read_document_chunks，无需盲猜关键词搜索。
             13. 外部工具（如联网搜索等）：若当前可用工具中包含外部 MCP 工具，当用户询问外部时事、第三方库最新资料、实时数据或空间内部资料无法解答的外部问题时，可按需调用外部搜索工具。外部工具获取的信息不属于内部空间切片，citations 仅用于标注内部空间文档编号（如 C1），使用外部工具获得的信息 citations 为空数组 []。
-
+            14. 禁止在脑内反复背诵验证长文本！
             === 当前系统环境与时间 ===
             %s
 
@@ -237,7 +237,8 @@ public class AgentWorker {
                 throw new AgentFailure("MODEL_UNAVAILABLE");
             }
 
-            //拼接提示词
+            // 新运行刷新一次元数据；模型循环复用已构建的上下文。
+            invalidateSpaceCache(run.getSpaceId());
             List<ChatMessage> messages = new ArrayList<>();
             String dynamicSystemMessage = buildSystemMessage(run.getSpaceId(), state);
             messages.add(SystemMessage.from(dynamicSystemMessage));
@@ -329,7 +330,8 @@ public class AgentWorker {
                     String repairPrompt = String.format(
                             "请注意：你的上一条回复未通过格式校验。请针对用户的原始问题【%s】直接给出最终回答，严禁回复“收到”、“明白”等格式确认套话，严禁直接输出裸露的 Markdown 文本！"
                             + "无论是否引用文档，整体必须且只能输出合法的 JSON 对象：{\"answer\":\"正文内容\",\"citations\":[]}。"
-                            + "通用常识、问候或澄清请使用空 citations: []，并在 answer 字段内作答，不要为修正格式而检索；文档结论仍须先取得本轮工具依据。",
+                            + "本轮未读取内部正文时，通用常识、问候或澄清可使用空 citations: []，不要为修正格式而检索。"
+                            + "本轮已读取内部正文时，必须使用至少一个实际返回的来源编号，正文 [C编号] 与 citations 保持一致，不得编造。",
                             run.getQuestion().replace("\"", "\\\""));
                     messages.add(UserMessage.from(repairPrompt));
                     continue;
@@ -558,7 +560,13 @@ public class AgentWorker {
             check(run, user, state);
             if (e.getCause() instanceof AgentFailure failure) throw failure;
             if (e.getCause() instanceof BusinessException) throw new AgentFailure("ACCESS_REVOKED");
-            log.warn("Agent 运行 {} 模型请求失败（不记录请求正文或凭据）", run.getId());
+            if (e.getCause() instanceof OpenAiReasoningChatModel.CallFailure failure) {
+                log.warn("Agent 运行 {} 模型请求失败: category={}, httpStatus={}",
+                        run.getId(), failure.category(), failure.httpStatus());
+            } else {
+                log.warn("Agent 运行 {} 模型请求失败: category=INTERNAL, exceptionType={}", run.getId(),
+                        e.getCause() == null ? "unknown" : e.getCause().getClass().getSimpleName());
+            }
             throw new AgentFailure("MODEL_FAILED");
         } finally {
             control.cancel();
@@ -589,32 +597,28 @@ public class AgentWorker {
      * @param user 当前用户
      * @param state 状态
      * @param messages 消息列表
-     */   private void history(
-            Run run, LoginUser user, AgentTools.State state, List<ChatMessage> messages) {
-        List<Message> selected = new ArrayList<>();
-        int historyBytes = 0;
-        for (Message message :
-                mapper.history(
-                        run.getSessionId(),
-                        Math.min(3, Math.max(0, properties.getHistoryTurns())))) {
-            List<Dependency> dependencies = json.dependencies(message.getDependencies());
-            if (tools.currentDependencies(run.getSpaceId(), user, dependencies)) continue;
+     */
+    private void history(Run run, LoginUser user, AgentTools.State state, List<ChatMessage> messages) {
+        List<List<ChatMessage>> selected = new ArrayList<>();
+        List<ChatMessage> estimated = new ArrayList<>();
+        int historyBudget = Math.min(Math.max(0, properties.getHistoryMaxInputTokens()), run.getMaxInputTokens() / 3);
+        int turns = Math.max(0, properties.getHistoryTurns());
+        if (turns == 0 || historyBudget == 0) return;
+        for (Message message : mapper.history(run.getSessionId(), turns)) {
+            // 查询历史之后运行可能被并发删除，只读取一次并保留问题快照。
             Run previous = mapper.run(message.getRunId());
-            int bytes =
-                    (previous.getQuestion() + message.getBody())
-                            .getBytes(java.nio.charset.StandardCharsets.UTF_8)
-                            .length;
-            if (historyBytes + bytes > run.getMaxInputTokens() / 3 || dependencies.size() > 64)
-                continue;
-            historyBytes += bytes;
-            selected.add(message);
+            if (previous == null || previous.getQuestion() == null || message.getBody() == null) continue;
+            List<Dependency> dependencies = json.dependencies(message.getDependencies());
+            if (dependencies.size() > 64 || tools.currentDependencies(run.getSpaceId(), user, dependencies)) continue;
+            List<ChatMessage> turn = List.of(UserMessage.from(previous.getQuestion()),
+                    AiMessage.from(REFERENCE.matcher(message.getBody()).replaceAll("")));
+            estimated.addAll(turn);
+            if (AgentBudget.estimate(estimated, List.of()) > historyBudget) break;
+            selected.add(turn);
             for (Dependency dependency : dependencies) state.depend(dependency);
         }
         Collections.reverse(selected);
-        for (Message message : selected) {
-            messages.add(UserMessage.from(mapper.run(message.getRunId()).getQuestion()));
-            messages.add(AiMessage.from(REFERENCE.matcher(message.getBody()).replaceAll("")));
-        }
+        for (List<ChatMessage> turn : selected) messages.addAll(turn);
     }
 
     private record FinalAnswer(String text, List<Source> sources) {}
@@ -676,8 +680,10 @@ public class AgentWorker {
         Set<String> inline = new HashSet<>();
         var matcher = REFERENCE.matcher(answerText);
         while (matcher.find()) inline.add(matcher.group(1));
-        if (!inline.equals(declared)) // 即使 state.sources() 不为空，也允许模型给出空 citations
+        // 已读取内部正文时不能静默丢弃所有来源；零正文的问候/澄清仍允许空引用。
+        if (!inline.equals(declared) || (!state.sources().isEmpty() && declared.isEmpty())) {
             throw new AgentFailure("INVALID_CITATION");
+        }
 
         List<Source> sources = new ArrayList<>();
         for (String id : declared)
