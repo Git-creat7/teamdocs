@@ -1,42 +1,8 @@
-# 单机部署
+# 部署说明
 
-TeamDocs 使用完整部署 `docker-compose.yaml`、本地开发 `docker-compose.dev.yaml` 和可选向量服务 `docker-compose.semantic.yaml`；按需组合，不再使用 semantic profile。GitHub Actions 负责测试和发布镜像，服务器负责拉取并启动；不在服务器构建源码，不需要部署脚本。Nginx 已包含在前端镜像中，用于托管页面和转发 `/api`。
+默认使用 Docker Compose 单机部署，前后端、MySQL、Redis、MinIO 和 Elasticsearch 一起启动。服务器需要 Linux x86_64、Docker 和 Compose v2，不需要安装 Java、Node.js 或 Maven。
 
-交付以全新服务器和空 MySQL 数据目录为准，数据库结构统一维护在 `sql/` 初始化脚本中，首次启动时自动创建。
-
-## 首次发布镜像
-
-将代码推送到 `main`，或在 `main` 上手动运行仓库的 **CI** workflow。Pull Request 只做检查，不发布镜像。
-
-后端测试、前端构建与 Compose 校验通过后，CI 发布：
-
-```text
-ghcr.io/git-creat7/teamdocs/backend:<完整提交 SHA>
-ghcr.io/git-creat7/teamdocs/frontend:<完整提交 SHA>
-ghcr.io/git-creat7/teamdocs/elasticsearch:<完整提交 SHA>
-```
-
-三份镜像发布成功后才更新 `latest`。发布版本会显示在 Actions 运行摘要中。首次部署前必须先有一次成功发布；仓库公开不代表镜像包公开，需要分别把 GHCR 的 backend、frontend、elasticsearch 包设为 Public，或者在服务器执行 `docker login ghcr.io`，使用具有 `read:packages` 权限的令牌登录。令牌不要写入仓库或 Compose 文件。
-
-Fork 后 CI 会发布到自己的仓库命名空间，需要同步修改 `.env` 中的 `IMAGE_REPOSITORY`；仓库路径使用小写。
-
-## MinIO 镜像来源
-
-MinIO 社区预编译镜像的上游拉取已反复失败。项目将 DaoCloud 缓存中的指定 MinIO/mc 镜像原样同步至本仓库 GHCR，Compose 和测试均固定到已验证摘要。**不编译 MinIO 源码，也不使用 latest。**
-
-当前镜像为 Linux amd64：MinIO `RELEASE.2024-05-28T17-19-04Z`、mc `RELEASE.2025-08-13T08-35-41Z`。DaoCloud 是第三方缓存，已核对二进制版本及同步前后的摘要一致性，不代表已验证上游供应链签名。
-
-先在 main 手动运行 [Mirror MinIO images](../.github/workflows/mirror-minio.yml)，成功后再运行日常 CI。该 workflow 从 `minio-mirror-seed-20261004` 预发布附件读取原始镜像归档，校验归档和 manifest 的 SHA-256，再通过 `skopeo copy --preserve-digests` 原样同步；日常 CI 不重复同步镜像。首次创建的 GHCR `minio`、`mc` 包可能默认为私有；建议在 GitHub Packages 中设为 Public，使外部 PR 和部署机器可匿名拉取，或在服务器执行 `docker login ghcr.io`，使用只读包权限。仓库内 CI 通过 GITHUB_TOKEN 读取包，不需要把 PAT 放进配置。
-
-存储镜像不跟随应用 `IMAGE_TAG` 更新，只有修改 Compose 中的摘要才会更换存储版本。Fork 若要使用自己的镜像仓库，需要同步修改镜像同步 workflow 和 Compose/测试中的 GHCR 地址，而不仅是 `IMAGE_REPOSITORY`。
-
-**这是旧版镜像的可获取性修复，不是安全升级。** 固定服务器版本为2024年版本，不包含后续全部安全修复；公网或生产使用前应单独评估维护风险和 AGPLv3 许可义务。已有数据卷应先备份并在副本上验证，不要删卷重装；本次操作不更换正在运行的存储服务。
-
-IDEA 开发只需 `docker compose -f docker-compose.dev.yaml up -d --wait`，不需要发布镜像 SHA；开发文件只包含 ES、Milvus 及其必需依赖，端口仅开放到本机；MySQL、Redis、业务 MinIO 使用已有服务。完整部署不加载该文件。完整部署使用下面的默认命令，启用向量服务再追加 `-f docker-compose.semantic.yaml`。查看、更新和停止均使用相同文件组合。
-
-## 准备与启动
-
-前置条件：Linux x86_64 服务器、Docker Engine、Docker Compose v2，可访问 GHCR 和 Docker Hub。当前 CI 构建 `linux/amd64` 应用镜像。服务器只需要上述 Compose 文件、`sql/` 和自己的 `.env`；克隆仓库是获取并同步这些文件的便捷方式，不会在服务器编译源码。
+## 1. 下载并配置
 
 ```bash
 git clone https://github.com/Git-creat7/teamdocs.git
@@ -44,14 +10,19 @@ cd teamdocs
 cp -n .env.example .env
 ```
 
-部署前请核实目标机器内存与内核参数，内存不足时不要直接启动全栈。启用只读 Agent 还需配置模型并确认文档出站授权；默认不会发送真实空间内容。
+编辑 `.env`，已有配置不要覆盖：
 
-编辑 `.env` 后再启动，已有配置不要覆盖：
+- `IMAGE_TAG`：填写一次成功发布镜像的完整提交 SHA；默认镜像仓库为 `ghcr.io/git-creat7/teamdocs`。
+- `DB_PASSWORD`、`REDIS_PASSWORD`、`MINIO_SECRET_KEY`：分别设置密码，不使用模板占位值。
+- `JWT_SECRET`：生成随机密钥，例如执行 `openssl rand -hex 32`。
+- `WEB_PORT`：网页端口，默认 `15173`。
+- `MINIO_PUBLIC_ENDPOINT`：浏览器可访问的 MinIO 文件 API 地址；`MINIO_CORS_ALLOWED_ORIGIN`：实际前端来源，不带 `/login` 等路径。
+- 启用问答时填写 `AGENT_BASE_URL`、`AGENT_API_KEY`、`AGENT_MODEL_NAME`，并确认允许问题及相关资料发送给模型。
+- 需要保存私人模型配置时，用 `openssl rand -base64 32` 生成 `MODEL_CONFIG_ENCRYPTION_KEY`，妥善保存，不要随意更换。
 
-- 填写不同的 `DB_PASSWORD`、`REDIS_PASSWORD`、`MINIO_SECRET_KEY`，以及至少 32 字节的随机 `JWT_SECRET`。Linux 可用 `openssl rand -hex 32` 每次生成一个值。已有 MySQL 卷不会因修改环境变量而自动修改库内密码。
-- 正式部署推荐将 `IMAGE_TAG` 设为一次完整成功发布的提交 SHA，使前后端和 ES 镜像版本一致。`latest` 适合本机快速体验，不作为可追溯的版本记录。
-- `MINIO_CORS_ALLOWED_ORIGIN` 填写浏览器实际前端来源，当前模板为 `http://localhost:15173`；修改 `WEB_PORT`、使用域名或 HTTPS 时同步修改该值，不带页面路径。
-- 密码含 `$` 时用单引号包住完整值，例如 `DB_PASSWORD='a$password'`。不要把真实 `.env` 或解析后的完整配置上传到仓库。
+密码含 `$` 时，在 `.env` 中用单引号包住完整值。真实密码、Key 和 `.env` 不要提交到仓库。
+
+## 2. 拉取并启动
 
 ```bash
 docker compose config --quiet
@@ -60,134 +31,74 @@ docker compose up -d --wait
 docker compose ps -a
 ```
 
-首次启动会自动创建 `teamdocs_mysql_data`、`teamdocs_redis_data`、`teamdocs_minio_data`、`teamdocs_elasticsearch_data` 四个命名卷，并在空 MySQL 卷中初始化表和全文索引。`minio-init` 创建公私桶后正常退出，状态为 `Exited (0)`；后端等待数据库、Redis 和桶初始化就绪，前端等待后端健康检查通过。
+GHCR 镜像提示权限不足时，执行 `docker login ghcr.io`，使用具有 `read:packages` 权限的 Token。空 MySQL 数据卷首次启动会自动初始化表；`minio-init` 完成后显示 `Exited (0)` 是正常状态。
 
-默认端口如下，可在 `.env` 调整宿主机端口，不需要修改容器内端口：
+## 3. 访问地址
 
-| 服务 | 宿主机入口 | 用途 |
-|---|---|---|
-| Web | `:15173` | 页面和同源 `/api` |
-| Backend | `127.0.0.1:8080` | 本机 API 调试与健康检查 |
-| MinIO S3 API | `127.0.0.1:29000` | 文件域名反代目标 |
-| MinIO Console | `127.0.0.1:29001` | 本机管理入口 |
-| MySQL / Redis | 部署不发布；dev 不启动 | 部署内网通信；IDEA 连接已有服务 |
-| Elasticsearch | 默认不发布；开发覆盖为 `127.0.0.1:9200` | 容器内部检索 / IDEA 开发 |
+| 服务 | 默认宿主机入口 |
+|---|---|
+| 网页 | `http://localhost:15173/login` |
+| 后端 | `127.0.0.1:8080`，仅本机 |
+| MinIO 文件 API | `127.0.0.1:29000`，仅本机 |
+| MinIO 控制台 | `127.0.0.1:29001`，仅本机 |
 
-## 用户全局记忆
+前端镜像已转发 `/api`，不必把后端端口开放到公网。MySQL、Redis、ES 默认只在容器网络中使用。
 
-已有数据库升级前先备份，再执行一次 `sql/user_memory.sql`，创建 `user_memory` 和 `user_memory_job` 两张表；新空库执行 `sql/init.sql` 已包含它们。不要在已有库重跑含 DROP 的初始化脚本。本次代码更新不会代替管理员执行迁移。
+**域名访问：**网页反代到 `127.0.0.1:15173`，文件域名反代到 `127.0.0.1:29000`。配置 HTTPS，文件反代保留原始 Host 和路径，网页反代关闭响应缓冲以支持 SSE；同步填写上面的两个 MinIO 地址配置。
 
-用户在“设置 → 用户记忆”主动开启，默认关闭。记忆复用当前问答模型的地址、凭据和模型名称，没有新增 `.env` 参数，也不使用 Milvus。开启即确认相关用户发言和已有记忆可发送至配置的模型；管理员关闭问答出站授权时，记忆抽取也停止。
+**内网 IP 试用：**把地址改为实际服务器 IP，例如：
 
-仅处理开启后创建且成功完成的问答，不扫描旧聊天。后台每次处理一个持久化任务，模型调用最多 12 秒、输出最多 512 Token，失败最多尝试 3 次；进程中断的任务在租约过期后恢复。终态任务保留 7 天后分批清理。单条记忆最多 160 字符、总计最多 20 条；当前只接受界面列出的固定个人信息与偏好类别，不猜测、不保存空间资料。语义判断可能漏记或误判，用户可直接修正或删除。
+```dotenv
+MINIO_PUBLIC_ENDPOINT=http://服务器IP:29000
+MINIO_CORS_ALLOWED_ORIGIN=http://服务器IP:15173
+```
 
-记忆提取不包含助手回答、文档正文或工具结果；抽取失败不改变已完成的回答。新提问读取已保存的用户记忆快照，按输入预算省略完整条目并为工具调用保留空间。后台保存是异步的，紧接着发送的提问可能尚未使用刚表达的偏好。
+同时把 `minio.ports` 中的 `127.0.0.1:${MINIO_API_PORT:-29000}:9000` 改为 `${MINIO_API_PORT:-29000}:9000`，防火墙按需放行网页和文件端口；控制台仍保持仅本机访问。公网正式使用建议 HTTPS，不要直接暴露管理端口。
 
-关闭功能停止读取和更新，但保留已存内容；清空不自动关闭。删除、修改、清空或切换开关都会使旧任务失效，防止迟到结果写回。删除会话不删除已经保存的个人记忆，但其尚未处理的任务不再生成记忆。清空后不从历史会话重建，用户在新对话中重新明确表达的信息仍可能再次保存。
+## 4. 复用已有 MySQL、Redis 或 MinIO
 
-回退应用可保留两张新表，无需删表。若回退后又升级，应核对用户记忆开关；不要以删除数据卷的方式回退。
+默认 Compose 的后端地址固定为容器服务名，**只修改 `.env` 不会切换到外部服务**。删除不再使用的服务配置及 `backend.depends_on` 中对应项；复用外部 MinIO 时同时移除 `minio` 和 `minio-init`，不删除原数据卷。然后只把需要复用的组件改为读取环境变量：
 
-## 更新与回退
+```yaml
+# backend.environment：按需替换对应项，其他配置保留
+DB_HOST: ${DB_HOST}
+DB_PORT: ${DB_PORT:-3306}
+DB_USERNAME: ${DB_USERNAME}
+REDIS_HOST: ${REDIS_HOST}
+REDIS_PORT: ${REDIS_PORT:-6379}
+MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+```
 
-等待目标版本的 CI 全部成功，在 `.env` 记录该版本的完整提交 SHA，然后执行：
+在 `.env` 填写已有服务的实际地址和有效凭据。容器中的 `localhost` 指容器自己；连接宿主机服务时使用容器可达的私网地址，并确认监听地址与账号授权允许 Docker 连接。复用远程 MinIO 时，还需在远程服务上允许实际前端来源。开发和部署环境应隔离 Redis 缓存，避免同名键互相影响。
+
+**已有数据库先备份，再按缺失结构增量升级。只有全新空库才能导入 `sql/init.sql`，该文件含 DROP，不能在有业务数据的库里重跑。修改环境变量或重建容器，也不会自动修改旧数据库的密码。**
+
+## 5. 可选：Milvus 与本地开发
+
+启用语义检索时，填写 Embedding 配置和 `MILVUS_STORAGE_PASSWORD`；需要重排再填写 Reranker 配置。有效 Embedding Key 会使后台为已有可用文档发送正文并建立向量索引，填写前先确认资料出站范围。
+
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.semantic.yaml pull
+docker compose -f docker-compose.yaml -f docker-compose.semantic.yaml up -d --wait
+```
+
+IDEA 开发单独使用 `docker compose -f docker-compose.dev.yaml up -d --wait`，仅启动 ES、Milvus 及其依赖；业务 MySQL、Redis、MinIO 使用已有服务，前后端在本地启动。不要把 dev 文件和完整部署文件合并。
+
+## 6. 更新与排错
+
+更新到目标版本的 Compose 和 SQL 文件，保留自己的 `.env` 与外部服务配置；将 `IMAGE_TAG` 改为已发布版本，再执行：
 
 ```bash
 docker compose pull
 docker compose up -d --wait
-docker compose ps -a
-curl --fail http://127.0.0.1:15173/api/actuator/health
+docker compose logs --tail=100 backend
 ```
 
-若本次发布修改了 Compose 或 SQL，先同步目标版本的仓库文件；跟随 `main` 可用 `git pull --ff-only`，并确认所选 SHA 与配置版本匹配。不要只拉取一端镜像，也不要在 `latest` 标签更新过程中发布。前端 Nginx 会重新解析 Docker DNS，因此后端容器替换后不需要额外手动重启前端。
+启用了 Milvus 时，更新和查看状态也使用相同的两个 `-f` 文件。只改配置不必重建镜像，但需要 `up -d` 重新创建受影响的容器；单纯 `restart` 不会加载新的环境变量。
 
-回退时把 `IMAGE_TAG` 改回上一个成功版本的完整 SHA，执行相同命令；配置有变更时一并恢复该版本配置。单机容器替换可能短暂中断请求，健康检查失败不会自动回退，应查看 `docker compose logs --tail=100 backend frontend` 并决定是否退回旧版本。
+镜像名称不对时用 `docker compose config --images` 检查；后端 unhealthy 先看日志。`Access denied`、`WRONGPASS` 优先核对实际连接目标与凭据，TLS 错误先核对证书和访问路径，不关闭证书校验。不要使用 `down -v` 或 `--remove-orphans` 来处理启动故障。
 
-应用回退不会恢复数据库结构或数据。初始化 SQL 仅在 MySQL 数据卷为空时执行，禁止更新时重复执行包含 `DROP TABLE` 的 `init*.sql`。
+## MinIO 镜像来源
 
-普通更新无需 `down`。使用启动时同一组 `-f` 参数执行 `down` 会保留命名卷；`docker compose down -v` 会删除数据，不要用于发布或处理初始化问题。数据库与文件应分别备份，基础设施镜像摘要的升级单独安排。
+MinIO 和 mc 使用 GHCR 上的固定摘要镜像，不随 `IMAGE_TAG` 更新，也不在部署时编译 MinIO 源码。当前固定版本较旧，生产使用前需评估维护风险与访问控制；Fork 的镜像同步方式见 [Mirror MinIO workflow](../.github/workflows/mirror-minio.yml)。
 
-## 验收
-
-后台解析支持 UTF-8 TXT、Markdown、文本型 PDF 和 DOCX，默认文件上限 10MB、正文上限 200,000 字符。扫描件、加密文件及不支持的格式会显示明确原因，原文件仍可下载，预览沿用原有支持范围。可通过 `.env` 中的 `PARSE_ENABLED=false` 停止后台扫描；解析大小、字符数、超时和重试间隔默认沿用后端配置；IDEA 运行可通过 `PARSE_MAX_BYTES`、`PARSE_MAX_CHARS`、`PARSE_TIMEOUT_SECONDS`、`PARSE_RETRY_DELAY_SECONDS` 覆盖，容器部署需要时再在应用文件添加对应环境变量。
-
-启动后先确认使用同一文件组合执行 `docker compose ... ps -a` 无失败服务，再从实际浏览器来源验证登录、空间列表、文件上传、预览和下载。仅检查 Web 的 `/healthz` 无法证明后端代理或外部文件地址可用；应同时检查上面的 `/api/actuator/health` 和文件链路。
-
-本机 IDEA 开发单独使用开发文件，详见 README 的“IDEA 本地开发”。
-
-
-## P5 回退与数据保留验证
-
-应用回退前先清空模型 Key，或在对应版本支持时通过 `--teamdocs.agent.enabled=false` 等 Spring 属性关闭功能；旧版仍按其开关配置操作。记录目标完整提交 SHA，确认旧应用与现存 SQL 结构兼容后只更换应用镜像。不要为了回退重新运行初始化 SQL、删表或删除数据卷。仍在执行的模型请求可能未立即结束；终态未知的请求不得自动重放。
-
-2026-09-29 已在独立空库演练当前主类进程重启，以及回退至 `0ed89bd` 构建的旧 JAR：文档、文件夹、会话和未知用量均保留，未重新初始化数据。此记录是本地应用兼容性证据，不是生产镜像发布/线上部署结果，详见 [P5 评测与命令](AGENT_EVALUATION.md)。
-
-上线前另行确定问答记录保留期限、清理责任与运维访问范围。当前会话没有用户删除入口，也没有自动 TTL；不能把测试报告的 14 天保留期误当作业务问答的保留策略。原始问题、文档衍生回答和部署密钥不得上传到 CI 制品。
-
-Redis 故障时 JWT 撤销校验按安全策略拒绝认证，可能需要恢复后重新登录；Agent 额度凭证实际在 MySQL。模型故障不应降低文档服务健康状态，但不能据此推导数据库/Redis 故障也完全无影响。
-
-
-### 应用与表结构兼容
-
-新空库使用当前 `sql/agent.sql` 的模型调用记录定义。已有旧版本数据库必须先备份并核对列、索引和约束，应用不会自动变更结构；本次未操作实际业务数据库。
-
-此前 `0ed89bd` 回退演练只覆盖当时的表结构。不要据此在当前结构下继续开放旧版 Agent；需选择兼容版本重新验证，或关闭 Agent 仅保留核心文档管理降级。
-
-## 用户自定义问答模型与依赖状态
-
-已有数据库先备份，再执行一次 `sql/user_model.sql`（新表和 `agent_run.model_config_ciphertext` 列）；新空库初始化已包含。不要重跑含 DROP 的初始化脚本。此更新不自动修改已有数据库。
-
-在部署环境配置 `MODEL_CONFIG_ENCRYPTION_KEY`：32字节安全随机值的 Base64，与 JWT 密钥分离。可在可信终端运行 `openssl rand -base64 32` 生成并通过秘密管理器配置，不要提交到 Git。妥善备份主密钥，更换后旧凭据和运行快照不能解密；即使主密钥不可用，用户仍可停用私人模型。
-
-所有登录用户可在“设置 → AI 服务”管理自己的 OpenAI 兼容接口。仅支持公网 HTTPS 默认端口，禁止 URL 内嵌凭据、查询参数、重定向和非公网 DNS 结果。内网、localhost、自定义端口及需要查询参数的服务暂不支持。服务端主密钥未配置时无法保存私人配置，系统默认模型仍可使用。管理员显式关闭 AI 或出站授权时，个人配置不能绕过。
-
-用户保存并启用私人配置后，仅自己的新问答使用该模型；失败不切回系统模型。每次运行在提交时保存绑定用户的加密配置快照，修改设置不影响已经提交的运行。该次问答的记忆提取复用快照；向量化、重排及索引仍使用系统配置。留空 API Key 保留本人已存密钥，更换 Base URL 时同样沿用；请确认新地址可信，因为测试和调用会向该地址发送此密钥。
-
-依赖状态默认只显示配置状态。人工检测可能产生少量模型用量，检测使用固定短文本，不发送业务文档。探测缓存5分钟，检测完成后可立即重试，无固定冷却时间，全局最多2个并发检测；并发保护为单实例内存状态，多实例部署应另配统一入口限流。运行中的语义/重排降级单独记录最近一小时的脱敏状态，不用探测成功冒充实际召回成功。
-
-MCP 检测仅验证当前项目支持的 HTTP JSON 握手与工具发现，不运行工具；需要 SSE 或其他会话协议的服务可能显示不兼容。健康状态不接入 Docker liveness，外部故障不会导致容器重启。
-
-### 模型出站代理
-
-默认不强制直连，使用 JVM 的 `ProxySelector`。JVM 可通过 `-Djava.net.useSystemProxies=true` 读取受支持的系统代理，或通过 `-Dhttps.proxyHost`、`-Dhttps.proxyPort` 设置；Java 不保证自动读取 shell 的 `HTTPS_PROXY`。默认选择器返回直连时仍校验目标公网 IP；代理地址可位于本机，目标侧访问控制由可信代理负责。
-
-管理员也可通过 `AGENT_PROXY_URL=http://127.0.0.1:7890` 配置 HTTP 代理（端口按实际代理设置填写）。系统问答、个人问答、模型连通性检测及记忆抽取共用此配置；不影响 ES、Milvus 等内网服务。当前支持无认证 HTTP 代理，HTTPS 模型请求通过 CONNECT 隧道转发，TLS 证书仍由客户端验证；禁止自动重定向；显式代理不回退直连，默认模式遵循 JVM 选择器返回的路由。
-
-代理配置是管理员信任边界：启用后由代理解析目标域名，应用无法验证代理侧的解析结果，因此代理必须限制目标访问，拒绝内网、回环、链路本地和云元数据地址；仅使用有对应出站 ACL 的可信代理。URL 本身的公网 HTTPS 限制仍保留。不能将普通用户提供的代理地址直接传入此配置。
-
-IDEA 后端可连接本机代理端口。Docker 后端的 `127.0.0.1` 是容器自身，Docker Desktop 通常使用 `http://host.docker.internal:7890`；Linux 按部署网络提供可达代理地址。重启后端后生效。此配置不会自动修改 Clash/Mihomo 或为其添加 ACL。
-
-## 文档范围、反馈与索引修复
-
-升级前备份已有数据库，执行一次 `sql/agent_scope_feedback.sql`，为运行新增范围字段并创建反馈表。不要重跑初始化 SQL。标签功能已从应用移除，现有标签表及关联数据保留，不执行删表或清理。
-
-文档详情的“索引管理”向空间成员开放，只有 OWNER/ADMIN 可重试当前文档的 ES/向量同步；不提供全局删除索引入口。ES 状态核对当前版本的分块数量；Milvus 展示持久化任务是否完成，不冒充实时探测。向量重试会产生 Embedding 用量。正文未 READY 时不能修复索引，先完成解析。
-
-问答范围可选择一个文件或文件夹（含子目录，最多30份文档，目录树最多200个目录）。提交时固化文档列表，新增文档不会扩大正在运行的范围，文档移出范围或被删除时停止运行。限定范围不使用历史回答或外部 MCP 工具，范围不匹配的工具调用由后端拒绝。目录选择每层最多显示200项文件、200项文件夹。
-
-用户可以给本人已完成且可访问的回答点赞或点踩，点踩可选引用不对、回答不完整、没找到文档等原因，可撤回；每个回答只保存最新反馈，删除会话会清理对应反馈。
-
-## 对话附件与 JSON 文档
-
-空间内 JSON/JSONL 文档按 UTF-8 文本解析、分块和索引；此前已标为 SKIPPED 的文件需要点击“重新解析”。不会执行 JSON 中的指令或脚本。
-
-对话附件使用独立 `agent_attachment` 表；此前已经迁移过的不需要再次更新数据库。附件保存在私有桶，不加入空间文档、正文分块或 ES/Milvus。支持 JPEG/PNG/WebP、PDF、DOCX、XLSX、PPTX、TXT/MD、JSON/JSONL、CSV/TSV，每次最多4个、单文件最多5MB。旧版 DOC/XLS/PPT、压缩包和加密文件暂不支持。
-
-文本、Word、Excel、PPT 转成带文件名的文本输入；PDF 文字带页码，Excel 带工作表和单元格地址，PPT 带幻灯片号。图片及没有文本的 PDF 页面作为图片交给当前模型，不调用另外的 VISION_MODEL，不再依赖供应商的 file_data 原生文件接口。Office 图表、嵌入图片及文本型 PDF 内的图片不做视觉提取，请需要时单独上传图片。回答来源应区分“后端提取的附件文字”和“模型理解的图片”，不能声称全部原生解析。
-
-每个附件最多100000字符，PDF/PPT 最多100页，无文本 PDF 最多8页图片，表格最多20000单元格，Office 解压最多40MB/2000项；处理循环检查15秒截止时间，具体第三方解析调用不是独立进程硬超时。超限、损坏、加密或无内容时整份拒绝，不静默截断。总输入仍受问答 Token 预算限制，过长时请拆分附件；不建立临时检索系统。宏、公式和外部链接不执行，格式校验不等于杀毒扫描。
-
-附件仅绑定一次问答，历史显示附件下载入口但不会自动把旧附件重新发送到模型。用户可在发送前移除附件；未发送附件一天后清理，删除会话后在下一次清理周期删除其附件，失败自动稍后重试。下载需同时验证空间成员资格和附件所属用户/会话，私有桶没有公开下载地址。
-
-## 问答输出与上下文预算
-
-普通问答默认不发送 `max_tokens`，也不再把输出硬截到4096 Token；系统模型和私人模型一致。内部运行/调用记录中输出预算 `0` 表示未指定上限，不是禁止生成；已有正数预算记录保持原语义，无需迁移数据库。若管理员显式设置 `teamdocs.agent.max-output-tokens` 为正数，则原样发送该值，不再追加4096限制。记忆抽取和连通性检测的独立小预算保持不变。
-
-这不保证模型无限输出：供应商的默认值、模型总上下文窗口、最大生成长度仍然有效，思考 Token 是否计入输出也取决于供应商。`finish_reason=length` 仍显示截断提示，不自动反复续写。输入预算、请求超时、调用次数、正文/网络响应安全大小、思考展示长度均保留；不指定输出上限可能增加等待时间和模型用量。
-
-当前答案正文校验仍有8000字符、JSON 解析16000字符，以及网络响应大小等安全限制；本轮未一并放开这些限制，不应把“不发送 max_tokens”理解成应用支持无限长回答。
-
-上下文不做模型摘要压缩，不新增摘要字段或调用。历史按游标分页读取，不再受50轮、10万历史 Token 或三分之一比例限制；每次模型调用前，只有完整请求放不下时才移除最旧的完整 User/Assistant 对。数据库中的聊天记录不删除，当前问题、附件和本轮工具链不拆分；这些必要内容本身放不下时仍返回 CONTEXT_LIMIT。范围、附件隔离及来源校验保持不变，现有来源数量安全限制仍然有效。
-
-`AGENT_MAX_INPUT_TOKENS`（对应 `teamdocs.agent.max-input-tokens`）为可用输入容量覆盖值，默认0自动计算。对精确模型标识 `step-5-preview`，按1M窗口扣除64k生成预留和10k估算余量，普通问答可用输入容量为926000；这不是模型请求的输出限制。显式设置了更小的正数输出上限时，生成预留相应缩小。未知模型保守回退16000，不假定所有私人模型都有1M窗口。其他模型或中转服务请按实际窗口设置正数覆盖值，覆盖值应已经扣除生成预留和估算余量。先前的 AGENT_HISTORY_TURNS / AGENT_HISTORY_MAX_INPUT_TOKENS 不再使用。
-
-本地使用 tokenizer 近似计数，而不是把 UTF-8 字节当作 Token；文本附件按实际发送的提取文本计数，图片暂沿用保守额度。该 tokenizer 不代表供应商的精确分词，实际输入 usage 大于估算值不会使成功响应作废，而用于调高本轮后续请求的估算。没有额外的远端计数请求，不向其他供应商发送内容。模型及可用输入容量在创建运行时确定，修改配置后请发起新问答。
