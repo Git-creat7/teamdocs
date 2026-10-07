@@ -1,7 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-const LandingView = () => import('@/views/LandingView.vue')
-
 const LoginView = () => import('@/views/LoginView.vue')
 
 const AppShell = () => import('@/layouts/AppShell.vue')
@@ -24,14 +22,8 @@ const SpaceWorkbenchView = () => import('@/views/SpaceWorkbenchView.vue')
 const DocumentPreviewPage = () => import('@/views/DocumentPreviewPage.vue')
 
 const routes = [
-  // 官网落地页：登录墙外的产品门面，与下方 AppShell 同挂 '/'，
-  // 同路径先注册者优先，精确访问 '/' 命中这里
-  {
-    path: '/',
-    name: 'Landing',
-    component: LandingView,
-    meta: { requiresAuth: false }
-  },
+  // 根路径直接进入登录页，登录后的工作台仍使用 /home。
+  { path: '/', redirect: '/login' },
   {
     path: '/login',
     name: 'Login',
@@ -68,7 +60,7 @@ const router = createRouter({
   routes
 })
 
-// 全局路由前置守卫 (落地页 '/' 对已登录用户也开放，方便随时回门面看)
+// 全局路由前置守卫：未登录时不可访问工作台。
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('teamdocs_token')
   const requiresAuth = to.matched.some((r) => r.meta.requiresAuth)
