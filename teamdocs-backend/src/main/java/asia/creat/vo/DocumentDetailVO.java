@@ -1,7 +1,6 @@
 package asia.creat.vo;
 
 import asia.creat.entity.ParseStatus;
-import asia.creat.entity.Tag;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -24,6 +23,5 @@ public class DocumentDetailVO {
     private String parseError;
     private LocalDateTime parsedAt;
     private Integer parseVersion;
-    private List<Tag> tags;
     private List<FolderPathItemVO> folderPath;
 }

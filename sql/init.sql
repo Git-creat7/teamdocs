@@ -4,6 +4,9 @@
 -- 顺序：用户、空间、文档、评论、日志、全文索引、正文、Agent、向量待办。
 
 -- 用户
+DROP TABLE IF EXISTS user_memory_job;
+DROP TABLE IF EXISTS user_memory;
+DROP TABLE IF EXISTS user_model_config;
 DROP TABLE IF EXISTS user;
 CREATE TABLE user(
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -192,7 +195,11 @@ CREATE TABLE agent_run (
     user_id BIGINT NOT NULL,
     client_request_id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     request_hash CHAR(64) NOT NULL,
+    scope_document_id BIGINT NULL,
+    scope_folder_id BIGINT NULL,
+    scope_document_ids JSON NULL,
     model_name VARCHAR(100) NOT NULL,
+    model_config_ciphertext TEXT,
     status VARCHAR(16) NOT NULL DEFAULT 'QUEUED',
     error_code VARCHAR(64),
     model_calls INT NOT NULL DEFAULT 0,
@@ -262,3 +269,58 @@ CREATE TABLE IF NOT EXISTS document_vector_task (
     error_code VARCHAR(64) NULL,
     INDEX idx_vector_task_pending (state, next_attempt_ms)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 用户全局记忆增量迁移。只建新表，不重跑包含 DROP 的初始化 SQL。
+CREATE TABLE IF NOT EXISTS user_memory (
+    user_id BIGINT PRIMARY KEY,
+    enabled TINYINT NOT NULL DEFAULT 0,
+    version BIGINT NOT NULL DEFAULT 0,
+    items_json JSON NOT NULL,
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+);
+
+CREATE TABLE IF NOT EXISTS user_memory_job (
+    run_id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    memory_version BIGINT NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    attempts INT NOT NULL DEFAULT 0,
+    next_attempt_ms BIGINT NOT NULL DEFAULT 0,
+    lease_until_ms BIGINT NOT NULL DEFAULT 0,
+    claim_token VARCHAR(36),
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    INDEX idx_user_memory_job_due(status, next_attempt_ms, run_id),
+    INDEX idx_user_memory_job_owner(user_id, memory_version)
+);
+
+CREATE TABLE IF NOT EXISTS user_model_config (
+    user_id BIGINT PRIMARY KEY,
+    enabled TINYINT NOT NULL DEFAULT 0,
+    version BIGINT NOT NULL DEFAULT 0,
+    base_url VARCHAR(500) NOT NULL,
+    model_name VARCHAR(100) NOT NULL,
+    key_ciphertext TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_answer_feedback (
+    run_id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    rating VARCHAR(8) NOT NULL,
+    reason VARCHAR(32),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+);
+
+CREATE TABLE IF NOT EXISTS agent_attachment (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    space_id BIGINT NOT NULL,
+    run_id BIGINT NULL,
+    name VARCHAR(160) NOT NULL,
+    mime VARCHAR(80) NOT NULL,
+    size BIGINT NOT NULL,
+    object_key VARCHAR(255) NOT NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    INDEX idx_attachment_run(run_id),
+    INDEX idx_attachment_owner(user_id,run_id),
+    INDEX idx_attachment_expiry(created_at)
+);

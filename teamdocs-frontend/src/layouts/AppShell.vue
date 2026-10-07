@@ -64,15 +64,7 @@
           <el-icon class="nav-icon"><UsersRound /></el-icon>
           <span v-show="!effectiveCollapsed" class="nav-label">团队动态</span>
         </RouterLink>
-        <RouterLink
-          to="/tags"
-          :class="['nav-item', { active: route.path === '/tags' }]"
-          aria-label="标签管理"
-          :aria-current="route.path === '/tags' ? 'page' : undefined"
-        >
-          <el-icon class="nav-icon"><Tag /></el-icon>
-          <span v-show="!effectiveCollapsed" class="nav-label">标签管理</span>
-        </RouterLink>
+
         <button
           type="button"
           :class="['nav-item', { active: route.path === '/trash' }]"
@@ -137,7 +129,6 @@
               </div>
             </el-tooltip>
 
-            <!-- 展开的直达入口：成员 / 标签 / 回收站 -->
             <div v-if="!effectiveCollapsed && expandedSpaceIds.has(space.id)" class="space-sublinks">
               <button type="button" class="space-sublink" :aria-label="`${space.name}：文档问答`"
                 @click="router.push({ name: 'SpaceAgent', params: { spaceId: space.id } })">
@@ -152,15 +143,7 @@
                 <el-icon><User /></el-icon>
                 <span>成员</span>
               </button>
-              <button
-                type="button"
-                class="space-sublink"
-                :aria-label="`${space.name}：标签`"
-                @click="router.push('/tags')"
-              >
-                <el-icon><Tag /></el-icon>
-                <span>标签</span>
-              </button>
+
               <button
                 type="button"
                 class="space-sublink"
@@ -290,7 +273,7 @@
           <el-input
             v-model.trim="searchKeyword"
             class="global-search-input"
-            placeholder="搜索文档名 / 标签…"
+            placeholder="搜索文档名 / 描述…"
             clearable
             @keyup.enter="handleGlobalSearch"
           >
@@ -327,7 +310,7 @@
           v-if="!globalSearching && globalResults.length === 0"
           :icon="SearchX"
           title="所有空间里都没有找到匹配的文档"
-          description="搜索会匹配各空间的文档名与标签"
+          description="搜索会匹配各空间的文档名与描述"
         />
         <button
           v-for="doc in globalResults"
@@ -405,7 +388,6 @@ import {
   PanelLeftClose,
   ChevronRight,
   User,
-  Tag,
   FileText,
   SearchX,
   Menu,
@@ -469,6 +451,7 @@ function stopSidebarResize(shouldPersist = true) {
 
   const activePointerId = resizePointerId
   const activeHandle = resizeHandleElement
+
   sidebarResizing.value = false
   resizePointerId = null
   resizeHandleElement = null
@@ -498,8 +481,10 @@ function startSidebarResize(event) {
 
 function handleSidebarResizeMove(event) {
   if (!sidebarResizing.value || event.pointerId !== resizePointerId) return
+
   if (event.pointerType === 'mouse' && event.buttons === 0) {
     stopSidebarResize()
+
     return
   }
 
@@ -511,6 +496,7 @@ function handleSidebarResizeMove(event) {
 
 function handleSidebarResizeEnd(event) {
   if (resizePointerId !== null && event.pointerId !== resizePointerId) return
+
   stopSidebarResize()
 }
 
@@ -526,19 +512,24 @@ function handleSidebarResizeBlur() {
 
 function handleSidebarResizeKeydown(event) {
   let nextWidth
+
   switch (event.key) {
     case 'ArrowLeft':
       nextWidth = sidebarWidth.value - 8
       break
+
     case 'ArrowRight':
       nextWidth = sidebarWidth.value + 8
       break
+
     case 'Home':
       nextWidth = SIDEBAR_MIN_WIDTH
       break
+
     case 'End':
       nextWidth = SIDEBAR_MAX_WIDTH
       break
+
     default:
       return
   }
@@ -551,11 +542,14 @@ function handleSidebarResizeKeydown(event) {
 // 移动端：侧栏变抽屉，汉堡键唤起，导航后自动收起
 const mq = window.matchMedia('(max-width: 768px)')
 const isMobile = ref(mq.matches)
+
 mq.addEventListener('change', (e) => { isMobile.value = e.matches })
+
 const mobileSidebarOpen = ref(false)
 const sidebarRef = ref(null)
 const hamburgerButtonRef = ref(null)
 let mobileSidebarTrigger = null
+
 const SIDEBAR_FOCUSABLE_SELECTOR = [
   'a[href]',
   'button:not([disabled])',
@@ -564,32 +558,40 @@ const SIDEBAR_FOCUSABLE_SELECTOR = [
   'textarea:not([disabled])',
   '[tabindex]:not([tabindex="-1"])'
 ].join(',')
+
 const detailSidebarExpanded = ref(false)
 const agentSidebarExpanded = ref(false)
+
 const isAgentPage = computed(() => route.name === 'SpaceAgent')
+
 const hasDocumentDetail = computed(() =>
   route.name === 'SpaceWorkbench' && Number(route.query.doc) > 0
 )
+
 const automaticDetailCollapse = computed(() =>
   autoCollapseSidebar.value
   && hasDocumentDetail.value
   && !detailSidebarExpanded.value
   && !isMobile.value
 )
+
 const automaticAgentCollapse = computed(() =>
   isAgentPage.value
   && !agentSidebarExpanded.value
   && !isMobile.value
 )
+
 const automaticSidebarCollapse = computed(() =>
   automaticDetailCollapse.value || automaticAgentCollapse.value
 )
+
 const effectiveCollapsed = computed(() =>
   (collapsed.value || automaticSidebarCollapse.value) && !isMobile.value
 )
 
 function getSidebarFocusableElements() {
   if (!sidebarRef.value) return []
+
   return [...sidebarRef.value.querySelectorAll(SIDEBAR_FOCUSABLE_SELECTOR)]
     .filter((element) => element.getClientRects().length > 0)
 }
@@ -611,13 +613,17 @@ async function closeMobileSidebar() {
 
   mobileSidebarOpen.value = false
   await nextTick()
+
   if (mobileSidebarOpen.value) return
 
   const savedTrigger = mobileSidebarTrigger
+
   mobileSidebarTrigger = null
+
   const returnTarget = savedTrigger?.isConnected
     ? savedTrigger
     : hamburgerButtonRef.value
+
   returnTarget?.focus()
 }
 
@@ -628,13 +634,17 @@ function handleMobileSidebarKeydown(event) {
     event.preventDefault()
     event.stopPropagation()
     closeMobileSidebar()
+
     return
   }
+
   if (event.key !== 'Tab') return
 
   const focusableElements = getSidebarFocusableElements()
+
   if (focusableElements.length === 0) {
     event.preventDefault()
+
     return
   }
 
@@ -655,30 +665,42 @@ function handleMobileSidebarKeydown(event) {
 function toggleSidebar() {
   if (isMobile.value) {
     closeMobileSidebar()
+
     return
   }
+
   if (effectiveCollapsed.value) {
     if (automaticAgentCollapse.value && !collapsed.value) {
       agentSidebarExpanded.value = true
+
       return
     }
+
     if (automaticDetailCollapse.value && !collapsed.value) {
       detailSidebarExpanded.value = true
+
       return
     }
+
     collapsed.value = false
     agentSidebarExpanded.value = true
     detailSidebarExpanded.value = true
+
     return
   }
+
   if (isAgentPage.value && agentSidebarExpanded.value && !collapsed.value) {
     agentSidebarExpanded.value = false
+
     return
   }
+
   if (hasDocumentDetail.value && detailSidebarExpanded.value && !collapsed.value) {
     detailSidebarExpanded.value = false
+
     return
   }
+
   collapsed.value = true
 }
 
@@ -703,6 +725,7 @@ watch(
 const activeSpaceId = computed(() => {
   const raw = route.params.spaceId
   const num = Number(raw)
+
   return isNaN(num) ? null : num
 })
 
@@ -715,6 +738,7 @@ const expandedSpaceIds = ref(new Set())
 
 watch([activeSpaceId, searchScopeMode], ([id]) => {
   searchSpaceId.value = searchScopeMode.value === 'all' ? 0 : (id || 0)
+
   if (id) {
     // 进入某空间时自动展开它的直达入口
     if (!expandedSpaceIds.value.has(id)) {
@@ -725,11 +749,13 @@ watch([activeSpaceId, searchScopeMode], ([id]) => {
 
 function setSpaceExpanded(id, expanded) {
   const next = new Set(expandedSpaceIds.value)
+
   if (expanded) {
     next.add(id)
   } else {
     next.delete(id)
   }
+
   expandedSpaceIds.value = next
 }
 
@@ -739,6 +765,7 @@ function toggleSpaceExpand(id) {
 
 async function handleSpaceClick(id) {
   const shouldExpand = !expandedSpaceIds.value.has(id)
+
   await router.push(`/spaces/${id}`)
   setSpaceExpanded(id, shouldExpand)
 }
@@ -755,9 +782,12 @@ const globalKeyword = ref('')
 
 async function handleGlobalSearch() {
   const keyword = searchKeyword.value.trim()
+
   if (!keyword) return
+
   if (spaces.value.length === 0) {
     ElMessage.warning('还没有空间，先创建一个吧')
+
     return
   }
 
@@ -768,6 +798,7 @@ async function handleGlobalSearch() {
       query: { search: keyword, t: Date.now() }
     })
     searchKeyword.value = ''
+
     return
   }
 
@@ -775,17 +806,20 @@ async function handleGlobalSearch() {
   globalKeyword.value = keyword
   globalSearchVisible.value = true
   globalSearching.value = true
+
   try {
     const settled = await Promise.all(
       spaces.value.map(async (s) => {
         try {
           const page = await searchDocumentsApi(s.id, keyword, 1, 50)
+
           return page.records.map((r) => ({ ...r, spaceName: s.name }))
         } catch (err) {
           return []
         }
       })
     )
+
     globalResults.value = settled
       .flat()
       .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
@@ -810,20 +844,26 @@ function openGlobalResult(doc) {
 function goTrash() {
   // 回收站是空间维度的：优先带上当前空间，否则用第一个空间
   const sid = activeSpaceId.value || searchSpaceId.value || spaces.value[0]?.id
+
   if (!sid) {
     ElMessage.warning('还没有空间，先创建一个吧')
+
     return
   }
+
   router.push({ path: '/trash', query: { spaceId: sid } })
 }
 
 // 侧栏主动作：进当前空间工作台并直接唤起文件选择
 function goUpload() {
   const sid = activeSpaceId.value || searchSpaceId.value || spaces.value[0]?.id
+
   if (!sid) {
     ElMessage.warning('还没有空间，先创建一个吧')
+
     return
   }
+
   router.push({ path: `/spaces/${sid}`, query: { upload: 1, t: Date.now() } })
 }
 
@@ -847,6 +887,7 @@ async function handleCreateSpace() {
   if (!createFormRef.value || creatingSpace.value) return
 
   creatingSpace.value = true
+
   try {
     await createFormRef.value.validate()
 
@@ -873,6 +914,7 @@ const sidebarRecentDocs = ref([])
 async function loadSidebarRecent() {
   try {
     const list = await getRecentDocumentsApi()
+
     sidebarRecentDocs.value = list.slice(0, 4)
   } catch (err) {
     // 刷新失败保留旧数据
@@ -1286,6 +1328,7 @@ onUnmounted(() => {
 
 @keyframes sublinks-in {
   from { opacity: 0; transform: translateY(-4px); }
+
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -1471,6 +1514,7 @@ onUnmounted(() => {
 
 @keyframes fade-in {
   from { opacity: 0; }
+
   to { opacity: 1; }
 }
 

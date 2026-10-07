@@ -4,9 +4,11 @@
 
 export function formatBytes(bytes) {
   if (bytes === 0 || !bytes) return '0 B'
+
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
+
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
@@ -15,34 +17,47 @@ export function formatBytes(bytes) {
  */
 export function formatRelativeTime(dateStr) {
   if (!dateStr) return '-'
+
   const d = new Date(dateStr)
+
   if (isNaN(d.getTime())) return '-'
+
   const now = new Date()
   const diff = now - d
+
   if (diff < 60 * 1000) return '刚刚'
+
   if (diff < 60 * 60 * 1000) return `${Math.floor(diff / 60000)}分钟前`
 
   const pad = (n) => String(n).padStart(2, '0')
+
   const sameDay = d.toDateString() === now.toDateString()
+
   if (sameDay) return `${Math.floor(diff / 3600000)}小时前`
 
   const yesterday = new Date(now)
   yesterday.setDate(now.getDate() - 1)
+
   if (d.toDateString() === yesterday.toDateString()) {
     return `昨天 ${pad(d.getHours())}:${pad(d.getMinutes())}`
   }
+
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 export function formatDateTime(dateStr) {
   if (!dateStr) return '-'
+
   const d = new Date(dateStr)
+
   if (isNaN(d.getTime())) return '-'
+
   const year = d.getFullYear()
   const month = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   const hours = String(d.getHours()).padStart(2, '0')
   const minutes = String(d.getMinutes()).padStart(2, '0')
+
   return `${year}/${month}/${day} ${hours}:${minutes}`
 }
 
@@ -50,9 +65,11 @@ export function getFileExt(filename, fileType) {
   if (filename && filename.includes('.')) {
     return filename.split('.').pop().toUpperCase()
   }
+
   if (fileType) {
     return fileType.toUpperCase()
   }
+
   return 'FILE'
 }
 
@@ -61,9 +78,12 @@ export function getFileExt(filename, fileType) {
  */
 export function middleEllipsis(name, max = 40) {
   const s = String(name || '')
+
   if (s.length <= max) return s
+
   const tail = s.slice(-12)
   const head = s.slice(0, Math.max(1, max - 13))
+
   return `${head}…${tail}`
 }
 
@@ -85,5 +105,6 @@ export function getFileTypeColor(ext) {
     RAR: '#8b5cf6',
     MP4: '#ec4899'
   }
+
   return map[ext] || '#64748b'
 }

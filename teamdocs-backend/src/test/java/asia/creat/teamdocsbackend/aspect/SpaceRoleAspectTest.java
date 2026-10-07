@@ -62,6 +62,7 @@ class SpaceRoleAspectTest {
         prepareInvocation("ownerOnly", SpaceRole.OWNER);
         when(joinPoint.proceed()).thenAnswer(invocation -> {
             assertEquals(SpaceRole.OWNER, SpaceContext.getSpaceMember().getRole());
+
             return "ok";
         });
 
@@ -78,12 +79,14 @@ class SpaceRoleAspectTest {
         assertThrows(BusinessException.class, () -> aspect.check(joinPoint));
 
         verify(joinPoint, never()).proceed();
+
         assertNull(SpaceContext.getSpaceMember());
     }
 
     @Test
     void shouldRejectNonMember() throws Throwable {
         Method method = RestrictedService.class.getMethod("ownerOnly", Long.class, LoginUser.class);
+
         when(joinPoint.getSignature()).thenReturn(signature);
         when(signature.getMethod()).thenReturn(method);
         when(joinPoint.getArgs()).thenReturn(new Object[]{1L, new LoginUser(9L, "alice")});
@@ -97,6 +100,7 @@ class SpaceRoleAspectTest {
 
     private void prepareInvocation(String methodName, SpaceRole role) throws Exception {
         Method method = RestrictedService.class.getMethod(methodName, Long.class, LoginUser.class);
+
         when(joinPoint.getSignature()).thenReturn(signature);
         when(signature.getMethod()).thenReturn(method);
         when(joinPoint.getArgs()).thenReturn(new Object[]{1L, new LoginUser(9L, "alice")});

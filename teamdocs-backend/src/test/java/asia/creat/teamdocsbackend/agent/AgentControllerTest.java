@@ -1,10 +1,14 @@
 package asia.creat.teamdocsbackend.agent;
 
 import asia.creat.agent.AgentData.NewRun;
+import asia.creat.agent.AgentEventHub;
 import asia.creat.agent.AgentService;
 import asia.creat.common.exception.GlobalExceptionHandler;
 import asia.creat.controller.AgentController;
 import asia.creat.security.LoginUser;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,12 +21,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @ExtendWith(OutputCaptureExtension.class)
@@ -34,10 +37,11 @@ class AgentControllerTest {
     @BeforeEach
     void prepare() {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));
-        mvc = MockMvcBuilders.standaloneSetup(new AgentController(service, mock(asia.creat.agent.AgentEventHub.class)))
+        mvc = MockMvcBuilders.standaloneSetup(new AgentController(service, mock(AgentEventHub.class)))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
     }
+
     @AfterEach void clear() { SecurityContextHolder.clearContext(); }
 
     @Test
@@ -61,14 +65,16 @@ class AgentControllerTest {
     @Test
     void invalidPrivateQuestionIsNeitherExecutedNorLogged(CapturedOutput output) throws Exception {
         String secret = "PRIVATE-QUESTION-MARKER";
-        String payload = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(java.util.Map.of(
+        String payload = new ObjectMapper().writeValueAsString(Map.of(
                 "clientRequestId", "valid-key", "question", secret.repeat(100)));
+
         mvc.perform(post("/spaces/1/agent/sessions/2/runs").contentType(MediaType.APPLICATION_JSON).content(payload))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0));
         mvc.perform(post("/spaces/1/agent/sessions/2/runs").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"clientRequestId\":\"bad key\",\"question\":\"" + secret + "\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0));
         verifyNoInteractions(service);
+
         assertFalse(output.getAll().contains(secret));
     }
 }

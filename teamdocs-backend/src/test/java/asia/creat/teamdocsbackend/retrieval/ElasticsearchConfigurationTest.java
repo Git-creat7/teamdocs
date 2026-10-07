@@ -41,6 +41,7 @@ class ElasticsearchConfigurationTest {
     void maintenanceProcessExitsCleanlyThroughRealSpringBootStartup() {
         SpringApplication app = new SpringApplication(MaintenanceApplication.class);
         app.setWebApplicationType(WebApplicationType.NONE);
+
         try (var context = app.run("--teamdocs.elasticsearch.rebuild=true",
                 "--spring.config.location=optional:classpath:/maintenance-test.properties")) {
             assertThat(context.isActive()).isFalse();
@@ -52,7 +53,9 @@ class ElasticsearchConfigurationTest {
     static class MaintenanceApplication {
         @Bean ChunkIndex index() {
             ChunkIndex index = mock(ChunkIndex.class);
+
             when(index.rebuild()).thenReturn(5);
+
             return index;
         }
     }
@@ -62,11 +65,13 @@ class ElasticsearchConfigurationTest {
         ChunkIndex index = mock(ChunkIndex.class);
         ConfigurableApplicationContext context = mock(ConfigurableApplicationContext.class);
         var command = new ElasticsearchConfiguration().rebuildChunkIndex(index, context);
+
         when(index.rebuild()).thenReturn(5);
         command.run(new DefaultApplicationArguments());
         verify(context).close();
         reset(context);
         when(index.rebuild()).thenThrow(new IllegalStateException("failed"));
+
         assertThrows(IllegalStateException.class, () -> command.run(new DefaultApplicationArguments()));
         verify(context, never()).close();
     }

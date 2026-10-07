@@ -17,7 +17,6 @@ import asia.creat.mapper.FolderMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
 import asia.creat.service.FolderService;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,6 +27,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Queue;
+
+import static com.baomidou.mybatisplus.extension.toolkit.ChainWrappers.lambdaQueryChain;
+import static com.baomidou.mybatisplus.extension.toolkit.ChainWrappers.lambdaUpdateChain;
 
 @Service
 @Slf4j
@@ -44,6 +46,7 @@ public class FolderServiceImpl implements FolderService {
 
         //防止空指针异常，默认父目录id为0（根目录）
         Long parentId = dto.getParentId() == null ? 0L : dto.getParentId();
+
         if (parentId != 0){
             checkParentSpaceId(parentId, spaceId);
         }
@@ -54,6 +57,7 @@ public class FolderServiceImpl implements FolderService {
                 .spaceId(spaceId)
                 .createdBy(loginUser.getUserId())
                 .build();
+
         folderMapper.insert(folder);
         log.info("{} 创建了文件夹：{}", loginUser.getUsername(), folder.getName());
     }
@@ -62,10 +66,8 @@ public class FolderServiceImpl implements FolderService {
     @RequireSpaceRole
     public List<Folder> getSubFolder(@SpaceId Long spaceId, Long parentId, LoginUser loginUser) {
 
-        LambdaQueryWrapper<Folder> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(Folder::getSpaceId, spaceId)
-                .eq(Folder::getParentId, parentId);
-        return folderMapper.selectList(queryWrapper);
+        return lambdaQueryChain(folderMapper).eq(Folder::getSpaceId, spaceId)
+                .eq(Folder::getParentId, parentId).list();
     }
 
     @Override
@@ -76,6 +78,7 @@ public class FolderServiceImpl implements FolderService {
         Folder folder = getFolder(folderId, spaceId);
 
         SpaceMember member = SpaceContext.getSpaceMember();
+
         permissionHelper.checkOwnerOrCreator(member, folder.getCreatedBy(), loginUser.getUserId());
 
         log.info("重命名文件夹：{} 将 {} 重命名为 {}", loginUser.getUsername(), folder.getName(), dto.getNewName());
@@ -92,13 +95,15 @@ public class FolderServiceImpl implements FolderService {
         Folder folder = getFolder(folderId, spaceId);
 
         SpaceMember member = SpaceContext.getSpaceMember();
+
         permissionHelper.checkOwnerOrCreator(member, folder.getCreatedBy(), loginUser.getUserId());
 
         List<Long> allIds = collectAllSubFolderIds(spaceId, folderId);
+
         // 文档进入回收站，保留 MinIO 对象供恢复。
-        documentMapper.delete(new LambdaQueryWrapper<Document>()
+        lambdaUpdateChain(documentMapper)
                 .eq(Document::getSpaceId, spaceId)
-                .in(Document::getFolderId, allIds));
+                .in(Document::getFolderId, allIds).remove();
         folderMapper.deleteByIds(allIds);
 
         log.info("{} 删除了文件夹 {} 及其子文件夹", loginUser.getUsername(), folder.getName());
@@ -113,6 +118,7 @@ public class FolderServiceImpl implements FolderService {
         Folder folder = getFolder(folderId, spaceId);
 
         SpaceMember member = SpaceContext.getSpaceMember();
+
         permissionHelper.checkOwnerOrCreator(member, folder.getCreatedBy(), loginUser.getUserId());
 
         if (dto.getTargetParentId() != 0){
@@ -138,9 +144,11 @@ public class FolderServiceImpl implements FolderService {
     private void checkParentSpaceId(Long parentId, Long spaceId) {
 
         Folder parentFolder = folderMapper.selectById(parentId);
+
         if (parentFolder == null){
             throw new BusinessException("父目录不存在");
         }
+
         if (!parentFolder.getSpaceId().equals(spaceId)) {
             throw new BusinessException("父目录不属于当前空间");
         }
@@ -154,15 +162,18 @@ public class FolderServiceImpl implements FolderService {
 
         while (!queue.isEmpty()) {
             Long currentId = queue.poll();
+
             allIds.add(currentId);
-            List<Folder> children = folderMapper.selectList(
-                    new LambdaQueryWrapper<Folder>()
-                            .eq(Folder::getSpaceId, spaceId)
-                            .eq(Folder::getParentId, currentId));
+
+            List<Folder> children = lambdaQueryChain(folderMapper)
+                    .eq(Folder::getSpaceId, spaceId)
+                    .eq(Folder::getParentId, currentId).list();
+
             for (Folder subFolder : children) {
                 queue.offer(subFolder.getId());
             }
         }
+
         return allIds;
     }
 

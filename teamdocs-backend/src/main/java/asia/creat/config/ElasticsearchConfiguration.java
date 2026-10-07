@@ -19,6 +19,7 @@ public class ElasticsearchConfiguration {
     public ApplicationRunner rebuildChunkIndex(ChunkIndex index, ConfigurableApplicationContext context) {
         return args -> {
             int count = index.rebuild();
+
             log.info("Elasticsearch 全量重建完成，共 {} 个当前分块", count);
             context.close();
         };

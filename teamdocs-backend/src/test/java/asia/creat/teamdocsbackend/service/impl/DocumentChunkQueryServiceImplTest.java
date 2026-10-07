@@ -9,26 +9,27 @@ import asia.creat.mapper.DocumentContentMapper;
 import asia.creat.mapper.DocumentMapper;
 import asia.creat.mapper.SpaceMapper;
 import asia.creat.security.LoginUser;
-import asia.creat.service.impl.DocumentChunkQueryServiceImpl;
 import asia.creat.service.ChunkIndex;
-import asia.creat.vo.ChunkIndexHit;
+import asia.creat.service.impl.DocumentChunkQueryServiceImpl;
 import asia.creat.vo.ChunkCitationVO;
 import asia.creat.vo.ChunkHitVO;
+import asia.creat.vo.ChunkIndexHit;
 import asia.creat.vo.ChunkReadVO;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -56,7 +57,7 @@ class DocumentChunkQueryServiceImplTest {
         properties.setSearchLimit(6);
         properties.setReadLimit(20);
         properties.setMaxChars(8);
-        service = new DocumentChunkQueryServiceImpl(documentContentMapper, documentMapper, spaceMapper, properties, chunkIndex, java.util.Optional.empty());
+        service = new DocumentChunkQueryServiceImpl(documentContentMapper, documentMapper, spaceMapper, properties, chunkIndex, Optional.empty());
     }
 
     @Test
@@ -135,6 +136,7 @@ class DocumentChunkQueryServiceImplTest {
         Document foreign = readyDocument();
         foreign.setSpaceId(2L);
         when(documentMapper.selectById(11L)).thenReturn(foreign);
+
         assertThrows(BusinessException.class, () -> service.readChunks(1L, 11L, 0, 5, USER));
 
         verify(documentContentMapper, never()).readChunks(any(), any(), anyInt(), anyInt());
@@ -143,6 +145,7 @@ class DocumentChunkQueryServiceImplTest {
     @Test
     void readReportsMoreRowsAndClampsPageSize() {
         Document document = readyDocument();
+
         when(documentMapper.selectById(10L)).thenReturn(document);
         when(spaceMapper.selectById(1L)).thenReturn(new Space());
         when(documentContentMapper.readChunks(1L, 10L, 0, 21))
@@ -195,10 +198,11 @@ class DocumentChunkQueryServiceImplTest {
     @Test
     void elasticCandidatesAreVerifiedAndPartialIndexIsSupplementedWithoutDuplicates() {
         when(chunkIndex.enabled()).thenReturn(true);
-        when(chunkIndex.search(1L, "上线检查", 6)).thenReturn(List.of(
+        when(chunkIndex.searchCandidates(1L, null, "上线检查", 6)).thenReturn(List.of(
                 new ChunkIndexHit(99L, 10L, 3, "<mark>上线</mark>检查"),
                 new ChunkIndexHit(88L, 11L, 1, "foreign")));
         when(documentContentMapper.findReadableChunk(1L, 10L, 99L, 3)).thenReturn(hit("上线检查"));
+
         ChunkHitVO extra = hit("补充");
         extra.setChunkId(100L);
         when(documentContentMapper.searchChunks(1L, "\"上线检查\"", 6)).thenReturn(List.of(hit("上线检查"), extra));
@@ -214,8 +218,9 @@ class DocumentChunkQueryServiceImplTest {
     @Test
     void elasticFailureFallsBackToMysql() {
         when(chunkIndex.enabled()).thenReturn(true);
-        when(chunkIndex.search(1L, "上线检查", 6)).thenThrow(new IllegalStateException("offline"));
+        when(chunkIndex.searchCandidates(1L, null, "上线检查", 6)).thenThrow(new IllegalStateException("offline"));
         when(documentContentMapper.searchChunks(1L, "\"上线检查\"", 6)).thenReturn(List.of(hit("备份")));
+
         assertEquals("备份", service.searchChunks(1L, "上线检查", USER).get(0).getExcerpt());
     }
 
@@ -223,12 +228,26 @@ class DocumentChunkQueryServiceImplTest {
     void untrustedOrOutOfRangeHighlightNeverReplacesAuthoritativeText() {
         for (String highlight : List.of("<img src=x onerror=alert(1)>", "<mark>不在正文</mark>")) {
             when(chunkIndex.enabled()).thenReturn(true);
-            when(chunkIndex.search(1L, "上线检查", 6)).thenReturn(List.of(new ChunkIndexHit(99L, 10L, 3, highlight)));
+            when(chunkIndex.searchCandidates(1L, null, "上线检查", 6)).thenReturn(List.of(new ChunkIndexHit(99L, 10L, 3, highlight)));
             when(documentContentMapper.findReadableChunk(1L, 10L, 99L, 3)).thenReturn(hit("上线检查"));
+
             List<ChunkHitVO> hits = service.searchChunks(1L, "上线检查", USER);
+
             assertEquals("上线检查", hits.get(0).getExcerpt());
             assertEquals(null, hits.get(0).getHighlight());
         }
+    }
+
+    /** 限定文档时把过滤传到索引召回层，不能先全空间截断再过滤。 */
+    @Test
+    void scopedSearchPassesDocumentFilterIntoKeywordRecall() {
+        when(chunkIndex.enabled()).thenReturn(true);
+        when(chunkIndex.searchCandidates(1L, 10L, "上线检查", 6))
+                .thenReturn(List.of(new ChunkIndexHit(99L, 10L, 3, null)));
+        when(documentContentMapper.findReadableChunk(1L, 10L, 99L, 3)).thenReturn(hit("上线检查"));
+        assertEquals(1, service.searchChunksInDocument(1L, 10L, "上线检查", USER).size());
+        verify(chunkIndex, never()).search(anyLong(), anyString(), anyInt());
+        verify(documentContentMapper, never()).searchChunks(anyLong(), anyString(), anyInt());
     }
 
     private Document readyDocument() {
@@ -238,6 +257,7 @@ class DocumentChunkQueryServiceImplTest {
         document.setName("上线手册");
         document.setParseStatus(ParseStatus.READY);
         document.setParseVersion(3);
+
         return document;
     }
 
@@ -249,6 +269,7 @@ class DocumentChunkQueryServiceImplTest {
         hit.setParseVersion(3);
         hit.setDocumentName("上线手册");
         hit.setExcerpt(excerpt);
+
         return hit;
     }
 }

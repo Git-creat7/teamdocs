@@ -49,6 +49,7 @@ export function changePasswordApi(data) {
 export function updateAvatarApi(file) {
   const formData = new FormData()
   formData.append('file', file)
+
   return request.post('/user/avatar', formData)
 }
 

@@ -47,6 +47,7 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
         if (hybrid.isPresent() && hybrid.get().enabled()) {
             return fitExcerpts(hybrid.get().search(spaceId, null, keyword, loginUser, retrievalProperties.getSearchLimit()));
         }
+
         return search(spaceId, null, keyword);
     }
 
@@ -56,6 +57,7 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
         if (hybrid.isPresent() && hybrid.get().enabled()) {
             return fitExcerpts(hybrid.get().search(spaceId, documentId, keyword, loginUser, retrievalProperties.getSearchLimit()));
         }
+
         return search(spaceId, documentId, keyword);
     }
 
@@ -63,19 +65,24 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
         String query = matchQuery(keyword);
         int limit = Math.min(6, Math.max(1, retrievalProperties.getSearchLimit()));
         Map<Long, ChunkHitVO> hits = new LinkedHashMap<>();
+
         if (chunkIndex.enabled()) {
             try {
-                for (ChunkIndexHit candidate : chunkIndex.search(spaceId, query.replace("\"", ""), limit)) {
+                for (ChunkIndexHit candidate : chunkIndex.searchCandidates(spaceId, documentId, query.replace("\"", ""), limit)) {
                     if (documentId != null && !documentId.equals(candidate.getDocumentId())) continue;
+
                     if (candidate.getChunkId() == null || candidate.getDocumentId() == null || candidate.getParseVersion() == null) {
                         continue;
                     }
+
                     ChunkHitVO current = documentContentMapper.findReadableChunk(spaceId, candidate.getDocumentId(),
                             candidate.getChunkId(), candidate.getParseVersion());
+
                     if (current != null) {
                         current.setHighlight(candidate.getHighlight());
                         hits.putIfAbsent(current.getChunkId(), current);
                     }
+
                     if (hits.size() == limit) {
                         break;
                     }
@@ -84,17 +91,21 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
                 log.warn("Elasticsearch 召回失败，退回 MySQL: {}", e.getClass().getSimpleName());
             }
         }
+
         // 不止空结果才降级：部分分块尚未索引时，也从 MySQL 补足，且不返回重复块。
         if (hits.size() < limit) {
             List<ChunkHitVO> fallback = documentId == null ? documentContentMapper.searchChunks(spaceId, query, limit)
                     : documentContentMapper.searchChunksInDocument(spaceId, documentId, query, limit);
+
             for (ChunkHitVO row : fallback) {
                 hits.putIfAbsent(row.getChunkId(), row);
+
                 if (hits.size() == limit) {
                     break;
                 }
             }
         }
+
         return fitExcerpts(new ArrayList<>(hits.values()));
     }
 
@@ -102,18 +113,22 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
     @RequireSpaceRole
     public ChunkReadVO readChunks(@SpaceId Long spaceId, Long documentId, int startIndex, int limit, LoginUser loginUser) {
         Document document = documentMapper.selectById(documentId);
+
         if (document == null || !spaceId.equals(document.getSpaceId())) {
             throw new BusinessException("文件不存在");
         }
+
         ChunkReadVO page = ChunkReadVO.builder()
                 .parseStatus(document.getParseStatus())
                 .parseVersion(document.getParseVersion())
                 .documentName(document.getName())
                 .chunks(List.of())
                 .build();
+
         if (document.getParseStatus() != ParseStatus.READY) {
             return page;
         }
+
         if (spaceMapper.selectById(spaceId) == null) {
             throw new BusinessException("文件不存在");
         }
@@ -125,21 +140,28 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
         // 只返回完整分块，放不下的留到下一页；第一块就放不下时报错，不能截一段冒充读完
         int budget = maxChars();
         List<ChunkHitVO> chunks = new ArrayList<>();
+
         for (ChunkHitVO row : rows.subList(0, Math.min(rows.size(), pageSize))) {
             int size = row.getExcerpt() == null ? 0 : row.getExcerpt().length();
+
             if (size > budget) {
                 if (chunks.isEmpty()) {
                     throw new BusinessException("单个分块超过读取字数上限");
                 }
+
                 hasMore = true;
+
                 break;
             }
+
             budget -= size;
             chunks.add(row);
         }
+
         page.setAvailable(true);
         page.setHasMore(hasMore);
         page.setChunks(chunks);
+
         return page;
     }
 
@@ -149,13 +171,17 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
                                            Integer parseVersion, LoginUser loginUser) {
         ChunkHitVO hit = documentContentMapper.findReadableChunk(spaceId, documentId, chunkId, parseVersion);
         ChunkCitationVO citation = new ChunkCitationVO();
+
         if (hit == null) {
             citation.setAccessible(false);
             citation.setMessage(CITATION_MISS);
+
             return citation;
         }
+
         citation.setAccessible(true);
         citation.setChunk(shorten(hit, maxChars()));
+
         return citation;
     }
 
@@ -167,15 +193,19 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
         if (keyword == null || keyword.isBlank()) {
             throw new BusinessException("搜索关键字不能为空");
         }
+
         List<String> terms = new ArrayList<>();
+
         for (String term : keyword.replaceAll("[+\\-><()~*\"@]", " ").trim().split("\\s+")) {
             if (term.codePointCount(0, term.length()) >= 2) {
                 terms.add("\"" + term + "\"");
             }
         }
+
         if (terms.isEmpty()) {
             throw new BusinessException("搜索关键字至少需要两个连续字符");
         }
+
         return String.join(" ", terms);
     }
 
@@ -183,40 +213,53 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
     private List<ChunkHitVO> fitExcerpts(List<ChunkHitVO> rows) {
         int budget = maxChars();
         List<ChunkHitVO> hits = new ArrayList<>();
+
         for (ChunkHitVO row : rows) {
             if (budget <= 0) {
                 break;
             }
+
             ChunkHitVO hit = shorten(row, budget);
+
             if (hit.getExcerpt().isEmpty()) {
                 break;
             }
+
             budget -= hit.getExcerpt().length();
             hits.add(hit);
         }
+
         return hits;
     }
 
     // 截断时不拆开代理对，charEnd 改成实际截到的位置
     private ChunkHitVO shorten(ChunkHitVO row, int budget) {
         String text = row.getExcerpt() == null ? "" : row.getExcerpt();
+
         if (text.length() > budget) {
             int end = Character.isHighSurrogate(text.charAt(budget - 1)) ? budget - 1 : budget;
+
             text = text.substring(0, end);
+
             if (row.getCharStart() != null) {
                 row.setCharEnd(row.getCharStart() + end);
             }
         }
+
         row.setExcerpt(text);
+
         String highlight = row.getHighlight();
+
         if (highlight != null) {
             String escaped = highlight.replace("<mark>", "").replace("</mark>", "");
+
             // 高亮不是权威原文；仅允许 mark 标签，且必须对应实际返回范围中的正文。
             if (highlight.length() > 1024 || escaped.contains("<") || escaped.contains(">")
                     || !text.contains(HtmlUtils.htmlUnescape(escaped))) {
                 row.setHighlight(null);
             }
         }
+
         return row;
     }
 

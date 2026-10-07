@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="asia.creat.mapper.VectorIndexMapper">
+    <select id="snapshot" resultType="asia.creat.mapper.VectorIndexMapper$Snapshot">
+        SELECT d.id document_id, d.parse_version, IF(d.deleted=0 AND s.deleted=0 AND d.parse_status='READY',1,0) ready
+        FROM document d
+        LEFT JOIN space s ON s.id=d.space_id
+        WHERE d.id=#{documentId}
+    </select>
+
+    <select id="deletedDocumentIds" resultType="long">
+        SELECT t.document_id
+        FROM document_vector_task t
+        LEFT JOIN document d ON d.id=t.document_id
+        WHERE d.id IS NULL AND t.target_signature&lt;&gt;'deleted'
+        ORDER BY t.document_id LIMIT 100
+    </select>
+
+    <insert id="enqueue">
+        INSERT INTO document_vector_task(document_id,generation,target_signature,state,attempts,next_attempt_ms) VALUES(#{documentId},1,#{signature},'PENDING',0,0)
+        ON DUPLICATE KEY UPDATE generation=generation+IF(target_signature&lt;&gt;VALUES(target_signature),1,0),
+            state=IF(target_signature&lt;&gt;VALUES(target_signature),'PENDING',state),
+            attempts=IF(target_signature&lt;&gt;VALUES(target_signature),0,attempts),
+            next_attempt_ms=IF(target_signature&lt;&gt;VALUES(target_signature),0,next_attempt_ms),
+            error_code=IF(target_signature&lt;&gt;VALUES(target_signature),NULL,error_code),
+            target_signature=VALUES(target_signature)
+    </insert>
+
+</mapper>

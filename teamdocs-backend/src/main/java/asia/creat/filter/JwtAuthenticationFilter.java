@@ -35,6 +35,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
         String requestURI = request.getServletPath();
+
         return "/user/login".equals(requestURI)
                 || "/user/register".equals(requestURI)
                 || "/actuator/health".equals(requestURI);
@@ -47,8 +48,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String requestURI = request.getRequestURI();
 
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
+
         if (authHeader == null) {
             filterChain.doFilter(request, response);
+
             return;
         }
 
@@ -58,6 +61,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     response,
                     new BadCredentialsException("Invalid Authorization header")
             );
+
             return;
         }
 
@@ -66,17 +70,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             Claims claims = jwtUtils.parseToken(token);
             String tokenId = claims.getId();
+
             if (tokenId == null || tokenId.isBlank()) {
                 throw new IllegalArgumentException("JWT ID is missing");
             }
+
             if (tokenRevocationService.isRevoked(tokenId)) {
                 throw new BadCredentialsException("JWT has been revoked");
             }
+
             Long userId = claims.get("userId", Long.class);
             String username = claims.get("username", String.class);
+
             if (userId == null || username == null) {
                 throw new IllegalArgumentException("JWT claims are incomplete");
             }
+
             if (tokenRevocationService.isUserSessionInvalid(userId, claims.getIssuedAt())) {
                 throw new BadCredentialsException("JWT has been invalidated");
             }
@@ -85,6 +94,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             UsernamePasswordAuthenticationToken auth =
                     new UsernamePasswordAuthenticationToken(loginUser, null, Collections.emptyList());
+
             SecurityContextHolder.getContext().setAuthentication(auth);
             new RequestAttributeSecurityContextRepository().saveContext(SecurityContextHolder.getContext(), request, response);
         } catch (Exception e) {
@@ -95,6 +105,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     response,
                     new BadCredentialsException("Invalid JWT", e)
             );
+
             return;
         }
 

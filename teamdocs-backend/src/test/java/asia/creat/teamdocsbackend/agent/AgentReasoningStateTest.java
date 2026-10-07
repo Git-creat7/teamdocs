@@ -20,7 +20,9 @@ class AgentReasoningStateTest {
     void accumulatesCallsAndThrottlesSnapshotsWithoutDuplication() {
         Run run = new Run();
         AgentReasoningRegistry registry = mock(AgentReasoningRegistry.class);
+
         when(registry.publish(eq(run), any(), anyList())).thenReturn(true);
+
         AtomicLong clock = new AtomicLong();
         AgentReasoningState state = new AgentReasoningState(run, registry, List::of, () -> { }, clock::get);
         var first = state.beginCall();
@@ -31,9 +33,11 @@ class AgentReasoningStateTest {
         first.onReasoning("检查资料后确认", 300L, false);
         state.flush();
         verify(registry, times(2)).publish(eq(run), any(), anyList());
+
         var second = state.beginCall();
         second.onReasoning("继续核对", 40L, false);
         state.flush();
+
         assertEquals("检查资料后确认\n\n继续核对", state.snapshot().content());
         assertEquals(340L, state.snapshot().durationMs());
     }
@@ -43,7 +47,9 @@ class AgentReasoningStateTest {
     void pollingFlushPublishesTrailingReasoningWithoutNewModelChunks() {
         Run run = new Run();
         AgentReasoningRegistry registry = mock(AgentReasoningRegistry.class);
+
         when(registry.publish(eq(run), any(), anyList())).thenReturn(true);
+
         AtomicLong clock = new AtomicLong();
         AgentReasoningState state = new AgentReasoningState(run, registry, List::of, () -> { }, clock::get);
         var observer = state.beginCall();
@@ -60,10 +66,14 @@ class AgentReasoningStateTest {
     @Test
     void preservesUnknownDurationAndBoundsCombinedContent() {
         AgentReasoningRegistry registry = mock(AgentReasoningRegistry.class);
+
         when(registry.publish(any(), any(), anyList())).thenReturn(true);
+
         AgentReasoningState state = new AgentReasoningState(new Run(), registry, List::of, () -> { });
+
         state.beginCall().onReasoning("完整响应", null, false);
         state.beginCall().onReasoning("a".repeat(32767) + "😀", 10L, true);
+
         assertNull(state.snapshot().durationMs());
         assertTrue(state.snapshot().truncated());
         assertTrue(state.snapshot().content().length() <= 32768);
@@ -75,6 +85,7 @@ class AgentReasoningStateTest {
     void rejectedRuntimeUpdateStopsObservation() {
         AgentReasoningRegistry registry = mock(AgentReasoningRegistry.class);
         AgentReasoningState state = new AgentReasoningState(new Run(), registry, List::of, () -> { });
+
         assertThrows(AgentFailure.class, () -> state.beginCall().onReasoning("开始", 0L, false));
     }
 
@@ -83,8 +94,10 @@ class AgentReasoningStateTest {
     void absentReasoningDoesNotPublish() {
         AgentReasoningRegistry registry = mock(AgentReasoningRegistry.class);
         AgentReasoningState state = new AgentReasoningState(new Run(), registry, List::of, () -> { });
+
         state.beginCall().onReasoning("", null, false);
         state.flush();
+
         assertNull(state.snapshot().content());
         assertNull(state.snapshot().durationMs());
         verifyNoInteractions(registry);

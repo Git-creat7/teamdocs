@@ -1,5 +1,6 @@
 package asia.creat.config;
 
+import asia.creat.retrieval.RetrievalHttp;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -10,6 +11,10 @@ public class AgentProperties {
      * AI 功能开关，未配置时根据有效 Key 自动判断
      */
     private Boolean enabled;
+    /** 仅由服务端为用户自定义地址设置，系统内网依赖不受此限制。 */
+    private boolean publicEndpointOnly;
+    /** 管理员配置的可信 HTTP 出站代理，空值遵循 JVM 默认 ProxySelector。 */
+    private String proxyUrl;
 
     /**
      * OpenAI 协议兼容接口 Base URL
@@ -37,16 +42,14 @@ public class AgentProperties {
     private int maxModelCalls = 6;
     private int maxToolCalls = 8;
     private int runTimeoutSeconds = 90;
-    private int maxInputTokens = 16000;
-    private int maxOutputTokens = 1024;
-    /** 最多保留的近期完整问答轮数，实际数量还受输入预算限制。 */
-    private int historyTurns = 50;
-    /** 历史输入预算，沿用 AgentBudget 的保守 Token 估算口径。 */
-    private int historyMaxInputTokens = 100000;
+    /** 可用输入容量覆盖值；0 按已知模型窗口扣除生成空间及估算余量。 */
+    private int maxInputTokens = 0;
+    /** 非正数表示不主动指定输出 Token 上限；检测和记忆抽取可显式设置小预算。 */
+    private int maxOutputTokens = 0;
 
     /** 根据显式开关或有效 Key 判断是否启用问答。 */
     public boolean isEnabled() {
-        return enabled != null ? enabled : asia.creat.retrieval.RetrievalHttp.hasApiKey(apiKey);
+        return enabled != null ? enabled : RetrievalHttp.hasApiKey(apiKey);
     }
 
     /** 有效 Key 的配置意味着允许问答资料出站，显式关闭优先。 */

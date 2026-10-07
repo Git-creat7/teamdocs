@@ -21,6 +21,7 @@ const title = ref('')
 
 function onLoaded(meta) {
   title.value = meta?.name || ''
+
   if (meta?.name) document.title = `${meta.name} - 预览`
 }
 </script>
@@ -31,6 +32,7 @@ function onLoaded(meta) {
   flex-direction: column;
   height: 100vh;
 }
+
 .preview-page__bar {
   flex: 0 0 auto;
   height: 48px;
@@ -40,12 +42,14 @@ function onLoaded(meta) {
   border-bottom: 1px solid var(--el-border-color);
   background: var(--el-bg-color);
 }
+
 .preview-page__name {
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .preview-page__body {
   flex: 1 1 auto;
   min-height: 0;

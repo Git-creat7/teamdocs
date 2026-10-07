@@ -25,15 +25,25 @@ html, body {
  * 硬性约束：动画只动 transform 和 opacity。
  */
 :root {
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1); /* 入场、展开 */
-  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);  /* hover 等状态过渡 */
-  --dur-fast: 120ms; /* hover / 按下 */
-  --dur-mid: 240ms;  /* 弹层 */
-  --dur-slow: 320ms; /* 页面转场、区块入场 */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* 入场、展开 */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* hover 等状态过渡 */
+  --dur-fast: 120ms;
+
+  /* hover / 按下 */
+  --dur-mid: 240ms;
+
+  /* 弹层 */
+  --dur-slow: 320ms;
+
+  /* 页面转场、区块入场 */
 }
 
 /* ===== 全局浅色令牌 =====
- * 实体色 (标签色/文件类型徽章/角色徽章) 是数据语义色。
+ * 实体色 (文件类型徽章/角色徽章) 是数据语义色。
  */
 :root {
   color-scheme: light;
@@ -86,6 +96,7 @@ html, body {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: none;
@@ -103,24 +114,31 @@ html, body {
 .stagger-rows .el-table__row:nth-child(1),
 .stagger-rows .recent-row:nth-child(1),
 .stagger-rows .trash-row:nth-child(1) { animation-delay: 25ms; }
+
 .stagger-rows .el-table__row:nth-child(2),
 .stagger-rows .recent-row:nth-child(2),
 .stagger-rows .trash-row:nth-child(2) { animation-delay: 50ms; }
+
 .stagger-rows .el-table__row:nth-child(3),
 .stagger-rows .recent-row:nth-child(3),
 .stagger-rows .trash-row:nth-child(3) { animation-delay: 75ms; }
+
 .stagger-rows .el-table__row:nth-child(4),
 .stagger-rows .recent-row:nth-child(4),
 .stagger-rows .trash-row:nth-child(4) { animation-delay: 100ms; }
+
 .stagger-rows .el-table__row:nth-child(5),
 .stagger-rows .recent-row:nth-child(5),
 .stagger-rows .trash-row:nth-child(5) { animation-delay: 125ms; }
+
 .stagger-rows .el-table__row:nth-child(6),
 .stagger-rows .recent-row:nth-child(6),
 .stagger-rows .trash-row:nth-child(6) { animation-delay: 150ms; }
+
 .stagger-rows .el-table__row:nth-child(7),
 .stagger-rows .recent-row:nth-child(7),
 .stagger-rows .trash-row:nth-child(7) { animation-delay: 175ms; }
+
 .stagger-rows .el-table__row:nth-child(n+8),
 .stagger-rows .recent-row:nth-child(n+8),
 .stagger-rows .trash-row:nth-child(n+8) { animation-delay: 175ms; }
@@ -130,6 +148,7 @@ html, body {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: none;
@@ -168,6 +187,7 @@ html, body {
 
 @keyframes overlay-fade-in {
   from { opacity: 0; }
+
   to { opacity: 1; }
 }
 
@@ -176,6 +196,7 @@ html, body {
     opacity: 0;
     transform: scale(0.96) translateY(8px);
   }
+
   to {
     opacity: 1;
     transform: none;
@@ -202,6 +223,7 @@ html, body {
 
 @keyframes drawer-slide-in {
   from { transform: translateX(100%); }
+
   to { transform: none; }
 }
 

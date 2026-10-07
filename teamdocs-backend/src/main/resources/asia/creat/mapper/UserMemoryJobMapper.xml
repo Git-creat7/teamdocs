@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="asia.creat.mapper.UserMemoryJobMapper">
+    <select id="next" resultType="asia.creat.memory.UserMemoryData$Job">
+        SELECT j.* FROM user_memory_job j
+        JOIN agent_run r ON r.id=j.run_id AND r.user_id=j.user_id AND r.status='SUCCEEDED'
+        JOIN agent_message q ON q.run_id=r.id AND q.role='USER'
+        JOIN user_memory m ON m.user_id=j.user_id AND m.enabled=1 AND m.version=j.memory_version
+        JOIN user u ON u.id=j.user_id AND u.status=1
+        JOIN space s ON s.id=r.space_id AND s.deleted=0
+        JOIN space_member sm ON sm.space_id=r.space_id AND sm.user_id=j.user_id
+        WHERE j.attempts &lt; 3 AND ((j.status='PENDING' AND j.next_attempt_ms&lt;=#{now})
+            OR (j.status='RUNNING' AND j.lease_until_ms&lt;=#{now}))
+        ORDER BY j.run_id LIMIT 1
+    </select>
+
+    <select id="current" resultType="asia.creat.memory.UserMemoryData$Job">
+        SELECT j.*,q.body AS question FROM user_memory_job j
+        JOIN agent_run r ON r.id=j.run_id AND r.user_id=j.user_id AND r.status='SUCCEEDED'
+        JOIN agent_message q ON q.run_id=r.id AND q.role='USER'
+        JOIN user_memory m ON m.user_id=j.user_id AND m.enabled=1 AND m.version=j.memory_version
+        JOIN user u ON u.id=j.user_id AND u.status=1
+        JOIN space s ON s.id=r.space_id AND s.deleted=0
+        JOIN space_member sm ON sm.space_id=r.space_id AND sm.user_id=j.user_id
+        WHERE j.run_id=#{id} AND j.status='RUNNING' AND j.claim_token=#{token} AND j.lease_until_ms&gt;#{now}
+    </select>
+
+    <update id="discardObsolete">
+        UPDATE user_memory_job j LEFT JOIN agent_run r ON r.id=j.run_id
+        LEFT JOIN agent_message q ON q.run_id=j.run_id AND q.role='USER'
+        LEFT JOIN user_memory m ON m.user_id=j.user_id
+        LEFT JOIN user u ON u.id=j.user_id
+        LEFT JOIN space s ON s.id=r.space_id
+        LEFT JOIN space_member sm ON sm.space_id=r.space_id AND sm.user_id=j.user_id
+        SET j.status='DISCARDED',j.claim_token=NULL
+        WHERE j.status IN ('PENDING','RUNNING') AND (r.id IS NULL OR q.id IS NULL
+            OR r.status IN ('FAILED','CANCELLED','TIMED_OUT') OR m.user_id IS NULL OR m.enabled=0 OR m.version&lt;&gt;j.memory_version
+            OR u.id IS NULL OR u.status&lt;&gt;1 OR s.id IS NULL OR s.deleted&lt;&gt;0 OR sm.user_id IS NULL
+            OR (j.attempts&gt;=3 AND j.lease_until_ms&lt;=#{now}))
+    </update>
+
+</mapper>

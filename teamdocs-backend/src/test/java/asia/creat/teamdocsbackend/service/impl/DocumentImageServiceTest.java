@@ -38,9 +38,11 @@ class DocumentImageServiceTest {
     @BeforeEach
     void prepare() throws Exception {
         when(members.selectCount(any())).thenReturn(1L);
+
         ChunkHitVO chunk = new ChunkHitVO();
         chunk.setImageRef("original");
         when(chunks.findReadableChunk(1L, 10L, 100L, 0)).thenReturn(chunk);
+
         Document document = new Document();
         document.setSpaceId(1L);
         document.setName("display.png");
@@ -66,8 +68,10 @@ class DocumentImageServiceTest {
     void rejectsMissingMembershipAndStaleVersionsBeforeStorage() {
         assertThrows(BusinessException.class, () -> service.read(1L, 10L, 100L, 0, null));
         when(members.selectCount(any())).thenReturn(0L);
+
         assertThrows(BusinessException.class, () -> service.read(1L, 10L, 100L, 0, user));
         when(members.selectCount(any())).thenReturn(1L);
+
         assertThrows(BusinessException.class, () -> service.read(1L, 10L, 100L, 99, user));
         assertThrows(BusinessException.class, () -> service.read(2L, 10L, 100L, 0, user));
         verify(storage, never()).open(any(), any());
@@ -78,8 +82,10 @@ class DocumentImageServiceTest {
     void rejectsMembershipRevokedDuringRead() throws Exception {
         when(reader.read(any(), any(), any(), any())).thenAnswer(call -> {
             when(members.selectCount(any())).thenReturn(0L);
+
             return image;
         });
+
         assertThrows(BusinessException.class, () -> service.read(1L, 10L, 100L, 0, user));
     }
 
@@ -88,8 +94,10 @@ class DocumentImageServiceTest {
     void rejectsSourceChangedDuringRead() throws Exception {
         when(reader.read(any(), any(), any(), any())).thenAnswer(call -> {
             when(chunks.findReadableChunk(1L, 10L, 100L, 0)).thenReturn(null);
+
             return image;
         });
+
         assertThrows(BusinessException.class, () -> service.read(1L, 10L, 100L, 0, user));
     }
 
@@ -97,12 +105,16 @@ class DocumentImageServiceTest {
     @Test
     void releasesCapacityAfterReadFailure() throws Exception {
         when(reader.read(any(), any(), any(), any())).thenThrow(new IOException("private/secret-key"));
+
         for (int attempt = 0; attempt < 3; attempt++) {
             BusinessException error = assertThrows(BusinessException.class, () -> service.read(1L, 10L, 100L, 0, user));
+
             assertFalse(error.getMessage().contains("secret-key"));
             assertTrue(error.getMessage().contains("不可读取"));
         }
+
         doReturn(image).when(reader).read(any(), any(), any(), any());
+
         assertSame(image, service.read(1L, 10L, 100L, 0, user));
     }
 
@@ -111,19 +123,28 @@ class DocumentImageServiceTest {
     void boundsConcurrentPreviewDecoding() throws Exception {
         CountDownLatch entered = new CountDownLatch(2);
         CountDownLatch release = new CountDownLatch(1);
+
         when(reader.read(any(), any(), any(), any())).thenAnswer(call -> {
             entered.countDown();
+
             assertTrue(release.await(5, TimeUnit.SECONDS));
+
             return image;
         });
+
         var executor = Executors.newFixedThreadPool(2);
+
         try {
             var first = executor.submit(() -> service.read(1L, 10L, 100L, 0, user));
             var second = executor.submit(() -> service.read(1L, 10L, 100L, 0, user));
+
             assertTrue(entered.await(3, TimeUnit.SECONDS));
+
             BusinessException error = assertThrows(BusinessException.class, () -> service.read(1L, 10L, 100L, 0, user));
+
             assertTrue(error.getMessage().contains("繁忙"));
             release.countDown();
+
             assertSame(image, first.get(3, TimeUnit.SECONDS));
             assertSame(image, second.get(3, TimeUnit.SECONDS));
         } finally {

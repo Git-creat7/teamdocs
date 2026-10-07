@@ -80,10 +80,15 @@ const OFFICE_EXT = [
 function resolveCategory(m) {
   const mime = String(m.fileType || '').toLowerCase()
   const ext = String(m.name || '').split('.').pop().toLowerCase()
+
   if (mime.startsWith('image/') || IMAGE_EXT.includes(ext)) return 'image'
+
   if (mime === 'application/pdf' || PDF_EXT.includes(ext)) return 'pdf'
+
   if (mime.startsWith('text/') || TEXT_EXT.includes(ext)) return 'text'
+
   if (OFFICE_EXT.includes(ext) || mime.includes('officedocument') || mime.includes('ms-')) return 'office'
+
   return 'unsupported'
 }
 
@@ -97,6 +102,7 @@ const viewerOptions = computed(() => ({
     theme: false,
     beforeDownload: async () => {
       await download()
+
       return false
     }
   },
@@ -109,8 +115,10 @@ const viewerOptions = computed(() => ({
 async function load() {
   state.value = 'loading'
   meta.value = null
+
   try {
     const data = await previewDocumentApi(props.spaceId, props.documentId)
+
     meta.value = data
     emit('loaded', data)
     state.value = resolveCategory(data) === 'unsupported' ? 'unsupported' : 'ready'
@@ -127,11 +135,16 @@ function onLoadComplete(payload) {
 
 async function download() {
   if (downloading.value) return
+
   downloading.value = true
+
   try {
     const url = await downloadDocumentApi(props.spaceId, props.documentId)
+
     if (!url) return
+
     const a = document.createElement('a')
+
     a.href = url
     a.target = '_blank'
     a.rel = 'noopener noreferrer'
@@ -148,6 +161,7 @@ async function download() {
 // 捕获 file-viewer 子树的渲染异常，避免白屏
 onErrorCaptured(() => {
   if (state.value === 'ready') state.value = 'renderError'
+
   return false
 })
 
@@ -161,11 +175,13 @@ watch(() => [props.spaceId, props.documentId], load, { immediate: true })
   height: 100%;
   min-height: 0;
 }
+
 .doc-preview__viewer {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
 }
+
 .doc-preview__status {
   flex: 1 1 auto;
   display: flex;
@@ -176,13 +192,16 @@ watch(() => [props.spaceId, props.documentId], load, { immediate: true })
   padding: 32px;
   color: var(--el-text-color-regular);
 }
+
 .doc-preview__meta {
   text-align: center;
 }
+
 .doc-preview__meta-name {
   font-weight: 600;
   word-break: break-all;
 }
+
 .doc-preview__meta-sub {
   margin-top: 4px;
   font-size: 12px;

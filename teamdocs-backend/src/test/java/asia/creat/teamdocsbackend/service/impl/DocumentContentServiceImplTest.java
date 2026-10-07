@@ -9,7 +9,9 @@ import asia.creat.mapper.DocumentMapper;
 import asia.creat.mapper.SpaceMapper;
 import asia.creat.service.impl.DocumentContentServiceImpl;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.conditions.AbstractWrapper;
+import org.mockito.ArgumentCaptor;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -49,6 +51,7 @@ class DocumentContentServiceImplTest {
     @BeforeAll
     static void initializeTableMetadata() {
         MybatisConfiguration configuration = new MybatisConfiguration();
+
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, ""), DocumentContent.class);
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, ""), Document.class);
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, ""), Space.class);
@@ -77,7 +80,7 @@ class DocumentContentServiceImplTest {
 
         service.saveChunks(100L, 1L, List.of(chunk1, chunk2));
 
-        verify(documentContentMapper).delete(any(LambdaQueryWrapper.class));
+        verifyDeletesOnlyDocument(100L);
         verify(documentContentMapper).insert(chunk1);
         verify(documentContentMapper).insert(chunk2);
 
@@ -102,6 +105,7 @@ class DocumentContentServiceImplTest {
     @Test
     void publishShouldRejectStaleVersionWithoutReplacingChunks() {
         Document locked = parsingDocument(2);
+
         when(documentMapper.lockById(100L)).thenReturn(locked);
 
         boolean published = service.publishIfParsing(100L, 1L, 1, List.of(chunk("正文")));
@@ -116,13 +120,15 @@ class DocumentContentServiceImplTest {
         when(documentMapper.lockById(100L)).thenReturn(parsingDocument(3));
         when(spaceMapper.selectById(1L)).thenReturn(new Space());
         when(documentMapper.update(isNull(), any())).thenReturn(1);
+
         DocumentContent chunk = chunk("正文");
 
         boolean published = service.publishIfParsing(100L, 1L, 3, List.of(chunk));
 
         assertTrue(published);
-        verify(documentContentMapper).delete(any(LambdaQueryWrapper.class));
+        verifyDeletesOnlyDocument(100L);
         verify(documentContentMapper).insert(chunk);
+
         assertEquals(100L, chunk.getDocumentId());
         assertEquals(1L, chunk.getSpaceId());
     }
@@ -161,7 +167,20 @@ class DocumentContentServiceImplTest {
     @Test
     void purgeByDocumentIdShouldDeleteChunks() {
         service.purgeByDocumentId(100L);
-        verify(documentContentMapper).delete(any(LambdaQueryWrapper.class));
+        verifyDeletesOnlyDocument(100L);
+    }
+
+    /** 删除方式可调整，但条件必须始终限定当前文档。 */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void verifyDeletesOnlyDocument(Long documentId) {
+        ArgumentCaptor<Wrapper<DocumentContent>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(documentContentMapper).delete(captor.capture());
+        Wrapper<DocumentContent> wrapper = captor.getValue();
+
+        assertTrue(wrapper.getSqlSegment().contains("document_id ="));
+        var parameters = ((AbstractWrapper<?, ?, ?>) wrapper).getParamNameValuePairs();
+        assertEquals(1, parameters.size());
+        assertTrue(parameters.containsValue(documentId));
     }
 
     private Document parsingDocument(int version) {
@@ -171,6 +190,7 @@ class DocumentContentServiceImplTest {
         document.setDeleted(0);
         document.setParseStatus(ParseStatus.PARSING);
         document.setParseVersion(version);
+
         return document;
     }
 
@@ -178,6 +198,7 @@ class DocumentContentServiceImplTest {
         DocumentContent chunk = new DocumentContent();
         chunk.setChunkIndex(0);
         chunk.setContent(content);
+
         return chunk;
     }
 }

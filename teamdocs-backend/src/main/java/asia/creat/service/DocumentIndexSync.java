@@ -28,9 +28,11 @@ public class DocumentIndexSync {
                 log.warn("文档 {} 向量待办登记失败，后续补扫恢复: {}", documentId, e.getClass().getSimpleName());
             }
         });
+
         if (!index.enabled()) {
             return;
         }
+
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override

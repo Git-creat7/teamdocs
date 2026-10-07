@@ -24,7 +24,9 @@ export function useDocumentNavigation() {
         name: 'DocumentPreview',
         params: { spaceId, documentId }
       }).href
+
       window.open(href, '_blank', 'noopener,noreferrer')
+
       return
     }
 

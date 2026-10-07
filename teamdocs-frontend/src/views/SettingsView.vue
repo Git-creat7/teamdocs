@@ -168,6 +168,14 @@
             </div>
           </section>
 
+          <section v-else-if="activeSection === 'ai'" class="settings-section">
+            <AiSettings :key="userInfo?.userId" />
+          </section>
+
+          <section v-else-if="activeSection === 'memory'" class="settings-section">
+            <UserMemorySettings :key="userInfo?.userId" />
+          </section>
+
           <section v-else class="settings-section">
             <div class="section-head">
               <h2>安全设置</h2>
@@ -222,12 +230,15 @@ import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { ElMessage } from 'element-plus'
 import {
+  Brain,
   PanelLeft,
   RotateCcw,
   ShieldCheck,
   SlidersHorizontal,
   UserRound
 } from 'lucide-vue-next'
+import AiSettings from '@/components/AiSettings.vue'
+import UserMemorySettings from '@/components/UserMemorySettings.vue'
 import { changePasswordApi, updateAvatarApi, updateProfileApi } from '@/api/user'
 import { resetAllStores, usePreferencesStore, useUserStore } from '@/stores'
 import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from '@/stores/preferences'
@@ -250,6 +261,8 @@ const sections = [
   { key: 'profile', label: '个人资料', icon: UserRound },
   { key: 'layout', label: '外观与布局', icon: PanelLeft },
   { key: 'documents', label: '搜索与文档', icon: SlidersHorizontal },
+  { key: 'ai', label: 'AI 服务', icon: SlidersHorizontal },
+  { key: 'memory', label: '用户记忆', icon: Brain },
   { key: 'security', label: '安全设置', icon: ShieldCheck }
 ]
 const sectionKeys = sections.map((item) => item.key)
@@ -277,10 +290,12 @@ const passwordRules = {
 const displayName = computed(() =>
   userInfo.value?.nickname || userInfo.value?.username || '团队成员'
 )
+
 const avatarFallback = computed(() => displayName.value.charAt(0).toUpperCase() || 'U')
 
 watch(userInfo, (value) => {
   if (!value) return
+
   profileForm.nickname = value.nickname || ''
   profileForm.email = value.email || ''
 }, { immediate: true })
@@ -300,11 +315,13 @@ function selectSection(section) {
 
 async function handleSaveProfile() {
   savingProfile.value = true
+
   try {
     const data = await updateProfileApi({
       nickname: profileForm.nickname,
       email: profileForm.email
     })
+
     userStore.setUser(data)
     ElMessage.success('资料已更新')
   } catch (err) {
@@ -316,22 +333,30 @@ async function handleSaveProfile() {
 
 async function handleAvatarSelected(event) {
   const file = event.target.files?.[0]
+
   if (event.target) event.target.value = ''
+
   if (!file) return
 
   const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+
   if (!allowed.includes(file.type)) {
     ElMessage.error('头像仅支持 JPG、PNG、GIF、WEBP')
+
     return
   }
+
   if (file.size > 2 * 1024 * 1024) {
     ElMessage.error('头像大小不能超过 2MB')
+
     return
   }
 
   avatarUploading.value = true
+
   try {
     const data = await updateAvatarApi(file)
+
     userStore.setUser(data)
     ElMessage.success('头像已更新')
   } catch (err) {
@@ -343,6 +368,7 @@ async function handleAvatarSelected(event) {
 
 async function handleChangePassword() {
   if (!passwordFormRef.value) return
+
   try {
     await passwordFormRef.value.validate()
   } catch (err) {
@@ -350,6 +376,7 @@ async function handleChangePassword() {
   }
 
   savingPassword.value = true
+
   try {
     await changePasswordApi(passwordForm)
     ElMessage.success('密码修改成功，请重新登录')

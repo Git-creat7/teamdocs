@@ -70,15 +70,13 @@ management:
 # Agent
 teamdocs:
   agent:
+    proxy-url: ${AGENT_PROXY_URL:}
     base-url: ${AGENT_BASE_URL:}
     api-key: ${AGENT_API_KEY:}
     model-name: ${AGENT_MODEL_NAME:}
     timeout-seconds: ${AGENT_TIMEOUT_SECONDS:60}
     streaming: ${AGENT_STREAMING:true}
-    history-turns: ${AGENT_HISTORY_TURNS:50}
-    history-max-input-tokens: ${AGENT_HISTORY_MAX_INPUT_TOKENS:100000}
-    max-input-tokens: 500000
-    max-output-tokens: 4096
+    max-input-tokens: ${AGENT_MAX_INPUT_TOKENS:0}
     # MCP: 联网搜索与外部工具扩展
     mcp:
       servers:

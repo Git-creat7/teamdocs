@@ -17,6 +17,7 @@ import java.util.List;
 @ConditionalOnProperty(prefix = "teamdocs.milvus", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class VectorIndexWorker {
     private static final long TASK_TIMEOUT_MS = 120_000;
+
     private final VectorIndexMapper mapper;
     private final DocumentContentMapper chunks;
     private final VectorIndexQueue queue;
@@ -32,15 +33,19 @@ public class VectorIndexWorker {
         if (!embeddings.enabled() || !vectors.enabled()) {
             return;
         }
+
         try {
             List<Long> ids = mapper.documentIds(afterId);
+
             for (Long id : ids) {
                 queue.enqueue(id);
                 afterId = id;
             }
+
             if (ids.isEmpty()) {
                 afterId = 0;
             }
+
             for (Long id : mapper.deletedDocumentIds()) {
                 queue.enqueue(id);
             }
@@ -57,15 +62,21 @@ public class VectorIndexWorker {
         if (!embeddings.enabled() || !vectors.enabled()) {
             return;
         }
+
         VectorIndexMapper.Task task = null;
+
         try {
             long now = System.currentTimeMillis();
+
             mapper.expireAttempts(now);
             task = mapper.next(now);
-            if (task == null || mapper.reserve(task.getDocumentId(), task.getGeneration(), now, now + TASK_TIMEOUT_MS) != 1) {
+
+            if (task == null || !mapper.reserve(task.getDocumentId(), task.getGeneration(), now, now + TASK_TIMEOUT_MS)) {
                 return;
             }
+
             VectorIndexMapper.Task currentTask = task;
+
             try (RetrievalContext ignored = RetrievalContext.open(now + TASK_TIMEOUT_MS,
                     () -> verifyCurrent(currentTask), hit -> { })) {
                 sync(task);
@@ -80,6 +91,7 @@ public class VectorIndexWorker {
                     log.warn("向量同步失败状态未能保存");
                 }
             }
+
             log.warn("向量同步未完成: {}", e.getClass().getSimpleName());
         }
     }
@@ -90,13 +102,17 @@ public class VectorIndexWorker {
      */
     private void sync(VectorIndexMapper.Task task) {
         List<ChunkHitVO> rows = chunks.listIndexableDocumentChunks(task.getDocumentId());
+
         vectors.ensureCollection();
         verifyCurrent(task);
         vectors.deleteDocument(task.getDocumentId());
+
         for (int start = 0; start < rows.size(); start += 16) {
             verifyCurrent(task);
+
             List<ChunkHitVO> batch = rows.subList(start, Math.min(rows.size(), start + 16));
             List<List<Float>> encoded = embeddings.embed(batch.stream().map(ChunkHitVO::getExcerpt).toList());
+
             verifyCurrent(task);
             vectors.upsert(batch, encoded);
         }
@@ -108,13 +124,17 @@ public class VectorIndexWorker {
      */
     private void verifyCurrent(VectorIndexMapper.Task task) {
         VectorIndexMapper.Task current = mapper.task(task.getDocumentId());
+
         if (current == null || current.getGeneration() != task.getGeneration()
                 || !"PENDING".equals(current.getState())) {
             throw new IllegalStateException("向量同步任务已被替换");
         }
+
         String signature = queue.signature(mapper.snapshot(task.getDocumentId()));
+
         if (!signature.equals(task.getTargetSignature())) {
             queue.enqueue(task.getDocumentId());
+
             throw new IllegalStateException("文档状态已变化");
         }
     }

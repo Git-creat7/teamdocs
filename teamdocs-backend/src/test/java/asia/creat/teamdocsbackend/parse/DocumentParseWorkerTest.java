@@ -42,6 +42,7 @@ class DocumentParseWorkerTest {
     void scanClaimsInsideExecutor() {
         ParseProperties properties = new ParseProperties();
         properties.setBatchSize(5);
+
         DocumentParseWorker worker = new DocumentParseWorker(
                 documentMapper,
                 documentParseService,
@@ -51,6 +52,7 @@ class DocumentParseWorkerTest {
         Page<Document> page = new Page<>();
         Document first = new Document();
         first.setId(9L);
+
         Document second = new Document();
         second.setId(10L);
         page.setRecords(List.of(first, second));
@@ -66,16 +68,20 @@ class DocumentParseWorkerTest {
     void timeoutDoesNotBumpParseVersion() {
         ParseProperties properties = new ParseProperties();
         properties.setTimeoutSeconds(120);
+
         DocumentParseWorker worker = new DocumentParseWorker(
                 documentMapper,
                 documentParseService,
                 properties,
                 Runnable::run
         );
+
         when(documentMapper.update(isNull(), any())).thenReturn(1);
+
         Document timedOut = new Document();
         timedOut.setId(9L);
         timedOut.setParseVersion(3);
+
         Page<Document> page = new Page<>();
         page.setRecords(List.of(timedOut));
         when(documentMapper.selectPage(any(), any())).thenReturn(page);
@@ -84,7 +90,9 @@ class DocumentParseWorkerTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<LambdaUpdateWrapper<Document>> wrapper = ArgumentCaptor.forClass(LambdaUpdateWrapper.class);
+
         verify(documentMapper).update(isNull(), wrapper.capture());
+
         assertFalse(wrapper.getValue().getSqlSet().contains("parse_version"));
     }
 }

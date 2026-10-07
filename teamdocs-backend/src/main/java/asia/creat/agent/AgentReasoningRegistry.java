@@ -3,7 +3,6 @@ package asia.creat.agent;
 import asia.creat.agent.AgentData.Dependency;
 import asia.creat.agent.AgentData.ReasoningProgress;
 import asia.creat.agent.AgentData.Run;
-import asia.creat.mapper.AgentMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -19,7 +18,8 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class AgentReasoningRegistry {
     private static final int MAX_RUNS = 32;
-    private final AgentMapper mapper;
+
+    private final AgentRepository mapper;
     private final AgentEventHub events;
     private final Map<Long, Entry> entries = new LinkedHashMap<>(16, 0.75f, true);
 
@@ -37,18 +37,25 @@ public class AgentReasoningRegistry {
     public boolean publish(Run run, ReasoningProgress progress, List<Dependency> dependencies) {
         Run current = mapper.lockRun(run.getId());
         long now = System.currentTimeMillis();
+
         if (current == null || !"RUNNING".equals(current.getStatus()) || current.getDeadlineMs() <= now
                 || !Objects.equals(current.getUserId(), run.getUserId())
                 || !Objects.equals(current.getSpaceId(), run.getSpaceId())) return false;
+
         if (progress.content() == null || progress.content().isBlank()) return true;
+
         if (progress.content().length() > 32768) throw new AgentFailure("REASONING_LIMIT");
+
         synchronized (entries) {
             entries.entrySet().removeIf(entry -> entry.getValue().expiresAt() <= now);
             entries.put(run.getId(), new Entry(run.getUserId(), run.getSpaceId(), run.getSessionId(), progress,
                     List.copyOf(dependencies), run.getDeadlineMs() + 60_000));
+
             while (entries.size() > MAX_RUNS) entries.remove(entries.keySet().iterator().next());
         }
+
         events.afterCommit(run.getId(), "reasoning_updated");
+
         return true;
     }
 
@@ -56,11 +63,15 @@ public class AgentReasoningRegistry {
     public Entry get(Run run) {
         synchronized (entries) {
             Entry entry = entries.get(run.getId());
+
             if (entry == null) return null;
+
             if (entry.expiresAt() <= System.currentTimeMillis()) {
                 entries.remove(run.getId());
+
                 return null;
             }
+
             return Objects.equals(entry.userId(), run.getUserId())
                     && Objects.equals(entry.spaceId(), run.getSpaceId())
                     && Objects.equals(entry.sessionId(), run.getSessionId()) ? entry : null;

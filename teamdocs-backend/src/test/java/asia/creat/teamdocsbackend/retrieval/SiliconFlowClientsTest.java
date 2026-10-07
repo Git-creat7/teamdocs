@@ -79,20 +79,25 @@ class SiliconFlowClientsTest {
     @AfterEach
     void stopServer() {
         responseGate.countDown();
+
         if (server != null) server.stop(0);
+
         if (executor != null) executor.shutdownNow();
     }
 
     @Test
     void defaultsRequireExplicitEnablementAndEgressConsent() {
         EmbeddingProperties defaults = new EmbeddingProperties();
+
         assertEquals(1024, defaults.getDimensions());
         assertEquals("", defaults.getModelName());
         assertEquals("", defaults.getBaseUrl());
         assertFalse(defaults.isEnabled());
         assertFalse(defaults.isAllowDocumentEgress());
         assertFalse(new SiliconFlowEmbeddingClient(defaults, http).enabled());
+
         RerankProperties rerankDefaults = new RerankProperties();
+
         assertEquals("", rerankDefaults.getModelName());
         assertEquals("", rerankDefaults.getBaseUrl());
         assertFalse(rerankDefaults.isEnabled());
@@ -103,7 +108,9 @@ class SiliconFlowClientsTest {
     @Test
     void embeddingPostsExpectedContractAndReordersByIndex() throws IOException {
         response = embeddings(item(1, vector(2)), item(0, vector(1)));
+
         List<List<Float>> result = embedding.embed(List.of("上线前备份", "回滚操作"));
+
         assertEquals(1.0f, result.get(0).get(0).floatValue());
         assertEquals(2.0f, result.get(1).get(0).floatValue());
         assertEquals(64, result.get(0).size());
@@ -125,10 +132,13 @@ class SiliconFlowClientsTest {
                 embeddings(item(0, vector(1)), Map.of("embedding", vector(2))),
                 embeddings(item(0, vector(1)), Map.of("index", "1", "embedding", vector(2))),
                 embeddings(item(0, vector(1)), Map.of("index", Long.MAX_VALUE, "embedding", vector(2))));
+
         for (String invalidResponse : invalid) {
             response = invalidResponse;
+
             assertThrows(RetrievalException.class, () -> embedding.embed(List.of("甲", "乙")));
         }
+
         assertEquals(invalid.size(), requests.get());
     }
 
@@ -136,12 +146,16 @@ class SiliconFlowClientsTest {
     void embeddingRejectsWrongDimensionsNonFiniteValuesAndZeroVectors() throws IOException {
         List<Object> overflow = new ArrayList<>(Collections.nCopies(64, 0));
         overflow.set(0, 1e100);
+
         List<Object> notNumeric = new ArrayList<>(Collections.nCopies(64, 0));
         notNumeric.set(0, "NaN");
+
         for (List<?> values : List.of(List.of(1.0), overflow, notNumeric, vector(0))) {
             response = embeddings(item(0, values));
+
             assertThrows(RetrievalException.class, () -> embedding.embed(List.of("合成资料")));
         }
+
         assertEquals(4, requests.get());
     }
 
@@ -153,10 +167,14 @@ class SiliconFlowClientsTest {
         assertThrows(RetrievalException.class, () -> embedding.embed(Arrays.asList("文本", null)));
         assertThrows(RetrievalException.class, () -> embedding.embed(List.of(" ")));
         assertThrows(RetrievalException.class, () -> embedding.embed(List.of("字".repeat(16001))));
+
         embeddingProperties.setDimensions(33);
+
         assertThrows(RetrievalException.class, () -> embedding.embed(List.of("文本")));
+
         embeddingProperties.setDimensions(64);
         embeddingProperties.setModelName("");
+
         assertThrows(RetrievalException.class, () -> embedding.embed(List.of("文本")));
         assertEquals(0, requests.get());
     }
@@ -164,18 +182,25 @@ class SiliconFlowClientsTest {
     @Test
     void embeddingNeverCallsWithoutConsentOrWithPlaceholderKeys() {
         embeddingProperties.setEnabled(false);
+
         assertFalse(embedding.enabled());
         assertThrows(RetrievalException.class, () -> embedding.embed(List.of("文本")));
+
         embeddingProperties.setEnabled(true);
         embeddingProperties.setAllowDocumentEgress(false);
+
         assertFalse(embedding.enabled());
         assertThrows(RetrievalException.class, () -> embedding.embed(List.of("文本")));
+
         embeddingProperties.setAllowDocumentEgress(true);
+
         for (String key : Arrays.asList(null, "", " ", "YOUR_API_KEY", "replace-me", "placeholder", "占位", "填写密钥", "请填写API Key")) {
             embeddingProperties.setApiKey(key);
+
             assertFalse(embedding.enabled());
             assertThrows(RetrievalException.class, () -> embedding.embed(List.of("文本")));
         }
+
         assertEquals(0, requests.get());
     }
 
@@ -186,6 +211,7 @@ class SiliconFlowClientsTest {
                   {"index":1,"relevance_score":0.9,"document":{"text":"远端替换正文"}},
                   {"index":0,"relevance_score":0.5}]}
                 """;
+
         assertEquals(List.of(1, 0), reranker.rerank("如何回滚", List.of("备份", "回滚", "发布"), 2));
         assertEquals("/v1/rerank", receivedPath);
         assertEquals("Bearer test-key", authorization);
@@ -209,10 +235,13 @@ class SiliconFlowClientsTest {
                 "{\"results\":[{\"index\":0,\"relevance_score\":0.9},{\"index\":1}]}",
                 "{\"results\":[{\"index\":0,\"relevance_score\":0.9},{\"index\":1,\"relevance_score\":\"NaN\"}]}",
                 "{\"results\":[{\"index\":0,\"relevance_score\":0.9},{\"index\":1,\"relevance_score\":1e999}]}");
+
         for (String invalidResponse : invalid) {
             response = invalidResponse;
+
             assertThrows(RetrievalException.class, () -> reranker.rerank("问题", List.of("甲", "乙"), 2));
         }
+
         assertEquals(invalid.size(), requests.get());
     }
 
@@ -228,7 +257,9 @@ class SiliconFlowClientsTest {
         assertThrows(RetrievalException.class, () -> reranker.rerank("问题", List.of("字".repeat(2001)), 1));
         assertThrows(RetrievalException.class, () -> reranker.rerank("问题", List.of("文本"), 0));
         assertThrows(RetrievalException.class, () -> reranker.rerank("问题", List.of("文本"), 2));
+
         rerankProperties.setModelName("");
+
         assertThrows(RetrievalException.class, () -> reranker.rerank("问题", List.of("文本"), 1));
         assertEquals(0, requests.get());
     }
@@ -236,14 +267,19 @@ class SiliconFlowClientsTest {
     @Test
     void rerankerNeverCallsWithoutConsentOrValidKey() {
         rerankProperties.setEnabled(false);
+
         assertFalse(reranker.enabled());
         assertThrows(RetrievalException.class, () -> reranker.rerank("问题", List.of("文本"), 1));
+
         rerankProperties.setEnabled(true);
         rerankProperties.setAllowDocumentEgress(false);
+
         assertFalse(reranker.enabled());
         assertThrows(RetrievalException.class, () -> reranker.rerank("问题", List.of("文本"), 1));
+
         rerankProperties.setAllowDocumentEgress(true);
         rerankProperties.setApiKey("YOUR_API_KEY");
+
         assertFalse(reranker.enabled());
         assertThrows(RetrievalException.class, () -> reranker.rerank("问题", List.of("文本"), 1));
         assertEquals(0, requests.get());
@@ -252,11 +288,14 @@ class SiliconFlowClientsTest {
     @Test
     void httpErrorsDoNotRetryOrExposeResponseBodies() {
         response = "test-key 私有正文及供应商内部信息";
+
         for (int code : List.of(401, 429, 503)) {
             status = code;
+
             int before = requests.get();
             RetrievalException error = assertThrows(RetrievalException.class,
                     () -> embedding.embed(List.of("合成资料")));
+
             assertTrue(error.getMessage().contains(Integer.toString(code)));
             assertFalse(error.getMessage().contains("test-key"));
             assertFalse(error.getMessage().contains("私有正文"));
@@ -269,6 +308,7 @@ class SiliconFlowClientsTest {
     void totalCallTimeoutIsBoundedAndNotRetried() {
         embeddingProperties.setTimeoutSeconds(1);
         responseGate = new CountDownLatch(1);
+
         assertTimeoutPreemptively(Duration.ofSeconds(4), () ->
                 assertThrows(RetrievalException.class, () -> embedding.embed(List.of("合成资料"))));
         assertEquals(1, requests.get());
@@ -277,6 +317,7 @@ class SiliconFlowClientsTest {
     @Test
     void redirectsAreRejectedWithoutForwardingCredentials() {
         status = 307;
+
         assertThrows(RetrievalException.class, () -> embedding.embed(List.of("合成资料")));
         assertEquals(1, requests.get());
         assertEquals("/v1/embeddings", receivedPath);
@@ -286,6 +327,7 @@ class SiliconFlowClientsTest {
     void chunkedResponseCannotBypassSizeLimit() {
         chunked = true;
         response = "{\"padding\":\"" + "x".repeat(4 * 1024 * 1024) + "\"}";
+
         assertThrows(RetrievalException.class, () -> embedding.embed(List.of("合成资料")));
         assertEquals(1, requests.get());
     }
@@ -294,15 +336,19 @@ class SiliconFlowClientsTest {
     void httpRejectsDuplicateKeysTrailingJsonAndNonObjectBodies() {
         for (String invalid : List.of("{\"data\":[],\"data\":[]}", "{} {}", "[]", "")) {
             response = invalid;
+
             assertThrows(RetrievalException.class, () -> http.post(baseUrl(), "/test", "", Map.of(), 3));
         }
+
         assertEquals(4, requests.get());
     }
 
     @Test
     void sharedTransportSupportsTokenlessMilvusRequests() {
         response = "{\"code\":0,\"data\":{}}";
+
         JsonNode result = http.post(baseUrl(), "/vectordb/test", "", Map.of("collectionName", "test"), 3);
+
         assertEquals(0, result.get("code").intValue());
         assertNull(authorization);
         assertEquals("test", received.get("collectionName").asText());
@@ -332,6 +378,7 @@ class SiliconFlowClientsTest {
     private List<Float> vector(float first) {
         List<Float> vector = new ArrayList<>(Collections.nCopies(embeddingProperties.getDimensions(), 0.0f));
         vector.set(0, first);
+
         return vector;
     }
 
@@ -364,12 +411,17 @@ class SiliconFlowClientsTest {
             receivedPath = exchange.getRequestURI().getPath();
             authorization = exchange.getRequestHeaders().getFirst("Authorization");
             received = mapper.readTree(exchange.getRequestBody());
+
             if (!responseGate.await(5, TimeUnit.SECONDS)) return;
+
             byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+
             exchange.getResponseHeaders().set("Content-Type", "application/json");
+
             if (status >= 300 && status < 400) {
                 exchange.getResponseHeaders().set("Location", baseUrl() + "/must-not-follow");
             }
+
             exchange.sendResponseHeaders(status, chunked || bytes.length == 0 ? 0 : bytes.length);
             exchange.getResponseBody().write(bytes);
         } catch (InterruptedException e) {

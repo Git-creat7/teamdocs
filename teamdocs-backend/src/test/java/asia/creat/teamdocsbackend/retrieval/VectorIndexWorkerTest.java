@@ -1,6 +1,7 @@
 package asia.creat.teamdocsbackend.retrieval;
 
 import asia.creat.config.EmbeddingProperties;
+import asia.creat.config.MilvusProperties;
 import asia.creat.mapper.DocumentContentMapper;
 import asia.creat.mapper.VectorIndexMapper;
 import asia.creat.retrieval.MilvusVectorClient;
@@ -9,11 +10,10 @@ import asia.creat.retrieval.SiliconFlowEmbeddingClient;
 import asia.creat.retrieval.VectorIndexQueue;
 import asia.creat.retrieval.VectorIndexWorker;
 import asia.creat.vo.ChunkHitVO;
+import java.util.List;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
-
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -23,7 +23,7 @@ class VectorIndexWorkerTest {
     private final SiliconFlowEmbeddingClient embeddings = mock(SiliconFlowEmbeddingClient.class);
     private final MilvusVectorClient vectors = mock(MilvusVectorClient.class);
     private final EmbeddingProperties properties = new EmbeddingProperties();
-    private final asia.creat.config.MilvusProperties milvus = new asia.creat.config.MilvusProperties();
+    private final MilvusProperties milvus = new MilvusProperties();
     private final VectorIndexQueue queue = new VectorIndexQueue(mapper, properties, milvus);
     private final VectorIndexWorker worker = new VectorIndexWorker(mapper, chunks, queue, embeddings, vectors);
     private VectorIndexMapper.Task task;
@@ -46,7 +46,7 @@ class VectorIndexWorkerTest {
         when(mapper.snapshot(10L)).thenReturn(snapshot);
         when(mapper.next(anyLong())).thenReturn(task);
         when(mapper.task(10L)).thenReturn(task);
-        when(mapper.reserve(eq(10L), eq(1L), anyLong(), anyLong())).thenReturn(1);
+        when(mapper.reserve(eq(10L), eq(1L), anyLong(), anyLong())).thenReturn(true);
         when(embeddings.enabled()).thenReturn(true);
         when(vectors.enabled()).thenReturn(true);
     }
@@ -64,10 +64,13 @@ class VectorIndexWorkerTest {
     @Test
     void persistsAttemptBeforeAnyRemoteMutation() {
         ChunkHitVO chunk = chunk();
+
         when(chunks.listIndexableDocumentChunks(10L)).thenReturn(List.of(chunk));
         when(embeddings.embed(List.of("合成正文"))).thenReturn(List.of(List.of(1f, 0f)));
         worker.processNext();
+
         var order = inOrder(mapper, vectors, embeddings);
+
         order.verify(mapper).reserve(eq(10L), eq(1L), anyLong(), anyLong());
         order.verify(vectors).ensureCollection();
         order.verify(vectors).deleteDocument(10L);
@@ -95,6 +98,7 @@ class VectorIndexWorkerTest {
         when(chunks.listIndexableDocumentChunks(10L)).thenReturn(List.of(chunk()));
         when(embeddings.embed(anyList())).thenAnswer(call -> {
             snapshot.setParseVersion(2);
+
             return List.of(List.of(1f, 0f));
         });
         worker.processNext();
@@ -112,6 +116,7 @@ class VectorIndexWorkerTest {
             newer.setGeneration(2);
             newer.setState("PENDING");
             when(mapper.task(10L)).thenReturn(newer);
+
             return List.of(List.of(1f, 0f));
         });
         worker.processNext();
@@ -135,7 +140,7 @@ class VectorIndexWorkerTest {
     /** 领取竞争失败时不发生任何远端调用。 */
     @Test
     void reservationFailureDoesNotRunTask() {
-        when(mapper.reserve(eq(10L), eq(1L), anyLong(), anyLong())).thenReturn(0);
+        when(mapper.reserve(eq(10L), eq(1L), anyLong(), anyLong())).thenReturn(false);
         worker.processNext();
         verify(vectors, never()).ensureCollection();
         verify(embeddings, never()).embed(anyList());
@@ -155,8 +160,9 @@ class VectorIndexWorkerTest {
     @Test
     void collectionChangeInvalidatesCompletedTarget() {
         String before = queue.signature(snapshot);
+
         milvus.setCollection("new_vector_collection");
-        org.junit.jupiter.api.Assertions.assertNotEquals(before, queue.signature(snapshot));
+        Assertions.assertNotEquals(before, queue.signature(snapshot));
     }
 
     /** 构造当前版本的合成正文。 */
@@ -167,6 +173,7 @@ class VectorIndexWorkerTest {
         chunk.setSpaceId(1L);
         chunk.setParseVersion(1);
         chunk.setExcerpt("合成正文");
+
         return chunk;
     }
 }

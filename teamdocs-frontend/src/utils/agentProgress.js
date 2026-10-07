@@ -52,10 +52,12 @@ export function getAgentProgress(run) {
   })
 
   let label
+
   if (!run) label = '正在准备回复…'
   else if (run.status === 'QUEUED') label = '正在排队等待处理…'
   else if (run.status === 'RUNNING') {
     const current = [...steps].reverse().find((step) => step.state === 'running')
+
     label = current?.label || (steps.length ? '等待后续响应…'
       : run.modelCalls > 0 ? '等待模型响应…' : '正在准备模型请求…')
   } else {
@@ -68,6 +70,7 @@ export function getAgentProgress(run) {
   }
 
   let waitingMessage = ''
+
   if (!run) waitingMessage = '正在确认运行状态，暂未收到处理记录。'
   else if (run.status === 'QUEUED') waitingMessage = '请求已进入队列，尚未开始执行。'
   else if (run.status === 'RUNNING' && !steps.some((step) => step.state === 'running')) {

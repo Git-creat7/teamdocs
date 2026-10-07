@@ -47,6 +47,7 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
             );
         } catch (Exception e) {
             log.error("文件上传失败: objectKey={}, error={}", objectKey, e.getMessage());
+
             throw new BusinessException("文件上传失败", e);
         }
     }
@@ -62,6 +63,7 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
             );
         } catch (Exception e) {
             log.error("文件删除失败: objectKey={}, error={}", objectKey, e.getMessage());
+
             throw new BusinessException("文件删除失败", e);
         }
     }
@@ -74,7 +76,9 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
                     minioProperties.getPublicEndpoint(),
                     resolveBucketName(bucket),
                     objectKey);
+
             log.debug("生成公共访问URL: {}", url);
+
             return url;
         }
 
@@ -91,10 +95,13 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
             }
 
             String url = minioPublicClient.getPresignedObjectUrl(builder.build());
+
             log.debug("生成私有访问URL: {}", url);
+
             return url;
         } catch (Exception e) {
             log.error("生成访问URL失败: objectKey={}, error={}", objectKey, e.getMessage());
+
             throw new BusinessException("生成访问URL失败", e);
         }
     }
@@ -110,6 +117,7 @@ public class MinioFileStorageServiceImpl implements FileStorageService {
             );
         } catch (Exception e) {
             log.error("读取文件失败: objectKey={}, error={}", objectKey, e.getMessage());
+
             throw new BusinessException("文件读取失败", e);
         }
     }

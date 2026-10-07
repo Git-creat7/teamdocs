@@ -23,6 +23,7 @@ public class ChunkHitVO {
     public boolean isImageSource() {
         return imageRef != null && !imageRef.isBlank();
     }
+
     /** 可选的 HTML 转义高亮；不替代正文，也不改变来源偏移。 */
     private String highlight;
 }

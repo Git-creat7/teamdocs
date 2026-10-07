@@ -115,30 +115,39 @@ function validate() {
   if (form.username.length < 2 || form.username.length > 16) {
     return '账号长度需在 2-16 位之间'
   }
+
   if (form.password.length < 6 || form.password.length > 20) {
     return '密码长度需在 6-20 位之间'
   }
+
   if (!isLogin.value && form.password !== form.confirmPassword) {
     return '两次输入的密码不一致'
   }
+
   return ''
 }
 
 async function handleSubmit() {
   errorMsg.value = validate()
+
   if (errorMsg.value) return
 
   loading.value = true
+
   try {
     if (!isLogin.value) {
       await registerApi({ username: form.username, password: form.password })
       ElMessage.success('注册成功，正在自动登录')
     }
+
     const res = await loginApi({ username: form.username, password: form.password })
     const token = typeof res === 'string' ? res : res?.token
+
     if (token) {
       localStorage.setItem('teamdocs_token', token)
+
       if (isLogin.value) ElMessage.success('登录成功，欢迎回来')
+
       router.replace('/home')
     } else {
       errorMsg.value = '登录响应异常：未获取到有效 Token'
@@ -182,6 +191,7 @@ async function handleSubmit() {
     opacity: 0;
     transform: translateY(40px) scale(0.96);
   }
+
   to {
     opacity: 1;
     transform: none;
@@ -197,6 +207,7 @@ async function handleSubmit() {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: none;
@@ -209,6 +220,7 @@ async function handleSubmit() {
 
 @keyframes fade-in {
   from { opacity: 0; }
+
   to { opacity: 1; }
 }
 
@@ -284,6 +296,7 @@ async function handleSubmit() {
     opacity: 0;
     transform: translateY(-8px);
   }
+
   to {
     opacity: 1;
     transform: none;
@@ -461,6 +474,7 @@ async function handleSubmit() {
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
+
   50% { opacity: 0.35; }
 }
 
@@ -469,6 +483,7 @@ async function handleSubmit() {
     transform: translateY(-25%);
     animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
   }
+
   50% {
     transform: none;
     animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
@@ -477,6 +492,7 @@ async function handleSubmit() {
 
 @keyframes ping {
   0% { transform: scale(1); opacity: 1; }
+
   75%, 100% { transform: scale(2.2); opacity: 0; }
 }
 

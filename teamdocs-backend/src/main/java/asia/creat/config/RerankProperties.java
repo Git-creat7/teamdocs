@@ -1,5 +1,6 @@
 package asia.creat.config;
 
+import asia.creat.retrieval.RetrievalHttp;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -16,7 +17,7 @@ public class RerankProperties {
 
     /** 根据显式开关或有效 Key 判断是否启用。 */
     public boolean isEnabled() {
-        return enabled != null ? enabled : asia.creat.retrieval.RetrievalHttp.hasApiKey(apiKey);
+        return enabled != null ? enabled : RetrievalHttp.hasApiKey(apiKey);
     }
 
     /** 有效 Key 的配置意味着允许该功能发送资料，显式关闭优先。 */

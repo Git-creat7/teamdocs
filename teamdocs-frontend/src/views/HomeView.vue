@@ -90,16 +90,6 @@
           <el-icon class="stat-arrow"><ChevronRight /></el-icon>
         </button>
 
-        <button type="button" class="stat-card is-clickable tint-lavender" @click="router.push('/tags')">
-          <div class="stat-icon-box">
-            <el-icon :size="22"><Tag /></el-icon>
-          </div>
-          <div class="stat-body">
-            <span class="stat-value-text">标签管理</span>
-            <span class="stat-label">为文档建立分类体系</span>
-          </div>
-          <el-icon class="stat-arrow"><ChevronRight /></el-icon>
-        </button>
 
         <button type="button" class="stat-card is-clickable tint-peach" @click="goTrash">
           <div class="stat-icon-box">
@@ -284,19 +274,7 @@
                 </span>
               </div>
               <p class="space-card-desc">{{ space.description || '暂无描述' }}</p>
-              <div v-if="(spaceTagsMap[space.id] || []).length" class="space-card-tags">
-                <span
-                  v-for="tag in spaceTagsMap[space.id].slice(0, 4)"
-                  :key="tag.id"
-                  class="space-tag-chip"
-                  :style="tagStyle(tag.name)"
-                >
-                  {{ tag.name }}
-                </span>
-                <span v-if="spaceTagsMap[space.id].length > 4" class="space-tag-more">
-                  +{{ spaceTagsMap[space.id].length - 4 }}
-                </span>
-              </div>
+
               <div class="space-card-foot">
                 <span class="space-card-date">创建于 {{ formatDate(space.createdAt) }}</span>
                 <span class="space-card-members">
@@ -349,10 +327,9 @@
       </section>
     </div>
 
-    <!-- 选择空间 (成员/标签直达入口用) -->
     <el-dialog
       v-model="spacePickVisible"
-      :title="panelChoice === 'members' ? '选择要管理成员的空间' : '选择要管理标签的空间'"
+      title="选择要管理成员的空间"
       width="400px"
       destroy-on-close
     >
@@ -419,18 +396,16 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { FolderOpen, MoreHorizontal, Pencil, Trash2, Plus, Clock, ChevronRight, User, Tag, History, FileText, UsersRound } from 'lucide-vue-next'
+import { FolderOpen, MoreHorizontal, Pencil, Trash2, Plus, Clock, ChevronRight, User, History, FileText, UsersRound } from 'lucide-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
 import FileIcon from '@/components/FileIcon.vue'
 import OnboardingBanner from '@/components/OnboardingBanner.vue'
 import { getRecentDocumentsApi } from '@/api/user'
 import { getActivitiesApi } from '@/api/activity'
 import { createSpaceApi, updateSpaceApi, deleteSpaceApi } from '@/api/space'
-import { listTagsApi } from '@/api/tag'
 import { storeToRefs } from 'pinia'
 import { useUserStore, useSpacesStore } from '@/stores'
 import { formatDateTime, formatRelativeTime, getFileExt, getFileTypeColor } from '@/utils/format'
-import { tagStyle } from '@/utils/tagColors'
 import { spaceIconPalette } from '@/utils/spaceColors'
 import { avatarColor } from '@/utils/userColors'
 import { activityMeta, activityName, activityVerb, canOpenActivityDocument, shouldWrapActivityName, truncateText } from '@/utils/activityText'
@@ -449,137 +424,9 @@ const loadingRecent = ref(true)
 const activities = ref([])
 const loadingActivities = ref(true)
 
-// 空态 = 加载完成且一个空间都没有 → 显示三步引导
-const isEmpty = computed(() => !spacesLoading.value && spaces.value.length === 0)
-
-// 继续阅读卡取最近一条浏览记录
-const resumeDoc = computed(() => recentDocs.value[0] || null)
-
-function openActivityDoc(act) {
-  if (!canOpenActivityDocument(act) || !act.spaceId) return
-  openDocument({
-    spaceId: act.spaceId,
-    documentId: act.resourceId
-  })
-}
-
-// 文件图标底色：按类型色打 12% 透明浅底
-function fileTintBg(ext) {
-  const c = getFileTypeColor(ext)
-  return `color-mix(in srgb, ${c} 12%, transparent)`
-}
-
-// 角色/成员数/文档数已由 /space/list 聚合随行返回 (space.myRole/memberCount/docCount)，
-// 这里只补 chips 用的标签列表——与角色数据彻底解耦
-const spaceTagsMap = ref({})
-
-function roleText(role) {
-  return { OWNER: '所有者', ADMIN: '管理员', MEMBER: '成员' }[role] || ''
-}
-
-async function loadSpaceTagsMap() {
-  const pairs = await Promise.all(
-    spaces.value.map(async (s) => {
-      try {
-        return [s.id, await listTagsApi(s.id)]
-      } catch (err) {
-        return [s.id, []]
-      }
-    })
-  )
-  spaceTagsMap.value = Object.fromEntries(pairs)
-}
-
-watch(spaces, (list) => {
-  if (list.length > 0) loadSpaceTagsMap()
-}, { immediate: true })
-
-const displayName = computed(() =>
-  userInfo.value?.nickname || userInfo.value?.username || '朋友'
-)
-
-const greeting = computed(() => {
-  const h = new Date().getHours()
-  if (h < 6) return '夜深了'
-  if (h < 12) return '早上好'
-  if (h < 14) return '中午好'
-  if (h < 18) return '下午好'
-  return '晚上好'
-})
-
-const todayText = computed(() => {
-  const d = new Date()
-  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${weekdays[d.getDay()]}`
-})
-
-function goTrash() {
-  const sid = spaces.value[0]?.id
-  if (!sid) {
-    ElMessage.warning('还没有空间，先创建一个吧')
-    return
-  }
-  router.push({ path: '/trash', query: { spaceId: sid } })
-}
-
-// 直达空间的成员/标签面板：只有一个空间直接进，多个时让用户选
-async function goSpacePanel(panel) {
-  if (spaces.value.length === 0) {
-    ElMessage.warning('还没有空间，先创建一个吧')
-    return
-  }
-  if (spaces.value.length === 1) {
-    router.push({ path: `/spaces/${spaces.value[0].id}`, query: { panel, t: Date.now() } })
-    return
-  }
-  panelChoice.value = panel
-  spacePickVisible.value = true
-}
 
 const spacePickVisible = ref(false)
 const panelChoice = ref('')
-
-function pickSpaceForPanel(space) {
-  spacePickVisible.value = false
-  router.push({ path: `/spaces/${space.id}`, query: { panel: panelChoice.value, t: Date.now() } })
-}
-
-
-onMounted(() => {
-  loadRecent()
-  loadActivities()
-  // SWR：立即用 store 里的旧数据渲染，同时后台刷新 (上传/加成员后的数字不再说谎)
-  refreshSpaces()
-})
-
-async function loadActivities() {
-  loadingActivities.value = true
-  try {
-    activities.value = await getActivitiesApi(20)
-  } catch (err) {
-    activities.value = []
-  } finally {
-    loadingActivities.value = false
-  }
-}
-
-async function loadRecent() {
-  loadingRecent.value = true
-  try {
-    recentDocs.value = await getRecentDocumentsApi()
-  } catch (err) {
-    recentDocs.value = []
-  } finally {
-    loadingRecent.value = false
-  }
-}
-
-function openRecentDoc(doc) {
-  openDocument({
-    spaceId: doc.spaceId,
-    documentId: doc.documentId
-  })
-}
 
 // 空间编辑/删除
 const editVisible = ref(false)
@@ -594,6 +441,138 @@ const editRules = {
     { min: 1, max: 64, message: '空间名称长度在 1 到 64 个字符', trigger: 'blur' }
   ],
   description: [{ max: 255, message: '空间描述最长 255 个字符', trigger: 'blur' }]
+}
+
+// 空态 = 加载完成且一个空间都没有 → 显示三步引导
+const isEmpty = computed(() => !spacesLoading.value && spaces.value.length === 0)
+
+// 继续阅读卡取最近一条浏览记录
+const resumeDoc = computed(() => recentDocs.value[0] || null)
+
+const displayName = computed(() =>
+  userInfo.value?.nickname || userInfo.value?.username || '朋友'
+)
+
+const greeting = computed(() => {
+  const h = new Date().getHours()
+
+  if (h < 6) return '夜深了'
+
+  if (h < 12) return '早上好'
+
+  if (h < 14) return '中午好'
+
+  if (h < 18) return '下午好'
+
+  return '晚上好'
+})
+
+const todayText = computed(() => {
+  const d = new Date()
+  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${weekdays[d.getDay()]}`
+})
+
+watch(spaces, (list) => {
+}, { immediate: true })
+
+async function loadRecent() {
+  loadingRecent.value = true
+
+  try {
+    recentDocs.value = await getRecentDocumentsApi()
+  } catch (err) {
+    recentDocs.value = []
+  } finally {
+    loadingRecent.value = false
+  }
+}
+
+async function loadActivities() {
+  loadingActivities.value = true
+
+  try {
+    activities.value = await getActivitiesApi(20)
+  } catch (err) {
+    activities.value = []
+  } finally {
+    loadingActivities.value = false
+  }
+}
+
+// 角色/成员数/文档数已由 /space/list 聚合随行返回 (space.myRole/memberCount/docCount)，
+
+
+function roleText(role) {
+  return { OWNER: '所有者', ADMIN: '管理员', MEMBER: '成员' }[role] || ''
+}
+
+// 文件图标底色：按类型色打 12% 透明浅底
+function fileTintBg(ext) {
+  const c = getFileTypeColor(ext)
+
+  return `color-mix(in srgb, ${c} 12%, transparent)`
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '-'
+
+  const d = new Date(dateStr)
+
+  if (isNaN(d.getTime())) return '-'
+
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+}
+
+function openActivityDoc(act) {
+  if (!canOpenActivityDocument(act) || !act.spaceId) return
+
+  openDocument({
+    spaceId: act.spaceId,
+    documentId: act.resourceId
+  })
+}
+
+function openRecentDoc(doc) {
+  openDocument({
+    spaceId: doc.spaceId,
+    documentId: doc.documentId
+  })
+}
+
+function goTrash() {
+  const sid = spaces.value[0]?.id
+
+  if (!sid) {
+    ElMessage.warning('还没有空间，先创建一个吧')
+
+    return
+  }
+
+  router.push({ path: '/trash', query: { spaceId: sid } })
+}
+
+async function goSpacePanel(panel) {
+  if (spaces.value.length === 0) {
+    ElMessage.warning('还没有空间，先创建一个吧')
+
+    return
+  }
+
+  if (spaces.value.length === 1) {
+    router.push({ path: `/spaces/${spaces.value[0].id}`, query: { panel, t: Date.now() } })
+
+    return
+  }
+
+  panelChoice.value = panel
+  spacePickVisible.value = true
+}
+
+function pickSpaceForPanel(space) {
+  spacePickVisible.value = false
+  router.push({ path: `/spaces/${space.id}`, query: { panel: panelChoice.value, t: Date.now() } })
 }
 
 function resetForm() {
@@ -628,6 +607,7 @@ async function handleSubmit() {
   if (!editFormRef.value || submitting.value) return
 
   submitting.value = true
+
   try {
     await editFormRef.value.validate()
 
@@ -635,6 +615,7 @@ async function handleSubmit() {
       name: editForm.name.trim(),
       description: editForm.description ? editForm.description.trim() : ''
     }
+
     if (editingSpace.value) {
       await updateSpaceApi(editingSpace.value.id, payload)
       ElMessage.success('空间已更新')
@@ -642,6 +623,7 @@ async function handleSubmit() {
       await createSpaceApi(payload)
       ElMessage.success('空间创建成功')
     }
+
     editVisible.value = false
     await refreshSpaces()
   } catch (err) {
@@ -651,12 +633,12 @@ async function handleSubmit() {
   }
 }
 
-function formatDate(dateStr) {
-  if (!dateStr) return '-'
-  const d = new Date(dateStr)
-  if (isNaN(d.getTime())) return '-'
-  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
-}
+onMounted(() => {
+  loadRecent()
+  loadActivities()
+  // SWR：立即用 store 里的旧数据渲染，同时后台刷新 (上传/加成员后的数字不再说谎)
+  refreshSpaces()
+})
 </script>
 
 <style scoped>
@@ -875,7 +857,7 @@ function formatDate(dateStr) {
 /* 快捷动作：4 列一行，统一主色浅底 */
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
   margin-bottom: 2.25rem;
 }
@@ -922,13 +904,19 @@ function formatDate(dateStr) {
 
 /* Notion 粉彩底：卡面着色，图标盒改半透明白 */
 .tint-sky { background: #dcecfa; border-color: transparent; }
+
 .tint-lavender { background: #e6e0f5; border-color: transparent; }
+
 .tint-peach { background: #ffe8d4; border-color: transparent; }
+
 .tint-mint { background: #d9f3e1; border-color: transparent; }
 
 .tint-sky .stat-icon-box { color: #0075de; }
+
 .tint-lavender .stat-icon-box { color: #5645d4; }
+
 .tint-peach .stat-icon-box { color: #dd5b00; }
+
 .tint-mint .stat-icon-box { color: #1aae39; }
 
 .tint-sky .stat-value-text,
@@ -1420,31 +1408,10 @@ function formatDate(dateStr) {
 }
 
 .role-owner { background: #fef3c7; color: #b45309; }
+
 .role-admin { background: #e0e7ff; color: #4338ca; }
+
 .role-member { background: var(--app-hover); color: var(--app-text-muted); }
-
-/* 空间标签行 */
-.space-card-tags {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0.55rem 0 0;
-}
-
-.space-tag-chip {
-  font-size: 0.68rem;
-  font-weight: 500;
-  padding: 1px 8px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  white-space: nowrap;
-}
-
-.space-tag-more {
-  font-size: 0.68rem;
-  color: var(--app-text-faint);
-}
 
 .space-card-foot {
   border-top: 1px solid var(--app-border-soft);
@@ -1536,9 +1503,11 @@ function formatDate(dateStr) {
   }
 
   .stat-label { display: none; }
+
   .stat-arrow { display: none; }
 
   .recent-grid { grid-template-columns: 1fr; }
+
   .space-grid { grid-template-columns: 1fr; }
 
   .home-columns {
@@ -1571,6 +1540,7 @@ function formatDate(dateStr) {
   }
 
   .resume-card { flex-wrap: wrap; }
+
   .resume-body { flex-basis: 60%; }
 }
 </style>

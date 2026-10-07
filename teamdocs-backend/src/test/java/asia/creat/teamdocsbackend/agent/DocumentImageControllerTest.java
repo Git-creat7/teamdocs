@@ -24,8 +24,11 @@ class DocumentImageControllerTest {
     @Test
     void returnsPrivateImageBytesWithoutAStoredUrl() {
         byte[] bytes = {1, 2, 3};
+
         when(service.read(1L, 10L, 100L, 0, user)).thenReturn(new DocumentImageReader.Preview(bytes, "image/png"));
+
         var response = controller.image(1L, 10L, 100L, 0, user);
+
         assertEquals(200, response.getStatusCode().value());
         assertEquals(MediaType.IMAGE_PNG, response.getHeaders().getContentType());
         assertEquals("private, no-store", response.getHeaders().getFirst(HttpHeaders.CACHE_CONTROL));
@@ -41,9 +44,13 @@ class DocumentImageControllerTest {
                 {"图片不可读取或超过预览限制", 400, "IMAGE_UNAVAILABLE"},
                 {"原图已更新或不可访问", 404, "SOURCE_CHANGED"}}) {
             doThrow(new BusinessException((String) sample[0])).when(service).read(any(), any(), any(), any(), any());
+
             var response = controller.image(1L, 10L, 100L, 0, user);
+
             assertEquals(sample[1], response.getStatusCode().value());
+
             Map<?, ?> body = (Map<?, ?>) response.getBody();
+
             assertEquals(sample[2], body.get("errorCode"));
             assertEquals(sample[0], body.get("msg"));
         }

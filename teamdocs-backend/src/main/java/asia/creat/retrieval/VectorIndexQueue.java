@@ -28,6 +28,7 @@ public class VectorIndexQueue {
                 || !RetrievalHttp.hasApiKey(properties.getApiKey())) {
             return;
         }
+
         mapper.enqueue(documentId, signature(mapper.snapshot(documentId)));
     }
 
@@ -40,9 +41,11 @@ public class VectorIndexQueue {
         if (snapshot == null) {
             return "deleted";
         }
+
         String target = "v1|" + properties.getModelName() + "|" + properties.getDimensions() + "|"
                 + milvus.getUrl() + "|" + milvus.getCollection() + "|"
                 + snapshot.getParseVersion() + "|" + snapshot.isReady();
+
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(target.getBytes(StandardCharsets.UTF_8)));

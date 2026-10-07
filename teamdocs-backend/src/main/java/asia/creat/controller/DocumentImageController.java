@@ -37,6 +37,7 @@ public class DocumentImageController {
                                         @AuthenticationPrincipal LoginUser user) {
         try {
             DocumentImageReader.Preview image = images.read(spaceId, documentId, chunkId, parseVersion, user);
+
             return ResponseEntity.ok().contentType(MediaType.parseMediaType(image.contentType()))
                     .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
                     .header("X-Content-Type-Options", "nosniff")
@@ -44,6 +45,7 @@ public class DocumentImageController {
         } catch (BusinessException e) {
             boolean busy = "图片预览繁忙，请稍后再试".equals(e.getMessage());
             boolean unavailable = "图片不可读取或超过预览限制".equals(e.getMessage());
+
             return ResponseEntity.status(busy ? 429 : unavailable ? 400 : 404)
                     .contentType(MediaType.APPLICATION_JSON)
                     .header(HttpHeaders.CACHE_CONTROL, "private, no-store")

@@ -24,6 +24,7 @@ class PaginationValidationWebTest {
     @BeforeEach
     void setUp() {
         documentService = mock(DocumentService.class);
+
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
         mockMvc = MockMvcBuilders

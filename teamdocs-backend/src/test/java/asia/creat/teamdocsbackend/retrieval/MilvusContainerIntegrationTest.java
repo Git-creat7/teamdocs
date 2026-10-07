@@ -62,24 +62,31 @@ class MilvusContainerIntegrationTest {
             etcd.start();
             storage.start();
             milvus.start();
+
             MilvusProperties properties = new MilvusProperties();
             properties.setUrl("http://127.0.0.1:" + milvus.getMappedPort(19530));
             properties.setCollection("synthetic_vector_contract");
             properties.setTimeoutSeconds(10);
+
             EmbeddingProperties embedding = new EmbeddingProperties();
             embedding.setModelName("synthetic-test-model");
             embedding.setDimensions(2);
+
             MilvusVectorClient client = new MilvusVectorClient(properties, embedding, new RetrievalHttp(new ObjectMapper()));
             client.ensureCollection();
             client.upsert(List.of(chunk(101, 10, 1), chunk(102, 11, 1), chunk(201, 20, 2)),
                     List.of(List.of(1f, 0f), List.of(0f, 1f), List.of(1f, 0f)));
+
             var hits = client.search(1L, null, List.of(1f, 0f), 6);
+
             assertEquals(2, hits.size());
             assertEquals(101L, hits.get(0).getChunkId());
             assertTrue(hits.stream().allMatch(hit -> hit.getParseVersion() == 0));
             assertEquals(List.of(102L), client.search(1L, 11L, List.of(1f, 0f), 6)
                     .stream().map(hit -> hit.getChunkId()).toList());
+
             client.deleteDocument(10L);
+
             assertEquals(List.of(102L), client.search(1L, null, List.of(1f, 0f), 6)
                     .stream().map(hit -> hit.getChunkId()).toList());
             assertEquals(201L, client.search(2L, null, List.of(1f, 0f), 6).get(0).getChunkId());
@@ -94,6 +101,7 @@ class MilvusContainerIntegrationTest {
         chunk.setSpaceId(spaceId);
         chunk.setParseVersion(0);
         chunk.setExcerpt("合成资料，不是业务数据");
+
         return chunk;
     }
 }

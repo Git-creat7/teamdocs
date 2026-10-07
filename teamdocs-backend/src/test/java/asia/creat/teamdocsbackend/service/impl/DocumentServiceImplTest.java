@@ -11,34 +11,33 @@ import asia.creat.entity.SpaceMember;
 import asia.creat.entity.SpaceRole;
 import asia.creat.helper.ResourcePermissionHelper;
 import asia.creat.mapper.DocumentMapper;
-import asia.creat.mapper.DocumentTagMapper;
 import asia.creat.mapper.FolderMapper;
-import asia.creat.mapper.TagMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
+import asia.creat.service.DocumentContentService;
+import asia.creat.service.DocumentIndexSync;
 import asia.creat.service.FileStorageService;
 import asia.creat.service.RecentDocumentService;
 import asia.creat.service.impl.DocumentServiceImpl;
+import asia.creat.vo.DocumentDetailVO;
 import asia.creat.vo.DocumentPreviewVO;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import asia.creat.service.DocumentIndexSync;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.SimpleTransactionStatus;
-
-import java.nio.charset.StandardCharsets;
-import java.util.Map;
-import java.util.stream.Stream;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -71,14 +70,12 @@ class DocumentServiceImplTest {
     @Mock
     private RecentDocumentService recentDocumentService;
 
-    @Mock
-    private DocumentTagMapper documentTagMapper;
+
+
+
 
     @Mock
-    private TagMapper tagMapper;
-
-    @Mock
-    private asia.creat.service.DocumentContentService documentContentService;
+    private DocumentContentService documentContentService;
 
 
     @Mock
@@ -97,12 +94,11 @@ class DocumentServiceImplTest {
                 permissionHelper,
                 folderMapper,
                 recentDocumentService,
-                documentTagMapper,
-                tagMapper,
                 documentContentService,
                 documentIndexSync,
                 transactionManager
         );
+
         SpaceMember member = new SpaceMember();
         member.setRole(SpaceRole.MEMBER);
         SpaceContext.set(member);
@@ -117,24 +113,31 @@ class DocumentServiceImplTest {
     @Test
     void uploadShouldPersistDocumentMetadata() {
         prepareUpload(0L);
+
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "notes.txt",
                 "text/plain",
                 "hello".getBytes(StandardCharsets.UTF_8)
         );
+
         when(documentMapper.insert(any(Document.class))).thenAnswer(invocation -> {
             Document document = invocation.getArgument(0);
             document.setId(88L);
+
             return 1;
         });
 
         Long documentId = service.upload(SPACE_ID, 0L, file, LOGIN_USER);
 
         verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), any(String.class));
+
         ArgumentCaptor<Document> documentCaptor = ArgumentCaptor.forClass(Document.class);
+
         verify(documentMapper).insert(documentCaptor.capture());
+
         Document saved = documentCaptor.getValue();
+
         assertEquals(SPACE_ID, saved.getSpaceId());
         assertEquals(0L, saved.getFolderId());
         assertEquals("notes.txt", saved.getName());
@@ -148,6 +151,7 @@ class DocumentServiceImplTest {
     @Test
     void uploadShouldDeleteObjectWhenMetadataInsertFails() {
         prepareUpload(0L);
+
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "notes.txt",
@@ -155,32 +159,38 @@ class DocumentServiceImplTest {
                 "hello".getBytes(StandardCharsets.UTF_8)
         );
         RuntimeException databaseFailure = new RuntimeException("database unavailable");
+
         when(documentMapper.insert(any(Document.class))).thenThrow(databaseFailure);
 
         RuntimeException thrown = assertThrows(RuntimeException.class,
                 () -> service.upload(SPACE_ID, 0L, file, LOGIN_USER));
 
         ArgumentCaptor<String> objectKeyCaptor = ArgumentCaptor.forClass(String.class);
+
         verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), objectKeyCaptor.capture());
         verify(fileStorageService).delete(BucketType.PRIVATE, objectKeyCaptor.getValue());
+
         assertSame(databaseFailure, thrown);
     }
 
     @Test
     void uploadShouldTreatZeroInsertedRowsAsFailure() {
         prepareUpload(0L);
+
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "notes.txt",
                 "text/plain",
                 "hello".getBytes(StandardCharsets.UTF_8)
         );
+
         when(documentMapper.insert(any(Document.class))).thenReturn(0);
 
         assertThrows(BusinessException.class,
                 () -> service.upload(SPACE_ID, 0L, file, LOGIN_USER));
 
         ArgumentCaptor<String> objectKeyCaptor = ArgumentCaptor.forClass(String.class);
+
         verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), objectKeyCaptor.capture());
         verify(fileStorageService).delete(BucketType.PRIVATE, objectKeyCaptor.getValue());
     }
@@ -193,6 +203,7 @@ class DocumentServiceImplTest {
                 "text/plain",
                 "hello".getBytes(StandardCharsets.UTF_8)
         );
+
         when(folderMapper.selectCount(any())).thenReturn(0L);
 
         BusinessException ex = assertThrows(BusinessException.class,
@@ -206,19 +217,23 @@ class DocumentServiceImplTest {
     @Test
     void uploadShouldAcceptFolderInCurrentSpace() {
         prepareUpload(20L);
+
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "notes.txt",
                 "text/plain",
                 "hello".getBytes(StandardCharsets.UTF_8)
         );
+
         when(folderMapper.selectCount(any())).thenReturn(1L);
         when(documentMapper.insert(any(Document.class))).thenReturn(1);
 
         service.upload(SPACE_ID, 20L, file, LOGIN_USER);
 
         ArgumentCaptor<Document> documentCaptor = ArgumentCaptor.forClass(Document.class);
+
         verify(documentMapper).insert(documentCaptor.capture());
+
         assertEquals(20L, documentCaptor.getValue().getFolderId());
         verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), any(String.class));
     }
@@ -249,7 +264,9 @@ class DocumentServiceImplTest {
         service.upload(SPACE_ID, 0L, new MockMultipartFile("file", original, "text/plain", new byte[]{1}), LOGIN_USER);
 
         ArgumentCaptor<Document> captured = ArgumentCaptor.forClass(Document.class);
+
         verify(documentMapper).insert(captured.capture());
+
         assertEquals(expected, captured.getValue().getName());
     }
 
@@ -260,14 +277,19 @@ class DocumentServiceImplTest {
         when(documentMapper.existsActiveName(SPACE_ID, 0L, "notes(1).txt")).thenReturn(true);
         when(documentMapper.existsActiveName(SPACE_ID, 0L, "notes(2).txt")).thenReturn(true);
         when(documentMapper.insert(any(Document.class))).thenReturn(1);
+
         MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", new byte[]{1});
 
         service.upload(SPACE_ID, 0L, file, LOGIN_USER);
 
         ArgumentCaptor<Document> captured = ArgumentCaptor.forClass(Document.class);
+
         verify(documentMapper).insert(captured.capture());
+
         assertEquals("notes(3).txt", captured.getValue().getName());
+
         var order = inOrder(fileStorageService, transactionManager, documentMapper);
+
         order.verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), any(String.class));
         order.verify(transactionManager).getTransaction(any());
         order.verify(documentMapper).lockUploadDirectory(SPACE_ID, 0L);
@@ -280,13 +302,16 @@ class DocumentServiceImplTest {
     void uploadShouldDeleteObjectIfTheDirectoryDisappearsBeforeMetadataWrite() {
         when(documentMapper.lockUploadDirectory(SPACE_ID, 0L)).thenReturn(null);
         when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+
         MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", new byte[]{1});
 
         assertThrows(BusinessException.class, () -> service.upload(SPACE_ID, 0L, file, LOGIN_USER));
 
         verify(documentMapper, never()).insert(any(Document.class));
         verify(transactionManager).rollback(any());
+
         ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
+
         verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), key.capture());
         verify(fileStorageService).delete(BucketType.PRIVATE, key.getValue());
     }
@@ -295,14 +320,18 @@ class DocumentServiceImplTest {
     void uploadShouldDeleteObjectWhenMetadataCommitFails() {
         prepareUpload(0L);
         when(documentMapper.insert(any(Document.class))).thenReturn(1);
+
         RuntimeException failure = new RuntimeException("commit failed");
+
         doThrow(failure).when(transactionManager).commit(any());
+
         MockMultipartFile file = new MockMultipartFile("file", "notes.txt", "text/plain", new byte[]{1});
 
         assertSame(failure, assertThrows(RuntimeException.class,
                 () -> service.upload(SPACE_ID, 0L, file, LOGIN_USER)));
 
         ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
+
         verify(fileStorageService).upload(eq(file), eq(BucketType.PRIVATE), key.capture());
         verify(fileStorageService).delete(BucketType.PRIVATE, key.getValue());
     }
@@ -313,6 +342,7 @@ class DocumentServiceImplTest {
         Folder targetFolder = new Folder();
         targetFolder.setId(20L);
         targetFolder.setSpaceId(2L);
+
         MoveDocumentDTO dto = new MoveDocumentDTO();
         dto.setTargetFolderId(20L);
         when(documentMapper.selectById(10L)).thenReturn(document);
@@ -383,13 +413,16 @@ class DocumentServiceImplTest {
         String url = service.downloadDocument(SPACE_ID, 10L, LOGIN_USER);
 
         assertEquals("https://files.example/notes.txt", url);
+
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, String>> paramsCaptor = ArgumentCaptor.forClass(Map.class);
+
         verify(fileStorageService).getAccessUrl(
                 eq(BucketType.PRIVATE),
                 eq("space/1/notes.txt"),
                 paramsCaptor.capture()
         );
+
         assertEquals(
                 "attachment; filename*=UTF-8''notes.txt",
                 paramsCaptor.getValue().get("response-content-disposition")
@@ -431,12 +464,14 @@ class DocumentServiceImplTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, String>> paramsCaptor = ArgumentCaptor.forClass(Map.class);
         var ordered = inOrder(fileStorageService, recentDocumentService);
+
         ordered.verify(fileStorageService).getAccessUrl(
                 eq(BucketType.PRIVATE),
                 eq("space/1/report.pdf"),
                 paramsCaptor.capture()
         );
         ordered.verify(recentDocumentService).recordRecentDocument(USER_ID, 10L);
+
         assertEquals(1, paramsCaptor.getValue().size());
         assertEquals(
                 "inline; filename*=UTF-8''%E5%AD%A3%E5%BA%A6%20%E6%8A%A5%E5%91%8A.pdf",
@@ -477,9 +512,9 @@ class DocumentServiceImplTest {
 
         service.purgeDocument(SPACE_ID, 10L, LOGIN_USER);
 
-        var inOrder = inOrder(fileStorageService, documentTagMapper, documentMapper, documentContentService);
+        var inOrder = inOrder(fileStorageService, documentMapper, documentContentService);
+
         inOrder.verify(fileStorageService).delete(BucketType.PRIVATE, "space/1/notes.txt");
-        inOrder.verify(documentTagMapper).delete(any());
         inOrder.verify(documentMapper).lockById(10L);
         inOrder.verify(documentContentService).purgeByDocumentId(10L);
         inOrder.verify(documentMapper).purgeDeleteById(10L);
@@ -497,7 +532,6 @@ class DocumentServiceImplTest {
         assertThrows(BusinessException.class,
                 () -> service.purgeDocument(SPACE_ID, 10L, LOGIN_USER));
 
-        verify(documentTagMapper, never()).delete(any());
         verify(documentMapper, never()).purgeDeleteById(any());
     }
 
@@ -507,12 +541,13 @@ class DocumentServiceImplTest {
         document.setName("spec.pdf");
         document.setParseStatus(ParseStatus.READY);
         document.setChunkCount(15);
-        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+
+        LocalDateTime now = LocalDateTime.now();
+
         document.setParsedAt(now);
         when(documentMapper.selectById(10L)).thenReturn(document);
-        when(documentTagMapper.selectList(any())).thenReturn(java.util.List.of());
 
-        asia.creat.vo.DocumentDetailVO vo = service.getDocumentDetail(SPACE_ID, 10L, LOGIN_USER);
+        DocumentDetailVO vo = service.getDocumentDetail(SPACE_ID, 10L, LOGIN_USER);
 
         assertEquals(ParseStatus.READY, vo.getParseStatus());
         assertEquals(15, vo.getChunkCount());
@@ -526,6 +561,7 @@ class DocumentServiceImplTest {
         document.setSpaceId(spaceId);
         document.setUploadBy(uploadBy);
         document.setFolderId(folderId);
+
         return document;
     }
 }

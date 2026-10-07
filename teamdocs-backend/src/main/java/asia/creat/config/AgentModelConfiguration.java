@@ -1,18 +1,19 @@
 package asia.creat.config;
 
-import dev.langchain4j.model.chat.ChatLanguageModel;
 import asia.creat.agent.model.OpenAiReasoningChatModel;
+import asia.creat.retrieval.RetrievalHttp;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.langchain4j.model.chat.ChatLanguageModel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Condition;
 import org.springframework.context.annotation.ConditionContext;
 import org.springframework.context.annotation.Conditional;
-import org.springframework.core.type.AnnotatedTypeMetadata;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.springframework.util.StringUtils;
 
 /**
@@ -31,13 +32,15 @@ public class AgentModelConfiguration {
     @Bean
     @Conditional(ConfiguredModel.class)
     public ChatLanguageModel chatLanguageModel() {
-        if (!properties.isEnabled() || !asia.creat.retrieval.RetrievalHttp.hasApiKey(properties.getApiKey())
+        if (!properties.isEnabled() || !RetrievalHttp.hasApiKey(properties.getApiKey())
                 || !StringUtils.hasText(properties.getModelName()) || !StringUtils.hasText(properties.getBaseUrl())) {
             log.warn("teamdocs.agent.enabled=true，但未配置 apiKey 或 modelName，不创建外部模型 Bean");
+
             return null;
         }
 
         log.info("成功创建流式 ChatLanguageModel 实例: modelName={}", properties.getModelName());
+
         return new OpenAiReasoningChatModel(properties, new ObjectMapper());
     }
 
@@ -46,7 +49,8 @@ public class AgentModelConfiguration {
         public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
             AgentProperties configured = Binder.get(context.getEnvironment())
                     .bind("teamdocs.agent", AgentProperties.class).orElseGet(AgentProperties::new);
-            return configured.isEnabled() && asia.creat.retrieval.RetrievalHttp.hasApiKey(configured.getApiKey())
+
+            return configured.isEnabled() && RetrievalHttp.hasApiKey(configured.getApiKey())
                     && StringUtils.hasText(configured.getModelName()) && StringUtils.hasText(configured.getBaseUrl());
         }
     }

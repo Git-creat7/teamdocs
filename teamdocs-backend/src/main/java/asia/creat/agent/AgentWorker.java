@@ -1,33 +1,30 @@
 package asia.creat.agent;
 
 import asia.creat.agent.AgentData.*;
-import asia.creat.agent.model.OpenAiReasoningChatModel;
+import asia.creat.agent.AgentBudget.InputEstimate;
 import asia.creat.agent.model.OpenAiReasoningChatModel.RequestControl;
+import asia.creat.agent.model.OpenAiReasoningChatModel;
 import asia.creat.common.exception.BusinessException;
-import asia.creat.config.AgentProperties;
 import asia.creat.entity.Document;
 import asia.creat.entity.Space;
-import asia.creat.mapper.AgentMapper;
 import asia.creat.mapper.DocumentMapper;
 import asia.creat.mapper.SpaceMapper;
+import asia.creat.memory.UserMemoryData.Item;
+import asia.creat.memory.UserMemoryPolicy;
+import asia.creat.memory.UserMemoryService;
+import asia.creat.model.UserModelService;
 import asia.creat.security.LoginUser;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
-import dev.langchain4j.data.message.*;
-import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.output.Response;
-import dev.langchain4j.model.output.TokenUsage;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-
+import dev.langchain4j.agent.tool.ToolSpecification;
+import dev.langchain4j.data.message.*;
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.output.FinishReason;
+import dev.langchain4j.model.output.Response;
+import dev.langchain4j.model.output.TokenUsage;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -39,9 +36,20 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.*;
 import java.util.regex.Pattern;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.lang.Nullable;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+import static com.baomidou.mybatisplus.extension.toolkit.ChainWrappers.lambdaQueryChain;
 
 @Component
 @Slf4j
@@ -61,9 +69,7 @@ public class AgentWorker {
                - 空间文档优先：对于涉及团队空间、具体业务、项目设计的问题，必须先通过工具检索正文分块并提供依据和 [C1] 引用。
                - 通用常识兜底：当用户询问与空间文档无关的通用技术问题（如编程语言原理、系统设计、算法、通用常识等），若空间内未检索到相关文档，允许利用你的通用专业知识或系统环境时间直接解答。
                  重要格式要求：必须同样且严格封装在 JSON 的 answer 字段中（严禁脱离 JSON 直接输出裸露的 Markdown 文本！），并在 answer 正文开头明确标注提示（纯问候或时间常识简短回答可不加此提示前缀，直接回答即可）：
-                 “【当前空间暂时未收录相关内部资料，以下基于通用技术知识为您解答】
-            
-            ……”
+                 “【当前空间暂时未收录相关内部资料，以下基于通用技术知识为您解答】”
                - 通用知识或时间问答时，citations 必须为空数组 []，严禁虚构引用编号。
             8. 检索后没有资料或证据不足时明确说明，不虚构结论、文档或引用。
             9. sourceId 由后端分配，例如 C1。最终严格输出一个合法的 JSON 对象，严禁输出任何“收到要求”、“遵照规范”等确认套话，严禁直接输出未被 JSON 包裹的 Markdown，必须针对用户的实际问题直接作答：
@@ -84,9 +90,9 @@ public class AgentWorker {
     public static final String SYSTEM = SYSTEM_TEMPLATE;
 
     private static final Pattern REFERENCE = Pattern.compile("\\[(C[0-9]+)]");
-    private static final Pattern JSON_EXTRACT_PATTERN = Pattern.compile("(?s)\\{.*}");
 
     record CachedDocMeta(Long id, String name, Integer parseVersion, String parseStatus, LocalDateTime updatedAt) {}
+
     record CachedSpaceMeta(Long spaceId, String name, String description, List<CachedDocMeta> documents) {}
 
     private final Cache<Long, CachedSpaceMeta> spaceMetaCache =
@@ -95,12 +101,11 @@ public class AgentWorker {
                     .expireAfterWrite(Duration.ofSeconds(60))
                     .build();
 
-    private final AgentMapper mapper;
+    private final AgentRepository mapper;
     private final AgentStore store;
     private final AgentTools tools;
     private final AgentBudget budget;
     private final AgentJson json;
-    private final AgentProperties properties;
     private final ObjectProvider<ChatLanguageModel> modelProvider;
     private final ExecutorService workers;
     private final ExecutorService modelCalls;
@@ -109,32 +114,42 @@ public class AgentWorker {
     private final boolean maintenance;
     private final AgentEventHub events;
     private final ObjectProvider<AgentReasoningRegistry> reasoning;
+    private final ObjectProvider<UserMemoryService> memory;
 
     private final Set<Long> executingRuns = ConcurrentHashMap.newKeySet();
     private final Set<Long> executingModels = ConcurrentHashMap.newKeySet();
     private final ConcurrentMap<Long, RequestControl> activeModelRequests = new ConcurrentHashMap<>();
 
+
+    private final UserModelService personalModels;
+
+    private final AgentScopeService scopes;
+
+    private final ChatAttachmentService attachments;
+
     private volatile boolean ready;
 
     public AgentWorker(
-            AgentMapper mapper,
+            AgentRepository mapper,
             AgentStore store,
             AgentTools tools,
             AgentBudget budget,
             AgentJson json,
-            AgentProperties properties,
             ObjectProvider<ChatLanguageModel> modelProvider,
             AgentEventHub events,
             @Qualifier("agentWorkerExecutor") ExecutorService workers,
             @Qualifier("agentModelExecutor") ExecutorService modelCalls, SpaceMapper spaceMapper, DocumentMapper documentMapper,
             @Value("${teamdocs.elasticsearch.rebuild:false}") boolean maintenance,
-            ObjectProvider<AgentReasoningRegistry> reasoning) {
+            ObjectProvider<AgentReasoningRegistry> reasoning,
+            ObjectProvider<UserMemoryService> memory,
+            @Nullable UserModelService personalModels,
+            @Nullable AgentScopeService scopes,
+            @Nullable ChatAttachmentService attachments) {
         this.mapper = mapper;
         this.store = store;
         this.tools = tools;
         this.budget = budget;
         this.json = json;
-        this.properties = properties;
         this.modelProvider = modelProvider;
         this.workers = workers;
         this.modelCalls = modelCalls;
@@ -143,30 +158,39 @@ public class AgentWorker {
         this.maintenance = maintenance;
         this.events = events;
         this.reasoning = reasoning;
+        this.memory = memory;
+        this.personalModels = personalModels;
+        this.scopes = scopes;
+        this.attachments = attachments;
     }
 
     @EventListener(ApplicationReadyEvent.class)
     public void recoverInterrupted() {
         if (maintenance) return;
+
         try {
-            if (mapper.recoverInterrupted() > 0) events.refreshAll();
+            if (mapper.recoverInterrupted()) events.refreshAll();
+
             ready = true;
         } catch (RuntimeException e) {
             log.warn("Agent 恢复失败，新运行保持关闭: {}", e.getClass().getSimpleName());
         }
     }
 
-    public boolean available() {
-        return ready && !maintenance && modelProvider.getIfAvailable() != null;
+    public boolean available(Long userId) {
+        return ready && !maintenance && (modelProvider.getIfAvailable() != null
+                || (personalModels != null && personalModels.hasPersonal(userId)));
     }
 
     @Scheduled(fixedDelay = 1000)
     public void expire() {
-        if (!maintenance && ready && properties.isEnabled() && properties.isAllowDocumentEgress()) {
+        if (!maintenance && ready) {
             try {
-                if (mapper.expire(System.currentTimeMillis()) > 0) events.refreshAll();
+                if (mapper.expire(System.currentTimeMillis())) events.refreshAll();
+
                 for (Long runId : activeModelRequests.keySet()) {
                     Run run = mapper.run(runId);
+
                     if (run == null || !"RUNNING".equals(run.getStatus())) cancelModel(runId);
                 }
             } catch (RuntimeException e) {
@@ -187,7 +211,7 @@ public class AgentWorker {
                 }
             });
         } catch (RejectedExecutionException e) {
-            if (mapper.endActive(runId, "FAILED", "QUEUE_FULL") == 1)
+            if (mapper.endActive(runId, "FAILED", "QUEUE_FULL"))
                 events.publish(runId, "run_failed");
         }
     }
@@ -195,6 +219,7 @@ public class AgentWorker {
     /** 中断当前模型 HTTP 请求，取消先于注册时仍由调用前检查兜底。 */
     public void cancelModel(Long runId) {
         RequestControl control = activeModelRequests.get(runId);
+
         if (control != null) control.cancel();
     }
 
@@ -212,15 +237,25 @@ public class AgentWorker {
         Run run = null;
 
         try {
-            if (mapper.claim(runId, System.currentTimeMillis()) != 1) {
+            if (!mapper.claim(runId, System.currentTimeMillis())) {
                 mapper.expire(System.currentTimeMillis());
+
                 return;
             }
+
             events.publish(runId, "run_started");
             run = mapper.run(runId);
+
+            if (run.getScopeDocumentIds() != null) {
+                var ids = new ObjectMapper().readValue(run.getScopeDocumentIds(),
+                        new TypeReference<List<Long>>() { });
+                state.scopeIds = List.copyOf(ids);
+            }
             Run activeRun = run;
+
             state.deadlineMs = run.getDeadlineMs();
             state.checkpoint = () -> check(activeRun, user, state);
+
             AgentReasoningRegistry registry = reasoning.getIfAvailable();
             AgentReasoningState thoughtState = registry == null ? null
                     : new AgentReasoningState(run, registry, state::dependencies, state.checkpoint);
@@ -233,51 +268,97 @@ public class AgentWorker {
 
             check(run, user, state);
 
-            ChatLanguageModel model = modelProvider.getIfAvailable();
+            ChatLanguageModel model;
+            if (run.getModelConfigCiphertext() != null) {
+                if (personalModels == null) throw new AgentFailure("MODEL_UNAVAILABLE");
+                model = personalModels.model(personalModels.credentials(run), false);
+            } else {
+                model = modelProvider.getIfAvailable();
+            }
+
             if (model == null) {
                 log.error("Agent [runId={}] 模型未配置或不可用", runId);
+
                 throw new AgentFailure("MODEL_UNAVAILABLE");
             }
 
             // 新运行刷新一次元数据；模型循环复用已构建的上下文。
             invalidateSpaceCache(run.getSpaceId());
+
             List<ChatMessage> messages = new ArrayList<>();
             String dynamicSystemMessage = buildSystemMessage(run.getSpaceId(), state);
-            messages.add(SystemMessage.from(dynamicSystemMessage));
 
-            history(run, user, state, messages);
-            messages.add(UserMessage.from(run.getQuestion()));
+            UserMessage question = UserMessage.from(run.getQuestion());
+            if (attachments != null && attachments.has(runId)) {
+                if (!(model instanceof OpenAiReasoningChatModel)) throw new AgentFailure("ATTACHMENTS_UNSUPPORTED");
+                question = new AttachmentMessage(run.getQuestion(), attachments.parts(run));
+                dynamicSystemMessage += "\n本次消息包含用户上传附件：文字由后端提取，图片与扫描页由当前模型理解，不调用空间文档工具代替附件读取。"
+                        + "附件不属于空间索引，不为附件编造[C编号]。说明来源时使用附件文件名及页码，不声称文本文件由模型原生解析。";
+            }
+            List<ToolSpecification> specifications = tools.specifications().stream().filter(tool -> state.scopeIds == null || AgentTools.NAMES.contains(tool.name())).toList();
+            UserMemoryService memoryService = memory.getIfAvailable();
+            var memoryView = memoryService == null ? null : memoryService.view(run.getUserId());
+            boolean memoryEnabled = memoryView != null && memoryView.enabled();
+            List<Item> memories = memoryEnabled ? UserMemoryPolicy.newestFirst(memoryView.items()) : List.of();
+            dynamicSystemMessage += memoryEnabled
+                    ? "\n用户已开启长期记忆，但本轮信息由后台异步提取，不能宣称已保存或已删除；用户可在设置中的用户记忆查看和管理。"
+                    : "\n用户未开启长期记忆，不要宣称会跨会话记住新信息；用户可在设置中的用户记忆主动开启。";
+            messages.add(memorySystemMessage(dynamicSystemMessage, memories, question, specifications, run.getMaxInputTokens()));
 
+            int historyPairs = history(run, user, state, messages, question, specifications);
+            messages.add(question);
+
+            InputEstimate inputEstimate = new InputEstimate();
             boolean repaired = false;
             Set<String> callIds = new HashSet<>();
             int round = 1;
 
             while (true) {
                 check(run, user, state);
+                if (round > 1) specifications = tools.specifications().stream().filter(tool -> state.scopeIds == null || AgentTools.NAMES.contains(tool.name())).toList();
+                historyPairs = trimHistoryToBudget(messages, historyPairs, run.getMaxInputTokens(), specifications, inputEstimate);
                 log.info("Agent [runId={}] 开始第 {} 轮模型交互, 当前上下文消息条数={}", runId, round++, messages.size());
-                ModelCall call = budget.startCall(run, AgentBudget.estimate(messages, tools.specifications()));
+
+                ModelCall call = budget.startCall(run, inputEstimate.estimate(messages, specifications));
+
                 events.publish(runId, "model_started");
-                Response<AiMessage> response = callModel(run, user, state, model, messages, call, thoughtState);
+
+                Response<AiMessage> response = callModel(run, user, state, model, messages, specifications, call, thoughtState);
+
                 if (response == null || response.content() == null)
                     throw new AgentFailure("MODEL_EMPTY_RESPONSE");
+
                 if (!budget.recordUsage(call, response.tokenUsage()))
                     throw new AgentFailure("MODEL_USAGE_INVALID");
+
                 var usage = response.tokenUsage();
-                log.info("Agent [runId={}] 模型返回完成: inputTokens={}, outputTokens={}, totalTokens={}",
+                if (usage != null) inputEstimate.observe(call.getEstimatedInput(), usage.inputTokenCount());
+
+                log.info("Agent [runId={}] 模型返回完成: inputTokens={}, outputTokens={}, totalTokens={}, finishReason={}",
                         runId,
                         usage != null ? usage.inputTokenCount() : null,
                         usage != null ? usage.outputTokenCount() : null,
-                        usage != null ? usage.totalTokenCount() : null);
+                        usage != null ? usage.totalTokenCount() : null,
+                        response.finishReason());
                 check(run, user, state);
 
+                // 截断不是 JSON 格式错误，不能执行不完整的工具请求或发布部分回答。
+                if (response.finishReason() == FinishReason.LENGTH) {
+                    throw new AgentFailure("MODEL_OUTPUT_TRUNCATED");
+                }
+
                 AiMessage reply = response.content();
+
                 if (reply.hasToolExecutionRequests()) {
                     log.info("Agent [runId={}] 模型请求调用 {} 个工具", runId, reply.toolExecutionRequests().size());
                     messages.add(reply);
+
                     for (var request : reply.toolExecutionRequests()) {
                         check(run, user, state);
-                        if (mapper.nextTool(runId, System.currentTimeMillis()) != 1)
+
+                        if (!mapper.nextTool(runId, System.currentTimeMillis()))
                             throw new AgentFailure("TOOL_CALL_LIMIT");
+
                         long start = System.nanoTime();
                         Trace trace = Trace.builder()
                                 .runId(runId)
@@ -289,57 +370,76 @@ public class AgentWorker {
                                 .resultSummary("records=0")
                                 .status("RUNNING")
                                 .build();
+
                         mapper.insertTrace(trace);
                         events.publish(runId, "tool_started");
                         log.info("Agent [runId={}] 开始调用工具: name={}, args={}", runId, request.name(), request.arguments());
+
                         try {
                             if (request.id() == null
                                     || request.id().isBlank()
                                     || request.id().length() > 128
                                     || !callIds.add(request.id()))
                                 throw new AgentFailure("INVALID_TOOL_CALL_ID");
+
                             AgentTools.Result result = tools.execute(run.getSpaceId(), user, request, state);
+
                             check(run, user, state);
                             messages.add(ToolExecutionResultMessage.from(request, json.write(result.data())));
+
                             trace.setResultSummary("records=" + result.count());
                             trace.setStatus("SUCCEEDED");
+
                             log.info("Agent [runId={}] 工具调用成功: name={}, 返回条数={}", runId, request.name(), result.count());
                         } catch (AgentFailure e) {
                             trace.setErrorCode(e.code());
                             log.warn("Agent [runId={}] 工具调用业务失败: name={}, code={}", runId, request.name(), e.code());
+
                             throw e;
                         } catch (BusinessException e) {
                             trace.setErrorCode("ACCESS_OR_RESOURCE_INVALID");
                             log.warn("Agent [runId={}] 工具调用权限异常: name={}, msg={}", runId, request.name(), e.getMessage());
+
                             throw e;
                         } finally {
                             trace.setDurationMs(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+
                             if ("RUNNING".equals(trace.getStatus())) trace.setStatus("FAILED");
+
                             mapper.updateTrace(trace);
                             events.publish(runId, "tool_finished");
                         }
                     }
+
                     continue;
                 }
 
                 FinalAnswer answer;
+
                 log.info("Agent [runId={}] 模型返回文本回答: {}", runId, reply.text());
+
                 try {
                     answer = finalAnswer(reply.text(), state);
                 } catch (AgentFailure e) {
                     log.warn("Agent [runId={}] 回答格式或引用校验未通过 (code={}), 触发二次修复提示", runId, e.code());
+
                     if (repaired) throw new AgentFailure("ANSWER_UNVERIFIABLE");
+
                     repaired = true;
                     messages.add(reply);
+
                     String repairPrompt = String.format(
                             "请注意：你的上一条回复未通过格式校验。请针对用户的原始问题【%s】直接给出最终回答，严禁回复“收到”、“明白”等格式确认套话，严禁直接输出裸露的 Markdown 文本！"
                             + "无论是否引用文档，整体必须且只能输出合法的 JSON 对象：{\"answer\":\"正文内容\",\"citations\":[]}。"
                             + "本轮未读取内部正文时，通用常识、问候或澄清可使用空 citations: []，不要为修正格式而检索。"
                             + "本轮已读取内部正文时，必须使用至少一个实际返回的来源编号，正文 [C编号] 与 citations 保持一致，不得编造。",
                             run.getQuestion().replace("\"", "\\\""));
+
                     messages.add(UserMessage.from(repairPrompt));
+
                     continue;
                 }
+
                 check(run, user, state);
                 tools.citations(run.getSpaceId(), user, answer.sources());
                 log.info("Agent [runId={}] 格式校验成功，发布回答 (SUCCEEDED), 引用数量={}", runId, answer.sources().size());
@@ -350,6 +450,7 @@ public class AgentWorker {
                         answer.text(),
                         state.dependencies(),
                         answer.sources());
+
                 return;
             }
         } catch (Exception e) {
@@ -358,7 +459,9 @@ public class AgentWorker {
                             : e instanceof BusinessException
                                     ? "ACCESS_REVOKED"
                                     : "EXECUTION_FAILED";
+
             log.error("Agent [runId={}] 执行终止: code={}, error={}", runId, code, e.getMessage(), e);
+
             try {
                 if (run != null
                         && Set.of(
@@ -383,11 +486,13 @@ public class AgentWorker {
                         code = "ACCESS_REVOKED";
                     }
                 }
+
                 if (run != null && run.getDeadlineMs() <= System.currentTimeMillis())
                     code = "RUN_TIMEOUT";
-                if (mapper.endActive(
-                                runId, "RUN_TIMEOUT".equals(code) ? "TIMED_OUT" : "FAILED", code)
-                        == 1) events.publish(runId, "run_failed");
+
+                if (mapper.endActive(runId, "RUN_TIMEOUT".equals(code) ? "TIMED_OUT" : "FAILED", code)) {
+                    events.publish(runId, "run_failed");
+                }
             } catch (RuntimeException unavailable) {
                 log.warn(
                         "Agent 运行 {} 无法写入终态，等待超时扫描/重启恢复: {}",
@@ -396,6 +501,7 @@ public class AgentWorker {
             }
         }
     }
+
     /**
      * 构建基于模版的系统提示词
      * @param spaceId 空间ID
@@ -405,6 +511,7 @@ public class AgentWorker {
     String buildSystemMessage(Long spaceId, AgentTools.State state) {
         String timeContext = buildTimeContext();
         String spaceContext = buildSpaceContext(spaceId, state);
+
         return String.format(SYSTEM_TEMPLATE, timeContext, spaceContext);
     }
 
@@ -415,6 +522,7 @@ public class AgentWorker {
     String buildTimeContext() {
         LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"));
         String dayOfWeek = now.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.CHINESE);
+
         return String.format(
                 "- 当前系统时间: %s (%s)\n"
                 + "- 时间基准说明: 当用户提到“今天”、“昨天”、“本周”、“最近”等相对时间概念时，统一以此时间为基准推算与筛选。",
@@ -433,18 +541,17 @@ public class AgentWorker {
         String description = space != null && space.getDescription() != null && !space.getDescription().isBlank()
                 ? space.getDescription() : "暂无描述";
 
-        List<Document> docs = documentMapper.selectList(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Document>()
-                        .eq(Document::getSpaceId, spaceId)
-                        .eq(Document::getDeleted, 0)
-                        .eq(Document::getParseStatus, "READY")
-                        .select(Document::getId, Document::getName, Document::getParseVersion,
+        List<Document> docs = lambdaQueryChain(documentMapper)
+                .eq(Document::getSpaceId, spaceId)
+                .eq(Document::getDeleted, 0)
+                .eq(Document::getParseStatus, "READY")
+                .select(Document::getId, Document::getName, Document::getParseVersion,
                                 Document::getParseStatus, Document::getUpdatedAt)
                         .orderByDesc(Document::getUpdatedAt)
-                        .last("LIMIT 15")
-        );
+                        .last("LIMIT 15").list();
 
         List<CachedDocMeta> docMetas = new ArrayList<>();
+
         if (docs != null) {
             for (Document d : docs) {
                 docMetas.add(new CachedDocMeta(
@@ -456,6 +563,7 @@ public class AgentWorker {
                 ));
             }
         }
+
         return new CachedSpaceMeta(spaceId, name, description, Collections.unmodifiableList(docMetas));
     }
 
@@ -467,24 +575,45 @@ public class AgentWorker {
      */
     String buildSpaceContext(Long spaceId, AgentTools.State state) {
         CachedSpaceMeta meta = getCachedSpaceMeta(spaceId);
+        if (state.scopeIds != null) {
+            var docs = new ArrayList<CachedDocMeta>();
+            for (Long id : state.scopeIds) {
+                Document d = documentMapper.selectById(id);
+                if (d == null || !spaceId.equals(d.getSpaceId())) throw new AgentFailure("SOURCE_CHANGED");
+                docs.add(new CachedDocMeta(d.getId(), d.getName(), d.getParseVersion(), d.getParseStatus().name(), d.getUpdatedAt()));
+            }
+            meta = new CachedSpaceMeta(spaceId, meta.name(), meta.description(), docs);
+        }
         StringBuilder sb = new StringBuilder();
+
         sb.append("- 空间 ID: ").append(spaceId).append("\n");
         sb.append("- 空间名称: ").append(meta.name()).append("\n");
         sb.append("- 空间描述: ").append(meta.description()).append("\n");
-        sb.append("- 相关就绪文档清单:\n");
+        if (state.scopeIds != null) {
+            sb.append("\n### 本次问答范围（执行约束，不是空间属性）\n");
+            sb.append("只允许检索下列文档；范围内证据不足时说明未找到，不扩大检索范围。\n");
+            sb.append("此约束不代表空间名称或描述，也不是文档正文，不要作为资料内容复述。\n");
+            sb.append("- 本次选定文档清单：\n");
+        } else {
+            sb.append("- 相关就绪文档清单:\n");
+        }
+
         if (meta.documents().isEmpty()) {
-            sb.append("  (当前空间暂未上传已就绪文档)");
+            sb.append(state.scopeIds == null ? "  (当前空间暂未上传已就绪文档)" : "  (本次选定范围内没有文档)");
         } else {
             for (int i = 0; i < meta.documents().size(); i++) {
                 CachedDocMeta d = meta.documents().get(i);
+
                 state.depend(new Dependency(d.id(), d.parseVersion(), d.parseStatus(), d.name(), d.updatedAt()));
                 sb.append("  ").append(i + 1).append(". [文档ID: ").append(d.id())
                         .append("] ").append(d.name());
+
                 if (i < meta.documents().size() - 1) {
                     sb.append("\n");
                 }
             }
         }
+
         return sb.toString();
     }
 
@@ -492,10 +621,6 @@ public class AgentWorker {
         if (spaceId != null) {
             spaceMetaCache.invalidate(spaceId);
         }
-    }
-
-    public void clearAllSpaceCache() {
-        spaceMetaCache.invalidateAll();
     }
 
     /**
@@ -514,22 +639,28 @@ public class AgentWorker {
             AgentTools.State state,
             ChatLanguageModel model,
             List<ChatMessage> messages,
+            List<ToolSpecification> specifications,
             ModelCall call,
             AgentReasoningState thoughtState) {
         Future<Response<AiMessage>> future;
         List<ChatMessage> input = List.copyOf(messages);
         RequestControl control = new RequestControl();
+
         activeModelRequests.put(run.getId(), control);
+
         try {
             future = modelCalls.submit(() -> {
                 executingModels.add(run.getId());
+
                 try {
                     check(run, user, state);
+
                     if (model instanceof OpenAiReasoningChatModel streaming) {
-                        return streaming.generate(input, tools.specifications(),
+                        return streaming.generate(input, specifications,
                                 thoughtState == null ? null : thoughtState.beginCall(), control);
                     }
-                    return model.generate(input, tools.specifications());
+
+                    return model.generate(input, specifications);
                 } finally {
                     executingModels.remove(run.getId());
                 }
@@ -538,19 +669,27 @@ public class AgentWorker {
             activeModelRequests.remove(run.getId(), control);
             control.cancel();
             budget.recordUsage(call, new TokenUsage(0, 0));
+
             throw new AgentFailure("MODEL_CAPACITY_EXCEEDED");
         }
+
         try {
             while (true) {
                 long remaining = run.getDeadlineMs() - System.currentTimeMillis();
+
                 if (remaining <= 0) throw new TimeoutException();
+
                 try {
                     Response<AiMessage> response = future.get(Math.min(remaining, 250), TimeUnit.MILLISECONDS);
+
                     check(run, user, state);
+
                     if (thoughtState != null) thoughtState.flush();
+
                     return response;
                 } catch (TimeoutException waiting) {
                     check(run, user, state);
+
                     if (thoughtState != null) thoughtState.flush();
                 }
             }
@@ -558,23 +697,34 @@ public class AgentWorker {
             throw new AgentFailure("RUN_TIMEOUT");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+
             throw new AgentFailure("PROCESS_INTERRUPTED");
         } catch (ExecutionException e) {
             // 适配器不暴露原始异常；重新检查运行，保留取消、超时和失权语义。
             check(run, user, state);
+
             if (e.getCause() instanceof AgentFailure failure) throw failure;
+
             if (e.getCause() instanceof BusinessException) throw new AgentFailure("ACCESS_REVOKED");
+
             if (e.getCause() instanceof OpenAiReasoningChatModel.CallFailure failure) {
                 log.warn("Agent 运行 {} 模型请求失败: category={}, httpStatus={}",
                         run.getId(), failure.category(), failure.httpStatus());
+                if (messages.stream().anyMatch(AttachmentMessage.class::isInstance)
+                        && failure.httpStatus() != null && (failure.httpStatus() == 400 || failure.httpStatus() == 415 || failure.httpStatus() == 422)) {
+                    throw new AgentFailure("ATTACHMENT_MODEL_REJECTED");
+                }
             } else {
                 log.warn("Agent 运行 {} 模型请求失败: category=INTERNAL, exceptionType={}", run.getId(),
                         e.getCause() == null ? "unknown" : e.getCause().getClass().getSimpleName());
             }
+
             throw new AgentFailure("MODEL_FAILED");
         } finally {
             control.cancel();
+
             if (!future.isDone()) future.cancel(true);
+
             activeModelRequests.remove(run.getId(), control);
         }
     }
@@ -586,11 +736,19 @@ public class AgentWorker {
      * @param state 状态
      */
     private void check(Run run, LoginUser user, AgentTools.State state) {
+        if (state.scopeIds != null) {
+            if (scopes == null || !scopes.valid(run.getSpaceId(), run.getScopeDocumentId(), run.getScopeFolderId(), state.scopeIds)) {
+                throw new AgentFailure("SOURCE_CHANGED");
+            }
+        }
         Run current = mapper.run(run.getId());
+
         if (current == null || !"RUNNING".equals(current.getStatus()))
             throw new AgentFailure("RUN_STOPPED");
+
         if (current.getDeadlineMs() <= System.currentTimeMillis())
             throw new AgentFailure("RUN_TIMEOUT");
+
         if (tools.currentDependencies(run.getSpaceId(), user, state.dependencies()))
             throw new AgentFailure("SOURCE_CHANGED");
     }
@@ -602,68 +760,125 @@ public class AgentWorker {
      * @param state 状态
      * @param messages 消息列表
      */
-    private void history(Run run, LoginUser user, AgentTools.State state, List<ChatMessage> messages) {
+    private int history(Run run, LoginUser user, AgentTools.State state, List<ChatMessage> messages,
+                        UserMessage question, List<ToolSpecification> specifications) {
+        int limit = run.getMaxInputTokens();
+        List<ChatMessage> fixed = new ArrayList<>(messages);
+        fixed.add(question);
+        long cost = AgentBudget.estimate(fixed, specifications);
+        if (cost > limit) throw new AgentFailure("CONTEXT_LIMIT");
+        if (cost == limit || state.scopeIds != null || question instanceof AttachmentMessage) return 0;
+
         List<List<ChatMessage>> selected = new ArrayList<>();
-        List<ChatMessage> estimated = new ArrayList<>();
-        int historyBudget = Math.min(Math.max(0, properties.getHistoryMaxInputTokens()), run.getMaxInputTokens() / 3);
-        int turns = Math.max(0, properties.getHistoryTurns());
-        if (turns == 0 || historyBudget == 0) return;
-        for (Message message : mapper.history(run.getSessionId(), turns)) {
-            // 查询历史之后运行可能被并发删除，只读取一次并保留问题快照。
-            Run previous = mapper.run(message.getRunId());
-            if (previous == null || previous.getQuestion() == null || message.getBody() == null) continue;
-            List<Dependency> dependencies = json.dependencies(message.getDependencies());
-            if (dependencies.size() > 64 || tools.currentDependencies(run.getSpaceId(), user, dependencies)) continue;
-            List<ChatMessage> turn = List.of(UserMessage.from(previous.getQuestion()),
-                    AiMessage.from(REFERENCE.matcher(message.getBody()).replaceAll("")));
-            estimated.addAll(turn);
-            if (AgentBudget.estimate(estimated, List.of()) > historyBudget) break;
-            selected.add(turn);
-            for (Dependency dependency : dependencies) state.depend(dependency);
+        long beforeId = Long.MAX_VALUE;
+        int pageSize = 50;
+        historyPages:
+        while (true) {
+            state.checkpoint.run();
+            List<Message> page = mapper.history(run.getSessionId(), beforeId, pageSize);
+            if (page.isEmpty()) break;
+
+            for (Message message : page) {
+                // 查询历史之后运行可能被并发删除，只读取一次并保留问题快照。
+                Run previous = mapper.run(message.getRunId());
+                if (previous == null || previous.getScopeDocumentIds() != null || previous.getQuestion() == null || message.getBody() == null) continue;
+
+                if (attachments != null && attachments.has(message.getRunId())) continue;
+                List<Dependency> dependencies = json.dependencies(message.getDependencies());
+                if (dependencies.size() > 64 || tools.currentDependencies(run.getSpaceId(), user, dependencies)) continue;
+
+                List<ChatMessage> turn = List.of(UserMessage.from(previous.getQuestion()),
+                        AiMessage.from(json.write(Map.of(
+                                "answer", REFERENCE.matcher(message.getBody()).replaceAll(""),
+                                "citations", List.of()))));
+                long turnCost = (long) AgentBudget.estimateMessage(turn.get(0)) + AgentBudget.estimateMessage(turn.get(1));
+                if (cost + turnCost > limit) break historyPages;
+
+                Set<Long> dependencyIds = new HashSet<>(state.dependencies.keySet());
+                for (Dependency dependency : dependencies) dependencyIds.add(dependency.documentId());
+                if (dependencyIds.size() > AgentTools.State.MAX_DEPENDENCIES) break historyPages;
+
+                selected.add(turn);
+                cost += turnCost;
+                for (Dependency dependency : dependencies) state.depend(dependency);
+            }
+
+            if (page.size() < pageSize) break;
+            beforeId = page.get(page.size() - 1).getId();
         }
+
         Collections.reverse(selected);
         for (List<ChatMessage> turn : selected) messages.addAll(turn);
+        return selected.size();
+    }
+
+    /** 记忆可省略，仅在可用输入容量不足时完整移除低优先级条目。 */
+    static SystemMessage memorySystemMessage(String base, List<Item> memories, UserMessage question,
+                                            List<ToolSpecification> specifications, int maxInput) {
+
+        List<Item> selected = new ArrayList<>(memories);
+        while (true) {
+            SystemMessage system = SystemMessage.from(base + UserMemoryPolicy.context(selected));
+            if (AgentBudget.estimate(List.of(system, question), specifications) <= maxInput || selected.isEmpty()) {
+                return system;
+            }
+            selected.remove(selected.size() - 1);
+        }
+
+    }
+
+    /** 只移除最旧的完整历史对，不拆开本轮问题、工具请求和结果。 */
+    private int trimHistoryToBudget(List<ChatMessage> messages, int historyPairs, int maxInput,
+                                    List<ToolSpecification> specifications, InputEstimate inputEstimate) {
+        int cost = AgentBudget.estimate(messages, specifications);
+        int removed = 0;
+        while (inputEstimate.adjusted(cost) > maxInput) {
+            if (removed == historyPairs) throw new AgentFailure("CONTEXT_LIMIT");
+            int index = 1 + removed * 2;
+            cost -= AgentBudget.estimateMessage(messages.get(index)) + AgentBudget.estimateMessage(messages.get(index + 1));
+            removed++;
+        }
+        if (removed > 0) messages.subList(1, 1 + removed * 2).clear();
+        return historyPairs - removed;
     }
 
     private record FinalAnswer(String text, List<Source> sources) {}
 
     /**
-     * 清理并提取大模型返回的 JSON 内容，具备抗错性：
-     * 1. 自动剥离 Markdown ``` 或 ```json 代码块
-     * 2. 使用正则表达式提取第一个 { 到最后一个 } 之间的有效 JSON 文本，避免前后附带问候、思维链或说明性文字导致解析失败
+     * 仅提取对象外的说明或围栏，不处理 answer 字符串内的 Markdown。
      * @param text 原始输出文本
-     * @return 提取出的 JSON 字符串
+     * @return 待校验的 JSON，格式错误或多个对象仍由解析器拒绝
      */
     public static String cleanAnswerJson(String text) {
         if (text == null) return "";
-        String s = text.trim();
-        if (s.contains("```")) {
-            int firstFence = s.indexOf("```");
-            int firstNewline = s.indexOf('\n', firstFence);
-            int lastFence = s.lastIndexOf("```");
-            if (firstFence != -1 && lastFence > firstFence) {
-                int contentStart = (firstNewline != -1 && firstNewline < lastFence) ? firstNewline + 1 : firstFence + 3;
-                String inner = s.substring(contentStart, lastFence).trim();
-                if (!inner.isEmpty()) {
-                    s = inner;
-                }
-            }
-        }
-        var matcher = JSON_EXTRACT_PATTERN.matcher(s);
-        if (matcher.find()) {
-            return matcher.group().trim();
-        }
-        int firstBrace = s.indexOf('{');
-        int lastBrace = s.lastIndexOf('}');
-        if (firstBrace != -1 && lastBrace != -1 && lastBrace >= firstBrace) {
-            return s.substring(firstBrace, lastBrace + 1).trim();
-        }
-        return s;
+
+        String value = text.trim();
+        // 已是 JSON 开头时保留全文，不能吞掉截断内容或额外的 JSON 值。
+        if (value.startsWith("{") || value.startsWith("[") || value.length() > 16000) return value;
+
+        int start = value.indexOf('{');
+        int end = value.lastIndexOf('}');
+        if (start < 0 || end < start) return value;
+
+        // 包在围栏或说明中的数组也不是合法回答对象。
+        if (value.substring(0, start).contains("[") || value.substring(end + 1).contains("]")) return value;
+
+        return value.substring(start, end + 1);
     }
 
     private FinalAnswer finalAnswer(String text, AgentTools.State state) {
-        String candidate = cleanAnswerJson(text);
-        JsonNode node = json.object(candidate, Set.of("answer", "citations"));
+        JsonNode node;
+        try {
+            node = json.object(text, Set.of("answer", "citations"));
+        } catch (AgentFailure error) {
+            // 优先解析原文；只对语法失败尝试剥离外层包装，不放宽字段或引用校验。
+            if (!"INVALID_JSON".equals(error.code()) || text == null || text.length() > 16000) throw error;
+
+            String candidate = cleanAnswerJson(text);
+            if (candidate.equals(text.trim())) throw error;
+            node = json.object(candidate, Set.of("answer", "citations"));
+        }
+
         if (!node.path("answer").isTextual()
                 || node.path("answer").asText().isBlank()
                 || node.path("answer").asText().length() > 8000
@@ -671,11 +886,13 @@ public class AgentWorker {
                 || node.path("citations").size() > 24) throw new AgentFailure("INVALID_ANSWER");
 
         String answerText = node.path("answer").asText();
+
         if (answerText.matches("(?s)^(收到|好的|明白)[，,。\\s].*?(遵守|输出规范|JSON|citations|代码块).*")) {
             throw new AgentFailure("INVALID_ANSWER");
         }
 
         Set<String> declared = new LinkedHashSet<>();
+
         for (JsonNode id : node.path("citations")) {
             if (!id.isTextual() || !declared.add(id.asText()))
                 throw new AgentFailure("INVALID_CITATION");
@@ -683,19 +900,23 @@ public class AgentWorker {
 
         Set<String> inline = new HashSet<>();
         var matcher = REFERENCE.matcher(answerText);
+
         while (matcher.find()) inline.add(matcher.group(1));
+
         // 已读取内部正文时不能静默丢弃所有来源；零正文的问候/澄清仍允许空引用。
         if (!inline.equals(declared) || (!state.sources().isEmpty() && declared.isEmpty())) {
             throw new AgentFailure("INVALID_CITATION");
         }
 
         List<Source> sources = new ArrayList<>();
+
         for (String id : declared)
             sources.add(
                     state.sources().stream()
                             .filter(source -> source.id().equals(id))
                             .findFirst()
                             .orElseThrow(() -> new AgentFailure("INVALID_CITATION")));
+
         return new FinalAnswer(answerText, sources);
     }
 }

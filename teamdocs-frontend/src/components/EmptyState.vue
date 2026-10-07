@@ -51,6 +51,7 @@ defineProps({
 
 @keyframes ring-breathe {
   0%, 100% { transform: scale(1); opacity: 1; }
+
   50% { transform: scale(1.18); opacity: 0.6; }
 }
 

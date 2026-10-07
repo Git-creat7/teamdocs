@@ -16,15 +16,13 @@ import asia.creat.security.LoginUser;
 import asia.creat.service.ChunkIndex;
 import asia.creat.vo.ChunkHitVO;
 import asia.creat.vo.ChunkIndexHit;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
-
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -45,13 +43,14 @@ class HybridChunkSearchTest {
     /** 准备有权限的空间和按当前版本复核的假数据库。 */
     @BeforeEach
     void setUp() {
-        search = new HybridChunkSearch(chunks, keywords, embeddings, vectors, reranker, spaces, members);
+        search = new HybridChunkSearch(null, chunks, keywords, embeddings, vectors, reranker, spaces, members);
         when(spaces.selectById(1L)).thenReturn(new Space());
         when(members.selectOne(any())).thenReturn(new SpaceMember());
         when(chunks.searchChunks(eq(1L), anyString(), eq(20))).thenAnswer(call -> lexical);
         when(chunks.searchChunksInDocument(eq(1L), anyLong(), anyString(), eq(20))).thenAnswer(call -> lexical);
         when(chunks.findReadableChunk(anyLong(), anyLong(), anyLong(), anyInt())).thenAnswer(call -> {
             ChunkHitVO hit = rows.get(call.getArgument(2));
+
             return hit != null && hit.getSpaceId().equals(call.getArgument(0))
                     && hit.getDocumentId().equals(call.getArgument(1))
                     && hit.getParseVersion().equals(call.getArgument(3)) ? hit : null;
@@ -65,11 +64,15 @@ class HybridChunkSearchTest {
         when(reranker.enabled()).thenReturn(true);
         when(reranker.rerank(anyString(), anyList(), eq(20)))
                 .thenReturn(IntStream.iterate(19, i -> i - 1).limit(20).boxed().toList());
+
         List<Long> dependencies = new ArrayList<>();
+
         try (var scope = RetrievalContext.open(Long.MAX_VALUE, () -> { }, h -> dependencies.add(h.getChunkId()))) {
             List<ChunkHitVO> result = search.search(1L, null, "回滚流程", user, 6);
+
             assertEquals(List.of(20L, 19L, 18L, 17L, 16L, 15L), result.stream().map(ChunkHitVO::getChunkId).toList());
         }
+
         assertEquals(20, dependencies.size());
         verify(chunks).searchChunks(1L, "\"回滚流程\"", 20);
     }
@@ -80,13 +83,18 @@ class HybridChunkSearchTest {
         ChunkHitVO first = hit(1);
         ChunkHitVO shared = hit(2);
         ChunkHitVO third = hit(3);
+
         lexical = List.of(first, shared);
         when(embeddings.enabled()).thenReturn(true);
         when(vectors.enabled()).thenReturn(true);
+
         String query = "如何撤销发布 + 回滚";
+
         when(embeddings.embed(List.of(query))).thenReturn(List.of(List.of(1f, 0f)));
         when(vectors.search(eq(1L), isNull(), anyList(), eq(20))).thenReturn(List.of(candidate(shared), candidate(third)));
+
         var result = search.search(1L, null, query, user, 6);
+
         assertEquals(2L, result.get(0).getChunkId());
         assertEquals(3, result.size());
         verify(embeddings).embed(List.of(query));
@@ -96,10 +104,12 @@ class HybridChunkSearchTest {
     @Test
     void singleCharacterCanUseSemanticSearch() {
         ChunkHitVO found = hit(3);
+
         when(embeddings.enabled()).thenReturn(true);
         when(vectors.enabled()).thenReturn(true);
         when(embeddings.embed(List.of("云"))).thenReturn(List.of(List.of(1f, 0f)));
         when(vectors.search(eq(1L), isNull(), anyList(), eq(20))).thenReturn(List.of(candidate(found)));
+
         assertEquals(1, search.search(1L, null, "云", user, 6).size());
         verify(chunks, never()).searchChunks(anyLong(), anyString(), anyInt());
     }
@@ -111,6 +121,7 @@ class HybridChunkSearchTest {
         when(embeddings.enabled()).thenReturn(true);
         when(vectors.enabled()).thenReturn(true);
         when(embeddings.embed(anyList())).thenThrow(new RetrievalException("测试超时"));
+
         assertEquals(1L, search.search(1L, null, "备份", user, 6).get(0).getChunkId());
         verify(vectors, never()).search(anyLong(), any(), anyList(), anyInt());
     }
@@ -121,10 +132,13 @@ class HybridChunkSearchTest {
         lexical = List.of(hit(1), hit(2));
         when(reranker.enabled()).thenReturn(true);
         when(reranker.rerank(anyString(), anyList(), anyInt())).thenThrow(new RetrievalException("测试限流"));
+
         List<Long> dependencies = new ArrayList<>();
+
         try (var scope = RetrievalContext.open(Long.MAX_VALUE, () -> { }, h -> dependencies.add(h.getChunkId()))) {
             assertEquals(2, search.search(1L, null, "备份", user, 6).size());
         }
+
         assertEquals(List.of(1L, 2L), dependencies);
     }
 
@@ -139,6 +153,7 @@ class HybridChunkSearchTest {
                 candidate(good), candidate(other), new ChunkIndexHit(1L, 101L, 99, null)));
         when(reranker.enabled()).thenReturn(true);
         when(reranker.rerank("备份", List.of("正文1"), 1)).thenReturn(List.of(0));
+
         assertEquals(1, search.search(1L, 101L, "备份", user, 6).size());
         verify(reranker).rerank("备份", List.of("正文1"), 1);
     }
@@ -152,9 +167,11 @@ class HybridChunkSearchTest {
         when(reranker.enabled()).thenReturn(true);
         when(embeddings.embed(anyList())).thenAnswer(call -> {
             when(members.selectOne(any())).thenReturn(null);
+
             return List.of(List.of(1f, 0f));
         });
         when(vectors.search(eq(1L), isNull(), anyList(), eq(20))).thenReturn(List.of());
+
         assertThrows(BusinessException.class, () -> search.search(1L, null, "备份", user, 6));
         verify(reranker, never()).rerank(anyString(), anyList(), anyInt());
     }
@@ -163,10 +180,12 @@ class HybridChunkSearchTest {
     @Test
     void stoppedRunDoesNotFallBackIntoMoreRequests() {
         IllegalStateException cancelled = new IllegalStateException("已取消");
+
         try (var scope = RetrievalContext.open(Long.MAX_VALUE, () -> { throw cancelled; }, hit -> { })) {
             assertSame(cancelled, assertThrows(IllegalStateException.class,
                     () -> search.search(1L, null, "备份", user, 6)));
         }
+
         verifyNoInteractions(embeddings, vectors, reranker);
     }
 
@@ -177,8 +196,10 @@ class HybridChunkSearchTest {
         when(reranker.enabled()).thenReturn(true);
         when(reranker.rerank(anyString(), anyList(), eq(2))).thenAnswer(call -> {
             rows.remove(1L);
+
             return List.of(0, 1);
         });
+
         assertEquals(List.of(2L), search.search(1L, null, "备份", user, 6).stream().map(ChunkHitVO::getChunkId).toList());
     }
 
@@ -191,7 +212,9 @@ class HybridChunkSearchTest {
         hit.setParseVersion(1);
         hit.setExcerpt("正文" + id);
         hit.setDocumentName("测试资料");
+
         rows.put((long) id, hit);
+
         return hit;
     }
 

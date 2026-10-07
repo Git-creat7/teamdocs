@@ -17,17 +17,7 @@
             <span>更新于 {{ formatDateTime(doc.updatedAt || doc.createdAt) }}</span>
             <span class="meta-dot">·</span>
             <span :title="parseErrorTitle">{{ parseStatusLabel }}</span>
-            <template v-if="tags.length">
-              <span class="meta-dot">·</span>
-              <span
-                v-for="tagName in tags"
-                :key="tagName"
-                class="hero-tag-chip"
-                :style="tagStyle(tagName)"
-              >
-                {{ tagName }}
-              </span>
-            </template>
+
           </div>
         </div>
         <div class="doc-hero-actions">
@@ -39,10 +29,7 @@
             <el-icon><Pencil /></el-icon>
             重命名
           </el-button>
-          <el-button size="small" class="doc-action-btn" @click="$emit('tags', doc)">
-            <el-icon><Tag /></el-icon>
-            标签
-          </el-button>
+
           <el-button size="small" class="doc-action-btn" @click="$emit('move', doc)">
             <el-icon><FolderInput /></el-icon>
             移动到
@@ -72,6 +59,9 @@
           </div>
         </el-tab-pane>
 
+        <el-tab-pane label="索引管理" name="index">
+          <DocumentIndexPanel v-if="internalTab === 'index'" :key="`${spaceId}:${doc.id}`" :space-id="spaceId" :document-id="doc.id" />
+        </el-tab-pane>
         <el-tab-pane label="评论" name="comments">
           <div class="comments-area" v-if="internalTab === 'comments'">
             <div class="comments-head">
@@ -184,45 +174,52 @@
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Download, FolderInput, MessageSquare, Pencil, Tag, Trash2, UserRound } from 'lucide-vue-next'
+import { ArrowLeft, Download, FolderInput, MessageSquare, Pencil, Trash2, UserRound } from 'lucide-vue-next'
 import { View, FullScreen } from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
 import FileIcon from '@/components/FileIcon.vue'
 import { listCommentsApi, addCommentApi, deleteCommentApi } from '@/api/comment'
 import { reparseDocumentApi } from '@/api/document'
 import { formatBytes, formatDateTime, getFileExt, getFileTypeColor } from '@/utils/format'
-import { tagStyle } from '@/utils/tagColors'
+
+const DocumentIndexPanel = defineAsyncComponent(() => import('@/components/DocumentIndexPanel.vue'))
 
 const DocumentPreview = defineAsyncComponent(() => import('@/components/DocumentPreview.vue'))
 
 const props = defineProps({
   spaceId: { type: [Number, String], required: true },
   doc: { type: Object, required: true },
-  tags: { type: Array, default: () => [] },
   myRole: { type: String, default: '' },
   currentUserId: { type: [Number, String], default: null },
   activeTab: { type: String, default: 'preview' },
   showBackButton: { type: Boolean, default: true }
 })
 
-const emit = defineEmits(['close', 'download', 'rename', 'tags', 'move', 'delete', 'update:activeTab'])
+const emit = defineEmits(['close', 'download', 'rename', 'move', 'delete', 'update:activeTab'])
 
 const localParseStatus = ref(null)
+
 watch(() => [props.spaceId, props.doc?.id, props.doc?.parseStatus], () => {
   localParseStatus.value = null
 })
+
 const parseStatus = computed(() => localParseStatus.value || props.doc?.parseStatus || 'PENDING')
 const parseStatusLabel = computed(() => {
   if (parseStatus.value === 'READY') return `已解析 ${props.doc?.chunkCount || 0} 段`
+
   if (parseStatus.value === 'PARSING') return '解析中'
+
   if (parseStatus.value === 'FAILED') return '解析失败'
+
   if (parseStatus.value === 'SKIPPED') return '未解析'
+
   return '等待解析'
 })
 const parseErrorTitle = computed(() => {
   if (parseStatus.value === 'FAILED' || parseStatus.value === 'SKIPPED') {
     return props.doc?.parseError || ''
   }
+
   return ''
 })
 const canReparse = computed(() => parseStatus.value === 'FAILED' || parseStatus.value === 'SKIPPED')
@@ -230,8 +227,11 @@ const canReparse = computed(() => parseStatus.value === 'FAILED' || parseStatus.
 async function reparse() {
   const spaceId = props.spaceId
   const documentId = props.doc.id
+
   await reparseDocumentApi(spaceId, documentId)
+
   if (props.spaceId !== spaceId || props.doc?.id !== documentId) return
+
   localParseStatus.value = 'PENDING'
   ElMessage.success('已重新加入解析队列')
 }
@@ -240,28 +240,6 @@ const router = useRouter()
 const PAGE_SIZE = 100
 
 const internalTab = ref(props.activeTab)
-
-watch(() => props.activeTab, (val) => {
-  if (val && val !== internalTab.value) {
-    internalTab.value = val
-  }
-}, { immediate: true })
-
-watch(internalTab, (val) => {
-  emit('update:activeTab', val)
-  if (val === 'comments' && comments.value.length === 0 && !loading.value) {
-    loadComments()
-  }
-})
-
-function openPreviewInNewTab() {
-  const href = router.resolve({
-    name: 'DocumentPreview',
-    params: { spaceId: props.spaceId, documentId: props.doc.id }
-  }).href
-  window.open(href, '_blank')
-}
-
 const loading = ref(false)
 const comments = ref([])
 const content = ref('')
@@ -272,10 +250,29 @@ const earliestLoadedPage = ref(1)
 // 草稿管理 (sessionStorage)
 const draftKey = computed(() => `draft_${props.currentUserId}_${props.spaceId}_${props.doc?.id}`)
 
+// 计数只算未删除的评论 (对标图: "评论 8" 是有效评论数)
+const visibleCount = computed(() => comments.value.filter((c) => c.deleted !== 1).length)
+
+watch(() => props.activeTab, (val) => {
+  if (val && val !== internalTab.value) {
+    internalTab.value = val
+  }
+}, { immediate: true })
+
+watch(internalTab, (val) => {
+  emit('update:activeTab', val)
+
+  if (val === 'comments' && comments.value.length === 0 && !loading.value) {
+    loadComments()
+  }
+})
+
 watch(() => props.doc?.id, (id) => {
   if (id) {
     const saved = sessionStorage.getItem(draftKey.value)
+
     content.value = saved || ''
+
     if (internalTab.value === 'comments') {
       loadComments()
     }
@@ -290,13 +287,20 @@ watch(content, (val) => {
   }
 })
 
-function canDelete(comment) {
-  if (props.myRole === 'OWNER' || props.myRole === 'ADMIN') return true
-  return comment.userId === props.currentUserId
+function openPreviewInNewTab() {
+  const href = router.resolve({
+    name: 'DocumentPreview',
+    params: { spaceId: props.spaceId, documentId: props.doc.id }
+  }).href
+
+  window.open(href, '_blank')
 }
 
-// 计数只算未删除的评论 (对标图: "评论 8" 是有效评论数)
-const visibleCount = computed(() => comments.value.filter((c) => c.deleted !== 1).length)
+function canDelete(comment) {
+  if (props.myRole === 'OWNER' || props.myRole === 'ADMIN') return true
+
+  return comment.userId === props.currentUserId
+}
 
 // 点击回复引用定位到原评论：未加载则先往前翻页，再滚动 + 高亮
 async function scrollToComment(commentId) {
@@ -308,6 +312,7 @@ async function scrollToComment(commentId) {
   }
 
   const el = document.querySelector(`[data-comment-id="${commentId}"]`)
+
   if (!el) return
 
   el.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -321,28 +326,37 @@ const AVATAR_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#
 function avatarColor(name) {
   const s = String(name || '')
   let h = 0
+
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+
   return AVATAR_COLORS[h % AVATAR_COLORS.length]
 }
 
 async function loadComments() {
   const reqId = props.doc.id
+
   loading.value = true
   replyTarget.value = null
+
   try {
     const first = await listCommentsApi(props.spaceId, reqId, 1, PAGE_SIZE)
+
     if (props.doc.id !== reqId) return // 请求响应后校验ID
+
     if (first.pages <= 1) {
       comments.value = first.records
       earliestLoadedPage.value = 1
     } else {
       const last = await listCommentsApi(props.spaceId, reqId, first.pages, PAGE_SIZE)
+
       if (props.doc.id !== reqId) return
+
       comments.value = last.records
       earliestLoadedPage.value = first.pages
     }
   } catch (err) {
     if (props.doc.id !== reqId) return
+
     comments.value = []
     earliestLoadedPage.value = 1
   } finally {
@@ -353,10 +367,14 @@ async function loadComments() {
 async function loadEarlier() {
   const reqId = props.doc.id
   const prev = earliestLoadedPage.value - 1
+
   if (prev < 1) return
+
   try {
     const page = await listCommentsApi(props.spaceId, reqId, prev, PAGE_SIZE)
+
     if (props.doc.id !== reqId) return
+
     comments.value = [...page.records, ...comments.value]
     earliestLoadedPage.value = prev
   } catch (err) {
@@ -366,15 +384,21 @@ async function loadEarlier() {
 
 async function handleSubmit() {
   const text = content.value.trim()
+
   if (!text || submitting.value) return
+
   const reqId = props.doc.id
+
   submitting.value = true
+
   try {
     await addCommentApi(props.spaceId, reqId, {
       content: text,
       replyToId: replyTarget.value?.id ?? null
     })
+
     if (props.doc.id !== reqId) return
+
     content.value = ''
     sessionStorage.removeItem(draftKey.value)
     replyTarget.value = null
@@ -487,15 +511,6 @@ function handleDelete(comment) {
   color: var(--app-text-faint);
 }
 
-.hero-tag-chip {
-  font-size: 0.68rem;
-  font-weight: 500;
-  padding: 1px 8px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  white-space: nowrap;
-}
-
 .doc-hero-actions {
   display: flex;
   align-items: center;
@@ -530,6 +545,7 @@ function handleDelete(comment) {
   flex-direction: column;
   padding: 0;
 }
+
 .detail-tabs :deep(.el-tab-pane) {
   flex: 1;
   min-height: 0;
@@ -763,6 +779,7 @@ function handleDelete(comment) {
   .doc-hero { padding: 0.7rem 0.9rem 0.9rem; }
 
   .detail-tabs :deep(.el-tabs__nav-scroll) { padding: 0 12px; }
+
   .preview-wrapper { margin: 8px; }
 
   .doc-hero-main {
@@ -783,6 +800,7 @@ function handleDelete(comment) {
   }
 
   .comments-area { padding: 0.7rem 0.9rem 0.9rem; }
+
   .editor-hint { display: none; }
 }
 </style>

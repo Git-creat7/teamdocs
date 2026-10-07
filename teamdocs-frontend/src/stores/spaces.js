@@ -8,6 +8,7 @@ export const useSpacesStore = defineStore('spaces', () => {
 
   async function refresh() {
     loading.value = true
+
     try {
       spaces.value = await listMySpacesApi()
     } catch (err) {

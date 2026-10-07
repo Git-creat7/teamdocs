@@ -13,6 +13,7 @@ import java.util.function.Supplier;
 /** 每轮独立累计思考，只将已提交快照通知前端。 */
 public final class AgentReasoningState {
     private static final int MAX_CHARS = 32768;
+
     private final Run run;
     private final AgentReasoningRegistry registry;
     private final Supplier<List<Dependency>> dependencies;
@@ -43,15 +44,19 @@ public final class AgentReasoningState {
     public synchronized ReasoningObserver beginCall() {
         String prefix = content.isEmpty() ? "" : content + "\n\n";
         Long previousDuration = durationMs;
+
         return (text, duration, cut) -> receive(prefix, previousDuration, text, duration, cut);
     }
 
     /** 合并当前调用的完整快照，避免把同一分片重复追加。 */
     private synchronized void receive(String prefix, Long previousDuration, String text, Long duration, boolean cut) {
         if (text == null || text.isBlank()) return;
+
         String complete = prefix + text;
         int end = Math.min(MAX_CHARS, complete.length());
+
         if (end < complete.length() && end > 0 && Character.isHighSurrogate(complete.charAt(end - 1))) end--;
+
         content = complete.substring(0, end);
         truncated |= cut || complete.length() > MAX_CHARS;
         durationMs = previousDuration == null || duration == null ? null : previousDuration + duration;
@@ -66,12 +71,17 @@ public final class AgentReasoningState {
     /** 检查状态后保存进度，取消和期限检查仍以事务内运行状态为准。 */
     private void flush(boolean force) {
         if (content.isBlank()) return;
+
         long now = clock.getAsLong();
         ReasoningProgress current = snapshot();
+
         if (current.equals(saved) || (!force && saved != null
                 && now - lastWriteNanos < TimeUnit.MILLISECONDS.toNanos(120))) return;
+
         checkpoint.run();
+
         if (!registry.publish(run, current, dependencies.get())) throw new AgentFailure("RUN_STOPPED");
+
         saved = current;
         lastWriteNanos = now;
     }

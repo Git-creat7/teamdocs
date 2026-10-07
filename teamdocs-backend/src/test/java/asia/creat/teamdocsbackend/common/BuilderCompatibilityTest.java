@@ -6,7 +6,6 @@ import asia.creat.entity.Document;
 import asia.creat.entity.DocumentContent;
 import asia.creat.entity.Folder;
 import asia.creat.entity.OperationLogRecord;
-import asia.creat.entity.Tag;
 import asia.creat.service.impl.ElasticsearchChunkIndex;
 import asia.creat.vo.ChunkReadVO;
 import asia.creat.vo.DocumentParseStatusVO;
@@ -31,7 +30,7 @@ class BuilderCompatibilityTest {
     static Stream<Class<?>> types() {
         return Stream.of(
                 Document.class, DocumentContent.class, OperationLogRecord.class,
-                Comment.class, Folder.class, Tag.class,
+                Comment.class, Folder.class,
                 UserProfileVO.class, DocumentParseStatusVO.class, DocumentPreviewVO.class, ChunkReadVO.class,
                 AgentData.Run.class, AgentData.Message.class, AgentData.Trace.class, AgentData.ModelCall.class,
                 ElasticsearchChunkIndex.IndexedChunk.class
@@ -54,14 +53,18 @@ class BuilderCompatibilityTest {
     void builderPreservesEveryFieldAndJacksonRoundTrips(Class<?> type) throws Exception {
         Object mutable = type.getConstructor().newInstance();
         Object builder = type.getMethod("builder").invoke(null);
+
         for (Field field : type.getDeclaredFields()) {
             if (Modifier.isStatic(field.getModifiers()) || field.isSynthetic()) continue;
+
             Object value = sample(field.getType(), field.getName());
             String name = field.getName();
             String setter = "set" + Character.toUpperCase(name.charAt(0)) + name.substring(1);
+
             type.getMethod(setter, field.getType()).invoke(mutable, value);
             builder.getClass().getMethod(name, field.getType()).invoke(builder, value);
         }
+
         Object built = builder.getClass().getMethod("build").invoke(builder);
 
         assertEquals(mutable, built);
@@ -71,12 +74,19 @@ class BuilderCompatibilityTest {
 
     private static Object sample(Class<?> type, String name) {
         if (type == String.class) return "sample-" + name;
+
         if (type == Long.class || type == long.class) return 42L;
+
         if (type == Integer.class || type == int.class) return 1;
+
         if (type == Boolean.class || type == boolean.class) return true;
+
         if (type == LocalDateTime.class) return LocalDateTime.of(2026, 10, 4, 12, 30);
+
         if (type == List.class) return List.of();
+
         if (type.isEnum()) return type.getEnumConstants()[0];
+
         throw new AssertionError("Missing sample value for " + type.getName());
     }
 }

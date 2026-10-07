@@ -4,6 +4,12 @@ import asia.creat.mapper.DocumentMapper;
 import asia.creat.service.impl.RecentDocumentServiceImpl;
 import asia.creat.utils.CacheClient;
 import asia.creat.vo.RecentDocumentVO;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,12 +17,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.DefaultTypedTuple;
 import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
-
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
-
 import static asia.creat.utils.RedisConstants.MAX_RECENT_DOCUMENTS;
 import static asia.creat.utils.RedisConstants.RECENT_DOCUMENT_PREFIX;
 import static asia.creat.utils.RedisConstants.RECENT_DOCUMENT_TTL;
@@ -98,6 +98,7 @@ class RecentDocumentServiceImplTest {
         RecentDocumentVO doc10 = new RecentDocumentVO();
         doc10.setDocumentId(10L);
         doc10.setName("old");
+
         RecentDocumentVO doc20 = new RecentDocumentVO();
         doc20.setDocumentId(20L);
         doc20.setName("new");
@@ -137,7 +138,7 @@ class RecentDocumentServiceImplTest {
         verify(cacheClient).removeZSetMembers(KEY, "10");
     }
 
-    private long toEpochMilli(java.time.LocalDateTime time) {
-        return time.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+    private long toEpochMilli(LocalDateTime time) {
+        return time.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
     }
 }

@@ -47,6 +47,7 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
                 .setRequestConfigCallback(config -> config.setConnectTimeout(1000)
                         .setConnectionRequestTimeout(1000).setSocketTimeout(2000))
                 .build();
+
         transport = new RestClientTransport(rest, new JacksonJsonpMapper());
         client = new ElasticsearchClient(transport);
     }
@@ -76,9 +77,11 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
                             .query(query -> query.bool(bool -> {
                                 bool.must(must -> must.match(match -> match.field("content").query(keyword)))
                                         .filter(filter -> filter.term(term -> term.field("space_id").value(spaceId)));
+
                                 if (documentId != null) {
                                     bool.filter(filter -> filter.term(term -> term.field("document_id").value(documentId)));
                                 }
+
                                 return bool;
                             }))
                             .highlight(highlight -> highlight.encoder(HighlighterEncoder.Html)
@@ -86,16 +89,21 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
                                     .fields("content", field -> field.fragmentSize(160).numberOfFragments(1))),
                     IndexedChunk.class);
             List<ChunkIndexHit> result = new ArrayList<>();
+
             for (var hit : response.hits().hits()) {
                 IndexedChunk source = hit.source();
+
                 if (source == null || source.getChunkId() == null || source.getDocumentId() == null
                         || source.getParseVersion() == null) {
                     continue;
                 }
+
                 List<String> fragments = hit.highlight().get("content");
+
                 result.add(new ChunkIndexHit(source.getChunkId(), source.getDocumentId(), source.getParseVersion(),
                         fragments == null || fragments.isEmpty() ? null : fragments.get(0)));
             }
+
             return result;
         } catch (IOException | ElasticsearchException e) {
             throw new IllegalStateException("Elasticsearch 检索失败", e);
@@ -107,13 +115,17 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
     public synchronized void syncDocument(Long documentId) {
         try {
             List<ChunkHitVO> rows = documentContentMapper.listIndexableDocumentChunks(documentId);
+
             ensureIndex();
+
             var deletion = client.deleteByQuery(request -> request.index(properties.getIndex())
                     .conflicts(Conflicts.Proceed).refresh(true)
                     .query(query -> query.term(term -> term.field("document_id").value(documentId))));
+
             if (deletion.timedOut() || !deletion.failures().isEmpty() || deletion.versionConflicts() > 0) {
                 throw new IOException("Elasticsearch 文档清理未完成");
             }
+
             write(rows);
         } catch (IOException | ElasticsearchException e) {
             throw new IllegalStateException("Elasticsearch 同步失败", e);
@@ -127,14 +139,19 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
             if (client.indices().exists(request -> request.index(properties.getIndex())).value()) {
                 client.indices().delete(request -> request.index(properties.getIndex()));
             }
+
             ensureIndex();
+
             long after = 0;
             int count = 0;
+
             while (true) {
                 List<ChunkHitVO> rows = documentContentMapper.listIndexableChunks(after, 200);
+
                 if (rows.isEmpty()) {
                     return count;
                 }
+
                 write(rows);
                 after = rows.get(rows.size() - 1).getChunkId();
                 count += rows.size();
@@ -148,7 +165,9 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
         if (rows.isEmpty()) {
             return;
         }
+
         List<BulkOperation> operations = new ArrayList<>();
+
         for (ChunkHitVO row : rows) {
             IndexedChunk source = IndexedChunk.builder()
                     .spaceId(row.getSpaceId())
@@ -158,12 +177,36 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
                     .parseVersion(row.getParseVersion())
                     .content(row.getExcerpt())
                     .build();
+
             operations.add(BulkOperation.of(op -> op.index(index -> index.index(properties.getIndex())
                     .id(row.getDocumentId() + "_" + row.getChunkIndex()).document(source))));
         }
+
         var response = client.bulk(request -> request.operations(operations).refresh(Refresh.True));
+
         if (response.errors()) {
             throw new IOException("Elasticsearch 部分分块写入失败");
+        }
+    }
+
+    @Override
+    public DocumentStatus documentStatus(Long spaceId, Long documentId, Integer version, long expected) {
+        try {
+            if (!client.indices().exists(q -> q.index(properties.getIndex())).value()) {
+                return new DocumentStatus("MISSING", 0, "ES 服务可达，正文索引尚未创建");
+            }
+            long total = client.count(q -> q.index(properties.getIndex()).query(query -> query.bool(b -> b
+                    .filter(f -> f.term(t -> t.field("space_id").value(spaceId)))
+                    .filter(f -> f.term(t -> t.field("document_id").value(documentId)))))).count();
+            long current = client.count(q -> q.index(properties.getIndex()).query(query -> query.bool(b -> b
+                    .filter(f -> f.term(t -> t.field("space_id").value(spaceId)))
+                    .filter(f -> f.term(t -> t.field("document_id").value(documentId)))
+                    .filter(f -> f.term(t -> t.field("parse_version").value(version)))))).count();
+            boolean synced = total == current && current == expected;
+            return new DocumentStatus(synced ? "SYNCED" : "OUTDATED", current,
+                    synced ? "当前版本分块数量一致" : "索引缺失分块或包含旧版本，请重新同步");
+        } catch (Exception error) {
+            return new DocumentStatus("ERROR", 0, "ES 索引检查失败，请检查服务连接与索引配置");
         }
     }
 
@@ -171,6 +214,7 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
         if (client.indices().exists(request -> request.index(properties.getIndex())).value()) {
             return;
         }
+
         try {
             client.indices().create(request -> request.index(properties.getIndex())
                     .settings(settings -> settings.numberOfShards("1").numberOfReplicas("0"))

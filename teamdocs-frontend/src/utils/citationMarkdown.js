@@ -7,6 +7,7 @@ const md = new MarkdownIt({ html: false, breaks: true, linkify: true, typographe
 md.renderer.rules.link_open = (tokens, index, options, env, renderer) => {
   tokens[index].attrSet('target', '_blank')
   tokens[index].attrSet('rel', 'noopener noreferrer')
+
   return renderer.renderToken(tokens, index, options)
 }
 
@@ -17,6 +18,7 @@ md.renderer.rules.fence = (tokens, index) => {
   const lang = info ? info.split(/\s+/)[0].toLowerCase() : ''
 
   let highlighted = ''
+
   if (lang && hljs.getLanguage(lang)) {
     try {
       highlighted = hljs.highlight(token.content, { language: lang, ignoreIllegals: true }).value
@@ -60,23 +62,31 @@ md.core.ruler.after('linkify', 'file_citations', (state) => {
 
     for (const token of block.children) {
       if (token.type === 'link_open') linkDepth++
+
       if (token.type === 'link_close') linkDepth--
+
       if (token.type !== 'text' || linkDepth !== 0) continue
 
       token.content = token.content.replace(/\[(C\d+)\]/g, (marker, id) => {
         const group = lookup.get(id)
+
         if (!group) return marker
 
         if (!references.has(group.key)) references.set(group.key, { number: group.number, ids: new Set() })
+
         references.get(group.key).ids.add(id)
+
         return ''
       })
     }
 
     for (const reference of references.values()) {
       const space = new state.Token('text', '', 0)
+
       space.content = ' '
+
       const badge = new state.Token('file_citation', 'button', 0)
+
       badge.meta = { number: reference.number, ids: [...reference.ids] }
       block.children.push(space, badge)
     }
@@ -86,6 +96,7 @@ md.core.ruler.after('linkify', 'file_citations', (state) => {
 md.renderer.rules.file_citation = (tokens, index) => {
   const { number, ids } = tokens[index].meta
   const sourceIds = md.utils.escapeHtml(ids.join(','))
+
   return `<button type="button" class="inline-citation-badge" data-citation-ids="${sourceIds}" data-citation-number="${number}" aria-label="查看来源 ${number} 的本段摘录" title="查看本段来源摘录">[${number}]</button>`
 }
 
@@ -94,6 +105,7 @@ export function renderCitationMarkdown(raw, citations = []) {
   if (!raw || typeof raw !== 'string') return ''
 
   const citationLookup = new Map()
+
   for (const group of groupAgentCitations(citations)) {
     for (const id of group.sourceIds) citationLookup.set(id, group)
   }

@@ -23,29 +23,19 @@ import asia.creat.vo.SpaceListItemVO;
 import asia.creat.vo.SpaceMemberVO;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static asia.creat.entity.SpaceRole.ADMIN;
-import static asia.creat.entity.SpaceRole.ADMIN;
 import static asia.creat.entity.SpaceRole.OWNER;
-import static asia.creat.entity.SpaceRole.OWNER;
-import static asia.creat.utils.RedisConstants.*;
 import static asia.creat.utils.RedisConstants.*;
 
 import java.time.Duration;
-import java.util.Collections;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.List;
 
-import static asia.creat.entity.SpaceRole.ADMIN;
-import static asia.creat.entity.SpaceRole.ADMIN;
-import static asia.creat.entity.SpaceRole.OWNER;
-import static asia.creat.entity.SpaceRole.OWNER;
-import static asia.creat.utils.RedisConstants.*;
-import static asia.creat.utils.RedisConstants.*;
+import static com.baomidou.mybatisplus.extension.toolkit.ChainWrappers.lambdaQueryChain;
 
 @Slf4j
 @Service
@@ -64,12 +54,14 @@ public class SpaceServiceImpl implements SpaceService {
         space.setName(dto.getName());
         space.setDescription(dto.getDescription());
         space.setOwnerId(loginUser.getUserId());
+
         spaceMapper.insert(space);
 
         SpaceMember spaceMember = new SpaceMember();
         spaceMember.setSpaceId(space.getId());
         spaceMember.setUserId(loginUser.getUserId());
         spaceMember.setRole(OWNER);
+
         spaceMemberMapper.insert(spaceMember);
     }
 
@@ -90,20 +82,22 @@ public class SpaceServiceImpl implements SpaceService {
         } else if (StrUtil.isNotBlank(json)) {
             space = JSONUtil.toBean(json, Space.class);
         } else {
-            LambdaQueryWrapper<Space> lqw = new LambdaQueryWrapper<>();
-            lqw.eq(Space::getId, spaceId);
-            space = spaceMapper.selectOne(lqw);
+            space = lambdaQueryChain(spaceMapper).eq(Space::getId, spaceId).one();
 
             if (space == null){
                 cacheClient.setString(key, NULL_VALUE, NULL_TTL);
+
                 throw new BusinessException("空间不存在");
             }
 
             Duration randomTtl = Duration.ofSeconds(ThreadLocalRandom.current().nextLong(0, MAX_RANDOM_TTL_SECONDS+1));
             Duration ttlPlus = COMMON_TTL.plus(randomTtl);
+
             cacheClient.set(key, space, ttlPlus);
         }
+
         checkIsMember(spaceId, loginUser.getUserId());
+
         return space;
     }
 
@@ -112,6 +106,7 @@ public class SpaceServiceImpl implements SpaceService {
     @OperationLog(value = "删除空间", resourceType = "SPACE")
     public void deleteSpace(@SpaceId @OperationTarget Long spaceId, LoginUser loginUser) {
         String key = CACHE_SPACE_PREFIX + spaceId;
+
         spaceMapper.deleteById(spaceId);
         cacheClient.delete(key);
     }
@@ -122,9 +117,8 @@ public class SpaceServiceImpl implements SpaceService {
     public void updateSpace(@SpaceId @OperationTarget Long spaceId, UpdateSpaceDTO dto, LoginUser loginUser) {
         String key = CACHE_SPACE_PREFIX + spaceId;
 
-        LambdaQueryWrapper<Space> lqw = new LambdaQueryWrapper<Space>()
-                .eq(Space::getId, spaceId);
-        Space space = spaceMapper.selectOne(lqw);
+        Space space = lambdaQueryChain(spaceMapper)
+                .eq(Space::getId, spaceId).one();
         space.setName(dto.getName());
         space.setDescription(dto.getDescription());
 
@@ -139,20 +133,22 @@ public class SpaceServiceImpl implements SpaceService {
         if (dto.getRole() == OWNER) {
             throw new BusinessException("不能直接添加 OWNER");
         }
-        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, dto.getUsername()));
+
+        User user = lambdaQueryChain(userMapper).eq(User::getUsername, dto.getUsername()).one();
+
         if (user == null) throw new BusinessException("用户不存在");
-        Long count = spaceMemberMapper.selectCount(
-                new LambdaQueryWrapper<SpaceMember>()
+
+        if (lambdaQueryChain(spaceMemberMapper)
                 .eq(SpaceMember::getSpaceId, spaceId)
-                .eq(SpaceMember::getUserId, user.getId())
-        );
-        if (count > 0){
+                .eq(SpaceMember::getUserId, user.getId()).exists()) {
             throw new BusinessException("用户已经是该空间的成员");
         }
+
         SpaceMember m = new SpaceMember();
         m.setSpaceId(spaceId);
         m.setUserId(user.getId());
         m.setRole(dto.getRole());
+
         spaceMemberMapper.insert(m);
     }
 
@@ -160,6 +156,7 @@ public class SpaceServiceImpl implements SpaceService {
     public List<SpaceMemberVO> listMembers(Long spaceId, LoginUser loginUser) {
         checkSpaceOrThrow(spaceId);
         checkIsMember(spaceId, loginUser.getUserId());
+
         return spaceMemberMapper.listMembers(spaceId);
     }
 
@@ -167,19 +164,20 @@ public class SpaceServiceImpl implements SpaceService {
     @OperationLog(value = "移除空间成员", resourceType = "SPACE")
     @RequireSpaceRole({OWNER, ADMIN})
     public void removeMember(@SpaceId @OperationTarget Long spaceId, Long targetUserId, LoginUser loginUser) {
-        SpaceMember spaceMember = spaceMemberMapper.selectOne(
-                new LambdaQueryWrapper<SpaceMember>()
-                        .eq(SpaceMember::getSpaceId, spaceId)
-                        .eq(SpaceMember::getUserId, targetUserId)
-        );
+        SpaceMember spaceMember = lambdaQueryChain(spaceMemberMapper)
+                .eq(SpaceMember::getSpaceId, spaceId)
+                .eq(SpaceMember::getUserId, targetUserId).one();
+
         if (spaceMember == null) {
             throw new BusinessException("目标用户不是该空间的成员");
         }
+
         if (spaceMember.getRole() == OWNER) {
             throw new BusinessException("不能移除 OWNER");
         }
 
         SpaceMember currentMember = SpaceContext.getSpaceMember();
+
         if (currentMember.getRole() == ADMIN && spaceMember.getRole() == ADMIN) {
             throw new BusinessException("管理员不能移除其他管理员");
         }
@@ -195,37 +193,36 @@ public class SpaceServiceImpl implements SpaceService {
         if (dto.getRole() == OWNER){
             throw new BusinessException("不能直接设置 OWNER");
         }
+
         if (targetUserId.equals(loginUser.getUserId())){
             throw new BusinessException("不能修改自己的角色");
         }
-        LambdaQueryWrapper<SpaceMember> lqw = new LambdaQueryWrapper<>();
-        lqw.eq(SpaceMember::getSpaceId, spaceId)
-                .eq(SpaceMember::getUserId, targetUserId);
-        SpaceMember member = spaceMemberMapper.selectOne(lqw);
+
+        SpaceMember member = lambdaQueryChain(spaceMemberMapper).eq(SpaceMember::getSpaceId, spaceId)
+                .eq(SpaceMember::getUserId, targetUserId).one();
+
         if (member == null) {
             throw new BusinessException("目标用户不是该空间的成员");
         }
+
         member.setRole(dto.getRole());
         spaceMemberMapper.updateById(member);
         log.info("修改了空间 {} 中用户 {} 的角色为 {}", spaceId, targetUserId, dto.getRole());
     }
 
     private Space checkSpaceOrThrow(Long spaceId) {
-        LambdaQueryWrapper<Space> lqw = new LambdaQueryWrapper<>();
-        lqw.eq(Space::getId, spaceId);
-        Space space = spaceMapper.selectOne(lqw);
+        Space space = lambdaQueryChain(spaceMapper).eq(Space::getId, spaceId).one();
+
         if (space == null){
             throw new BusinessException("空间不存在");
         }
+
         return space;
     }
 
     private void checkIsMember(Long spaceId, Long userId) {
-        LambdaQueryWrapper<SpaceMember> lqwUserId = new LambdaQueryWrapper<>();
-        lqwUserId.eq(SpaceMember::getSpaceId, spaceId)
-                .eq(SpaceMember::getUserId, userId);
-        Long count = spaceMemberMapper.selectCount(lqwUserId);
-        if (count == 0){
+        if (!lambdaQueryChain(spaceMemberMapper).eq(SpaceMember::getSpaceId, spaceId)
+                .eq(SpaceMember::getUserId, userId).exists()) {
             throw new BusinessException("您不是该空间的成员");
         }
     }

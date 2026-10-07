@@ -59,24 +59,32 @@ class RetrievalActivationTest {
         server.createContext("/", exchange -> {
             calls.incrementAndGet();
             exchange.getRequestBody().readAllBytes();
+
             byte[] body = "{\"result\":{\"tools\":[]}}".getBytes(StandardCharsets.UTF_8);
+
             exchange.sendResponseHeaders(200, body.length);
+
             try (var output = exchange.getResponseBody()) {
                 output.write(body);
             }
         });
         server.start();
+
         try {
             McpProperties properties = new McpProperties();
             McpProperties.ServerConfig config = new McpProperties.ServerConfig();
             config.setUrl("http://127.0.0.1:" + server.getAddress().getPort());
             config.setHeaders(Map.of("Authorization", "Bearer YOUR_MCP_STEP_API_KEY"));
+
             properties.setServers(Map.of("test", config));
+
             McpHttpClient client = new McpHttpClient(properties, new ObjectMapper());
             client.init();
+
             assertEquals(0, calls.get());
             config.setHeaders(Map.of("Authorization", "Bearer test-key"));
             client.init();
+
             assertEquals(3, calls.get());
         } finally {
             server.stop(0);

@@ -16,12 +16,15 @@ const KEYS = {
 
 function readBoolean(key, fallback) {
   const value = localStorage.getItem(key)
+
   if (value === null) return fallback
+
   return value === '1'
 }
 
 function readEnum(key, allowed, fallback) {
   const value = localStorage.getItem(key)
+
   return allowed.includes(value) ? value : fallback
 }
 
@@ -31,6 +34,7 @@ function clampSidebarWidth(width) {
 
 function readSidebarWidth() {
   const value = Number(localStorage.getItem(KEYS.sidebarWidth))
+
   return Number.isFinite(value) && value > 0
     ? clampSidebarWidth(value)
     : SIDEBAR_DEFAULT_WIDTH
@@ -47,15 +51,19 @@ export const usePreferencesStore = defineStore('preferences', () => {
   watch(sidebarCollapsed, (value) => {
     localStorage.setItem(KEYS.sidebarCollapsed, value ? '1' : '0')
   })
+
   watch(autoCollapseSidebar, (value) => {
     localStorage.setItem(KEYS.autoCollapseSidebar, value ? '1' : '0')
   })
+
   watch(searchScopeMode, (value) => {
     localStorage.setItem(KEYS.searchScopeMode, value)
   })
+
   watch(documentOpenMode, (value) => {
     localStorage.setItem(KEYS.documentOpenMode, value)
   })
+
   watch(defaultDetailTab, (value) => {
     localStorage.setItem(KEYS.defaultDetailTab, value)
   })

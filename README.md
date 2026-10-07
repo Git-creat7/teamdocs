@@ -8,7 +8,7 @@
 
 RAG 不只依赖向量搜索：系统先检索当前用户有权访问的资料，再将有效正文提供给模型生成带来源的回答。Agent 可以根据工具结果继续查找或读取片段，而不是固定执行一次检索后直接总结。
 
-- **解决的问题**：通过独立空间和三级角色划分访问边界，使用目录、标签和正文检索组织资料，通过带来源的只读问答查找信息，并以在线预览、评论、团队动态、最近浏览和回收站串联文档生命周期
+- **解决的问题**：通过独立空间和三级角色划分访问边界，使用目录和正文检索组织资料，通过带来源的只读问答查找信息，并以在线预览、评论、团队动态、最近浏览和回收站串联文档生命周期
 - **应用场景**：适用于小型研发团队的技术资料库、课程或实验室小组的共享空间，以及项目交付材料和内部制度文档的集中管理
 - **项目价值**：实现从身份认证、权限控制和文件存储，到检索、协作、审计与恢复的完整业务闭环，并通过自动化测试和隔离环境验证关键路径
 
@@ -49,7 +49,7 @@ RAG 不只依赖向量搜索：系统先检索当前用户有权访问的资料�
 | 正文解析与检索 | 后台提取 TXT、Markdown、文本 PDF 和 DOCX，按版本发布分块；ES 关键词检索回退 MySQL | 解析超时、重复任务、版本竞争、索引故障、检索边界 |
 | 混合召回与重排 | ES 与 Milvus 分别召回候选，回 MySQL 复核后通过 RRF 融合，再由 Reranker 精排；最终最多返回 6 个片段 | 原始查询向量化、候选去重、空间/版本过滤、精排位置与故障降级 |
 | 向量索引同步 | MySQL 持久化待办、任务代次、有界补扫与有限重试；模型、维度或 Collection 变化后重新索引 | 事务回滚、迟到任务、删除清理、初始版本 0、失败重试 |
-| 文档 Agent | LangChain4j 原生工具调用与显式循环；内置文档工具只读，会话幂等、调用次数和上下文限制、来源校验 | 工具参数、空间边界、取消超时、用量记录、全部出站候选的依赖遮蔽 |
+| 文档 Agent | LangChain4j 原生工具调用与显式循环；内置文档工具只读，会话幂等、调用次数限制、按可用容量保留完整历史轮次（不做摘要）、来源校验 | 工具参数、空间边界、取消超时、用量记录、全部出站候选的依赖遮蔽 |
 | 流式状态 | SSE 推送已提交且重新授权的运行快照，前端断线恢复观察而不重复提交 | 订阅竞争、Nginx 刷新、401、切换空间和旧事件丢弃 |
 
 ## 系统结构
@@ -84,12 +84,16 @@ MySQL 是业务数据、正文和权限状态的事实来源；ES 与 Milvus 都
 - 用户注册、登录、退出登录、个人信息与密码修改
 - 空间创建、成员管理和 OWNER / ADMIN / MEMBER 权限控制
 - 文件夹分层管理与移动；文档上传、下载、移动、重命名、软删除和回收站恢复
-- 标签管理、按标签筛选、MySQL FULLTEXT + ngram 元数据搜索
+- MySQL FULLTEXT + ngram 名称与描述搜索
+- 文件／文件夹限定问答范围、回答反馈
+- 文档详情中的索引状态与单文档修复
 - 评论与回复、操作日志、团队活动流、最近浏览
 - 图片、文本、PDF、Word、表格、演示文稿和 OFD 在线预览
 - TXT、Markdown、文本 PDF、DOCX 正文解析与 ES/MySQL 关键词检索
 - Milvus 语义召回、RRF 排名融合、Reranker 精排与索引失败补偿
 - 空间内文档问答、会话历史、工具状态、停止执行和来源预览
+- 对话附件：常见文本、PDF、DOCX、XLSX、PPTX 与图片，提取文本或直接看图，不写入空间检索索引
+- 用户全局偏好记忆、个人模型配置、模型连通性与依赖状态检测
 - 按配置接入外部 MCP 工具，不替代内置文档权限校验
 
 ## RAG 与文档 Agent
@@ -109,9 +113,32 @@ Agent、Embedding、Reranker 和 MCP 根据各自配置的有效 Key 自动启�
 
 每用户同时最多一个 Agent 运行，每轮最多 6 次聊天模型调用、8 次工具调用、90 秒。内置文档工具只读；外部 MCP 工具的能力由所配置服务器决定，应单独审查，不能一概视为只读。
 
+### 当前 Agent 能力边界
+
+| 能力 | 当前实现 | 边界 |
+|---|---|---|
+| Tool Calling | 搜索空间文档、检索正文、读取分块；按配置接入 MCP | 内置工具只读，未实现 Agent 创建文档；附件读取是输入预处理，不是独立工具 |
+| Agent Loop | 模型 → 工具 → 结果 → 模型，多轮调用并检查权限、取消和超时 | 最多6次模型调用、8次工具调用，运行时限仍保留 |
+| Context 管理 | System、可选用户偏好、历史完整问答、当前附件及检索结果 | 限定范围或附件提问不混入普通历史；不生成会话摘要 |
+| 上下文窗口 | 按可用输入容量分页加载历史，放不下时裁剪最旧完整轮次 | 原始聊天记录不删除；不拆开当前问题、附件和本轮工具链 |
+| Run 状态机 | QUEUED → RUNNING → SUCCEEDED / FAILED / CANCELLED / TIMED_OUT | 工具阶段通过 tool_started / tool_finished 事件表达，不是独立 Run 状态 |
+| 取消 | 取消运行、关闭当前模型 HTTP 请求，阻止后续执行和回答发布 | 不保证已发出的所有外部工具请求都能立即终止 |
+
+普通问答不主动发送 `max_tokens`，但模型窗口、最大生成长度和应用安全限制仍然有效。`AGENT_MAX_INPUT_TOKENS=0` 时，`step-5-preview` 按1M窗口扣除64k生成预留与10k估算余量，可用输入容量为926000；未知模型保守回退16000，也可显式配置已经扣除预留的输入容量。详细说明见 [部署文档](docs/DEPLOYMENT.md#问答输出与上下文预算)。
+
 ## 质量与验证
 
-2026-10-01 已完成以下分组验证。各组可能重复覆盖用例，不能相加当作一次全量测试：
+2026-10-07 本轮结项验证：
+
+| 验证范围 | 结果 | 说明 |
+|---|---|---|
+| 后端离线回归与打包 | 462 项中453通过、9跳过；JAR 打包通过 | 未启动本地 Docker，显式排除9个容器依赖测试类；其余显式开关控制的真实 API/容器用例保持跳过，不宣称全量集成测试通过 |
+| 前端回归与构建 | 160项全部通过；Vite 构建通过 | 仍有部分产物超过500kB的构建警告，不影响构建结果 |
+| Compose 与差异检查 | 通过 | 基础、dev、基础+semantic 三种配置校验，以及 git diff --check |
+
+本轮未重跑真实 MySQL、Elasticsearch、MinIO 或 Milvus 集成测试，也未调用真实模型；推送后的完整验证与镜像发布以 GitHub Actions 状态为准。
+
+2026-10-01 历史分组验证如下。各组可能重复覆盖用例，不能与本轮结果相加当作一次全量测试：
 
 | 验证范围 | 结果 | 说明 |
 |---|---|---|
@@ -119,7 +146,7 @@ Agent、Embedding、Reranker 和 MCP 根据各自配置的有效 Key 自动启�
 | 真实 MySQL | 5 项全部通过 | 合并 `init.sql` 初始化、向量待办事务回滚、任务代次、有限重试和删除清理 |
 | 真实 Milvus 3.0.2 | 1 项集成测试通过 | 独立 Milvus/etcd/MinIO 容器验证集合创建、写入、空间/文档过滤、初始版本 0、检索和删除 |
 | 实际 Embedding / Reranker API | 2 项全部通过 | 仅使用固定合成文字，验证向量维度、相关性及重排索引，不读取业务文档或打印 Key |
-| 部署配置回归 | 3 项通过 | 单一初始化挂载、语义服务 profile、提交 SHA 与手动评估配置 |
+| 部署配置回归 | 4 项通过 | 部署与开发 Compose 组合校验、单一初始化挂载、回环端口、数据卷、提交 SHA 与手动评估配置 |
 | 后端打包与静态检查 | 通过 | JAR 打包、基础/semantic Compose 配置及 `git diff --check` |
 
 ### JMeter 并发限流验证
@@ -177,27 +204,39 @@ docker compose ps
 - 本机 API：`http://127.0.0.1:8080`，由 `BACKEND_PORT` 控制
 - 本机 MinIO S3 API / Console：`http://127.0.0.1:29000` / `http://127.0.0.1:29001`
 
-根目录保留一份 `docker-compose.yaml`。空库首次启动只挂载 `sql/init.sql`，按用户、空间、文档、评论、日志、全文索引、正文、Agent、向量待办的顺序初始化；已有数据目录不会重新执行。`minio-init` 负责创建业务存储桶，禁止通过重跑初始化或 `down -v` 处理更新问题。
+根目录按用途拆分：`docker-compose.yaml` 为完整部署，`docker-compose.dev.yaml` 为独立的 IDEA 开发 ES/Milvus 服务，`docker-compose.semantic.yaml` 为可选 Milvus 服务。空库首次启动只挂载 `sql/init.sql`，按用户、空间、文档、评论、日志、全文索引、正文、Agent、向量待办的顺序初始化；已有数据目录不会重新执行。`minio-init` 负责创建业务存储桶，禁止通过重跑初始化或 `down -v` 处理更新问题。
 
 `MINIO_PUBLIC_ENDPOINT` 填写浏览器可访问的文件地址；Compose 中后端通过容器网络访问 MinIO，原生 IDEA 后端使用 `MINIO_ENDPOINT`。`MINIO_CORS_ALLOWED_ORIGIN` 必须与实际前端来源一致，修改 `WEB_PORT`、域名或 HTTPS 时同步调整。首次镜像发布权限和远程接入见 [部署文档](docs/DEPLOYMENT.md)。
+
+### IDEA 本地开发
+
+只启动 ES、Milvus 及其必需的 etcd、专用对象存储，不启动 MySQL、Redis、业务 MinIO 或前后端，也不要求填写 `IMAGE_TAG`：
+
+```bash
+docker compose -f docker-compose.dev.yaml up -d --wait
+```
+
+首次启动会构建本地 Elasticsearch 镜像，需要保留 `docker/elasticsearch/`。开发文件仅发布 ES `9200`、Milvus `19530` 和健康端口 `9091` 到本机，由 `ES_PORT`、`MILVUS_PORT`、`MILVUS_HEALTH_PORT` 控制。MySQL、Redis、业务 MinIO 使用已有服务，在 `.env` 配置对应地址。IDEA 后端使用 `.env` 中的本机地址；部署文件覆盖为容器服务名和固定容器端口。若修改 `ES_PORT`，同步调整 `ES_URL`。MinIO CORS 应填写实际前端来源（Vite 通常为 `http://localhost:5173`）。
+
+**注意：`docker compose up` 启动完整应用；IDEA 开发单独使用 `-f docker-compose.dev.yaml`，不要与主文件合并。** 项目名 `teamdocs`、服务名和数据卷名保持不变；更新、查看状态和停止时使用启动时同一组 `-f` 参数。不删除数据卷、不加 `--remove-orphans`。
 
 ### 启用 Milvus 与混合检索
 
 确认内存、磁盘和端口可用，填写向量专用存储凭据后，先启动语义服务：
 
 ```bash
-docker compose --profile semantic pull milvus milvus-etcd milvus-storage
-docker compose --profile semantic up -d --wait milvus
+docker compose -f docker-compose.dev.yaml pull milvus milvus-etcd milvus-storage
+docker compose -f docker-compose.dev.yaml up -d --wait milvus
 ```
 
 该命令只启动 Milvus 及其两个依赖，不会默认启动或替换基础服务。向量专用 MinIO 使用独立数据卷，不复用业务文件存储；etcd 和向量存储不映射宿主机端口。Milvus API / 健康检查默认分别为 `127.0.0.1:19530` / `127.0.0.1:9091`。
 
 准备好向量任务表后，在 `.env` 中填写 Embedding/Reranker 的地址、模型和有效 Key，再按实际启动方式重新加载后端。已有数据库须审核后单独补充 `sql/vector_index.sql` 的新表，不能重新执行含 DROP 的 `init.sql`。原生后端使用 `MILVUS_URL=http://127.0.0.1:19530`；Compose 后端使用容器内地址。
 
-完整启用语义服务的部署和后续更新使用同一 profile：
+完整启用语义服务的部署和后续更新使用同一组文件：
 
 ```bash
-docker compose --profile semantic up -d --wait
+docker compose -f docker-compose.yaml -f docker-compose.semantic.yaml up -d --wait
 ```
 
 模型服务故障不会自动切换到其他供应商；向量召回和重排可以降级到现有关键词或融合结果。
@@ -206,7 +245,7 @@ docker compose --profile semantic up -d --wait
 
 [GitHub Actions](.github/workflows/ci.yml) 在 Pull Request 和 `main` 提交时校验 Compose、一次性运行后端普通测试（含向量 SQL）与前端测试并构建前端；固定检索评估仅在手动运行时勾选 `run_retrieval_evaluation` 执行，不调用真实模型。`main` 普通校验通过后构建并发布前后端及 Elasticsearch GHCR 镜像，使用同一完整提交 SHA 标记版本，同时更新 `latest`；手动评估模式不发布镜像。生产 Compose 要求显式填写 `IMAGE_TAG`，不再隐式回退到 `latest`。CI 负责测试和镜像交付，服务器由维护者执行 Compose 更新，不自动通过 SSH 部署。
 
-等待目标版本的 CI 全部成功，将 `.env` 中的 `IMAGE_TAG` 改为该次发布的完整提交 SHA，再执行（启用语义服务时，两条命令都使用 `docker compose --profile semantic`）：
+等待目标版本的 CI 全部成功，将 `.env` 中的 `IMAGE_TAG` 改为该次发布的完整提交 SHA，再执行（启用语义服务时，两条命令都使用 `docker compose -f docker-compose.yaml -f docker-compose.semantic.yaml`）：
 
 ```bash
 docker compose pull
@@ -226,6 +265,8 @@ TeamDocs/
 ├── docker/elasticsearch/ Elasticsearch 与 IK 镜像
 ├── docs/                部署说明与运行截图
 ├── docker-compose.yaml
+├── docker-compose.dev.yaml
+├── docker-compose.semantic.yaml
 ├── .env.example
 └── README.md
 ```

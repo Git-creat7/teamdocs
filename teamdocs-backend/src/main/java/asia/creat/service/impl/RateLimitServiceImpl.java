@@ -22,12 +22,14 @@ public class RateLimitServiceImpl implements RateLimitService {
         DefaultRedisScript<Long> script = new DefaultRedisScript<>();
         script.setLocation(new ClassPathResource("lua/window_rate_limit.lua"));
         script.setResultType(Long.class);
+
         return script;
     }
 
     @Override
     public boolean isRateLimited(String key, Duration limitWindow, long maxAttempts) {
         Long attempts = null;
+
         try {
             attempts = stringRedisTemplate.execute(
                     script,
@@ -37,6 +39,7 @@ public class RateLimitServiceImpl implements RateLimitService {
         } catch (Exception e) {
             log.warn("Redis 异常", e);
         }
+
         return attempts != null && attempts > maxAttempts;
     }
 }

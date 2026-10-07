@@ -54,22 +54,27 @@ class TokenRevocationServiceImplTest {
     @Test
     void revokeShouldStoreTokenIdUntilJwtExpiration() {
         Date expiration = new Date(System.currentTimeMillis() + 60_000L);
+
         when(jwtUtils.parseToken("token")).thenReturn(claims);
         when(claims.getId()).thenReturn("token-id");
         when(claims.getExpiration()).thenReturn(expiration);
         when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
+
         long maximumExpectedTtl = expiration.getTime() - System.currentTimeMillis();
 
         tokenRevocationService.revoke("token");
 
         long minimumExpectedTtl = expiration.getTime() - System.currentTimeMillis();
         ArgumentCaptor<Duration> ttlCaptor = ArgumentCaptor.forClass(Duration.class);
+
         verify(valueOperations).set(
                 eq(TOKEN_REVOKED_PREFIX + "token-id"),
                 eq("1"),
                 ttlCaptor.capture()
         );
+
         long actualTtl = ttlCaptor.getValue().toMillis();
+
         assertTrue(actualTtl <= maximumExpectedTtl);
         assertTrue(actualTtl >= minimumExpectedTtl);
     }
@@ -77,6 +82,7 @@ class TokenRevocationServiceImplTest {
     @Test
     void revokeShouldFailWhenRedisWriteFails() {
         Date expiration = new Date(System.currentTimeMillis() + 60_000L);
+
         when(jwtUtils.parseToken("token")).thenReturn(claims);
         when(claims.getId()).thenReturn("token-id");
         when(claims.getExpiration()).thenReturn(expiration);
@@ -113,13 +119,16 @@ class TokenRevocationServiceImplTest {
         tokenRevocationService.invalidateAllForUser(7L);
 
         ArgumentCaptor<String> watermarkCaptor = ArgumentCaptor.forClass(String.class);
+
         verify(valueOperations).set(
                 eq(TOKEN_USER_INVALID_BEFORE_PREFIX + 7L),
                 watermarkCaptor.capture(),
                 eq(Duration.ofMillis(JWT_EXPIRATION_MILLIS))
         );
+
         long watermark = Long.parseLong(watermarkCaptor.getValue());
         long now = System.currentTimeMillis();
+
         assertTrue(watermark <= now);
         assertTrue(watermark >= now - 5_000L);
     }
@@ -127,7 +136,9 @@ class TokenRevocationServiceImplTest {
     @Test
     void isUserSessionInvalidShouldRejectTokensIssuedBeforeWatermark() {
         when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
+
         long watermark = System.currentTimeMillis();
+
         when(valueOperations.get(TOKEN_USER_INVALID_BEFORE_PREFIX + 7L))
                 .thenReturn(String.valueOf(watermark));
 

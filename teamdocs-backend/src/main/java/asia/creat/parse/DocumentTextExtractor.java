@@ -2,6 +2,20 @@ package asia.creat.parse;
 
 import asia.creat.config.ParseProperties;
 import asia.creat.retrieval.RetrievalContext;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.InterruptedIOException;
+import java.io.Reader;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.MalformedInputException;
+import java.nio.charset.StandardCharsets;
+import java.nio.charset.UnmappableCharacterException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
@@ -17,28 +31,14 @@ import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.apache.tika.detect.DefaultDetector;
 import org.apache.tika.exception.EncryptedDocumentException;
 import org.apache.tika.exception.WriteLimitReachedException;
-import org.apache.tika.metadata.Metadata;
 import org.apache.tika.io.TikaInputStream;
+import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.parser.microsoft.ooxml.OOXMLParser;
 import org.apache.tika.sax.BodyContentHandler;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.nio.charset.CharsetDecoder;
-import java.nio.charset.CodingErrorAction;
-import java.nio.charset.MalformedInputException;
-import java.nio.charset.StandardCharsets;
-import java.nio.charset.UnmappableCharacterException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
 
 @Component
 @Slf4j
@@ -66,42 +66,58 @@ public class DocumentTextExtractor {
 
     public ExtractedText extract(String fileName, String contentType, InputStream input) throws IOException {
         Kind kind = detect(fileName, contentType);
+
         if (kind == Kind.UNSUPPORTED) return ExtractedText.skipped("不支持解析该文件类型");
+
         return extractSource(fileName, contentType, DocumentImageReader.readLimited(input, properties.getMaxBytes()));
     }
 
     /** 复用已读取的原件，不复制或修改数组；直接调用仍须校验字节上限。 */
     public ExtractedText extractSource(String fileName, String contentType, byte[] source) throws IOException {
         Kind kind = detect(fileName, contentType);
+
         if (kind == Kind.UNSUPPORTED) return ExtractedText.skipped("不支持解析该文件类型");
+
         if (properties.getMaxBytes() < 1) throw new IOException("字节上限配置无效");
+
         if (source.length > properties.getMaxBytes()) throw new IOException("内容超过字节上限");
+
         try (TikaInputStream stream = TikaInputStream.get(new ByteArrayInputStream(source))) {
             String actualType = new DefaultDetector().detect(stream, new Metadata()).toString();
+
             if (kind == Kind.IMAGE) {
                 if (!visionEnabled()) return ExtractedText.skipped("未配置图像理解服务");
+
                 if (!actualType.equals(imageMime(fileName, contentType))) {
                     throw new IOException("图片真实格式与声明类型不符");
                 }
+
                 return describeImages(List.of(new ExtractedText.Segment(null, "", "original", "原图")),
                         ref -> DocumentImageReader.prepare(source, actualType, vision.limits(), false));
             }
+
             if (kind == Kind.TEXT) {
                 if (actualType.equals("application/pdf") || actualType.contains("zip")
                         || actualType.contains("officedocument") || actualType.startsWith("image/")) {
                     throw new IOException("文件内容与文本类型不符");
                 }
+
                 return readPlain(stream);
             }
+
             if (kind == Kind.PDF) {
                 if (!actualType.equals("application/pdf")) throw new IOException("文件内容与 PDF 类型不符");
+
                 return readPdf(stream);
             }
+
             if (!actualType.equals("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                     && !actualType.equals("application/x-tika-ooxml-protected")) {
                 throw new IOException("文件内容与 DOCX 类型不符");
             }
+
             if (actualType.equals("application/x-tika-ooxml-protected")) return ExtractedText.skipped("文件已加密");
+
             return visionEnabled() ? readDocxWithImages(source) : readDocx(stream);
         }
     }
@@ -112,17 +128,29 @@ public class DocumentTextExtractor {
 
     static Kind detect(String fileName, String contentType) {
         String ext = extension(fileName);
+
         switch (ext) {
-            case "txt", "md", "markdown" -> { return Kind.TEXT; }
+            case "txt", "md", "markdown", "json", "jsonl" -> { return Kind.TEXT; }
+
             case "pdf" -> { return Kind.PDF; }
+
             case "docx" -> { return Kind.DOCX; }
+
             case "png", "jpg", "jpeg", "webp" -> { return Kind.IMAGE; }
         }
+
         String type = contentType == null ? "" : contentType.toLowerCase(Locale.ROOT);
-        if (type.startsWith("text/plain") || type.startsWith("text/markdown")) return Kind.TEXT;
+
+        if (type.startsWith("text/plain") || type.startsWith("text/markdown")
+                || type.split(";", 2)[0].trim().equals("application/json")
+                || type.split(";", 2)[0].trim().equals("application/x-ndjson")) return Kind.TEXT;
+
         if ("application/pdf".equals(type)) return Kind.PDF;
+
         if ("application/vnd.openxmlformats-officedocument.wordprocessingml.document".equals(type)) return Kind.DOCX;
+
         if (List.of("image/png", "image/jpeg", "image/webp").contains(type)) return Kind.IMAGE;
+
         return Kind.UNSUPPORTED;
     }
 
@@ -130,8 +158,11 @@ public class DocumentTextExtractor {
     static String imageMime(String fileName, String contentType) {
         return switch (extension(fileName)) {
             case "png" -> "image/png";
+
             case "jpg", "jpeg" -> "image/jpeg";
+
             case "webp" -> "image/webp";
+
             default -> contentType == null ? "" : contentType.toLowerCase(Locale.ROOT);
         };
     }
@@ -143,20 +174,26 @@ public class DocumentTextExtractor {
         CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
                 .onUnmappableCharacter(CodingErrorAction.REPORT);
+
         try (Reader reader = new InputStreamReader(input, decoder)) {
             StringBuilder text = new StringBuilder();
             char[] buffer = new char[4096];
             int read;
+
             while ((read = reader.read(buffer)) >= 0) {
                 if (text.length() + read > properties.getMaxChars()) {
                     return ExtractedText.skipped("正文超过解析长度上限");
                 }
+
                 text.append(buffer, 0, read);
             }
+
             String normalized = TextChunker.normalize(text.toString());
+
             if (normalized.isEmpty()) {
                 return ExtractedText.skipped("没有可提取文本");
             }
+
             return ExtractedText.of(List.of(new ExtractedText.Segment(null, normalized)));
         } catch (MalformedInputException | UnmappableCharacterException e) {
             throw new IOException("不是有效的 UTF-8 文本", e);
@@ -166,18 +203,26 @@ public class DocumentTextExtractor {
     private ExtractedText readPdf(InputStream input) throws IOException {
         try (PDDocument document = PDDocument.load(input)) {
             if (document.isEncrypted()) return ExtractedText.skipped("文件已加密");
+
             PDFTextStripper stripper = new PDFTextStripper();
             List<ExtractedText.Segment> segments = new ArrayList<>();
             long totalChars = 0;
+
             for (int page = 1; page <= document.getNumberOfPages(); page++) {
                 stripper.setStartPage(page);
                 stripper.setEndPage(page);
+
                 String text = TextChunker.normalize(stripper.getText(document));
+
                 totalChars += text.length();
+
                 if (totalChars > properties.getMaxChars()) return ExtractedText.skipped("正文超过解析长度上限");
+
                 if (!text.isEmpty()) segments.add(new ExtractedText.Segment(page, text));
+
                 if (visionEnabled()) {
                     boolean imagePage = text.isEmpty();
+
                     try {
                         imagePage |= DocumentImageReader.hasImages(document.getPage(page - 1), vision.limits());
                     } catch (IOException | RuntimeException imageFailure) {
@@ -185,9 +230,11 @@ public class DocumentTextExtractor {
                         // 交给逐图阶段隔离失败，不能丢掉已经提取的页面文本。
                         imagePage = true;
                     }
+
                     if (imagePage) segments.add(new ExtractedText.Segment(page, "", "pdf:" + page, "PDF 第 " + page + " 页"));
                 }
             }
+
             return describeImages(segments, ref -> DocumentImageReader.render(document,
                     Integer.parseInt(ref.substring(4)), vision.limits()));
         } catch (InvalidPasswordException e) {
@@ -198,22 +245,29 @@ public class DocumentTextExtractor {
     private ExtractedText readDocx(InputStream input) throws IOException {
         try {
             BodyContentHandler handler = new BodyContentHandler(properties.getMaxChars());
+
             new OOXMLParser().parse(input, handler, new Metadata(), new ParseContext());
+
             String text = TextChunker.normalize(handler.toString());
+
             if (text.isEmpty()) {
                 return ExtractedText.skipped("没有可提取文本");
             }
+
             return ExtractedText.of(List.of(new ExtractedText.Segment(null, text)));
         } catch (Exception e) {
             if (causedBy(e, WriteLimitReachedException.class)) {
                 return ExtractedText.skipped("正文超过解析长度上限");
             }
+
             if (causedBy(e, EncryptedDocumentException.class)) {
                 return ExtractedText.skipped("文件已加密");
             }
+
             if (e instanceof IOException ioException) {
                 throw ioException;
             }
+
             throw new IOException("DOCX 解析失败", e);
         }
     }
@@ -222,15 +276,21 @@ public class DocumentTextExtractor {
     private ExtractedText readDocxWithImages(byte[] source) throws IOException {
         try (var pack = DocumentImageReader.openDocx(source); XWPFDocument document = new XWPFDocument(pack)) {
             ExtractedText text = readDocx(new ByteArrayInputStream(source));
+
             if (text.isSkipped() && !"没有可提取文本".equals(text.getReason())) return text;
+
             List<ExtractedText.Segment> segments = new ArrayList<>(text.getSegments());
+
             collectPictures(document.getBodyElements(), "DOCX 正文", segments);
+
             for (int i = 0; i < document.getHeaderList().size(); i++) {
                 collectPictures(document.getHeaderList().get(i).getBodyElements(), "DOCX 页眉 " + (i + 1), segments);
             }
+
             for (int i = 0; i < document.getFooterList().size(); i++) {
                 collectPictures(document.getFooterList().get(i).getBodyElements(), "DOCX 页脚 " + (i + 1), segments);
             }
+
             return describeImages(segments, ref -> DocumentImageReader.readPart(pack, ref, vision.limits()));
         }
     }
@@ -240,11 +300,14 @@ public class DocumentTextExtractor {
         for (int i = 0; i < elements.size(); i++) {
             IBodyElement element = elements.get(i);
             String location = position + " / " + (i + 1);
+
             if (element instanceof XWPFParagraph paragraph) {
                 for (int run = 0; run < paragraph.getRuns().size(); run++) {
                     List<XWPFPicture> pictures = paragraph.getRuns().get(run).getEmbeddedPictures();
+
                     for (int image = 0; image < pictures.size(); image++) {
                         XWPFPictureData data = pictures.get(image).getPictureData();
+
                         segments.add(new ExtractedText.Segment(null, "", data == null ? null
                                         : "docx:" + data.getPackagePart().getPartName().getName(),
                                 location + " 段落 / run " + (run + 1) + " / 图 " + (image + 1)));
@@ -253,6 +316,7 @@ public class DocumentTextExtractor {
             } else if (element instanceof XWPFTable table) {
                 for (int row = 0; row < table.getRows().size(); row++) {
                     List<XWPFTableCell> cells = table.getRows().get(row).getTableCells();
+
                     for (int cell = 0; cell < cells.size(); cell++) {
                         collectPictures(cells.get(cell).getBodyElements(), location + " 表格 / 行 " + (row + 1) + " / 列 " + (cell + 1), segments);
                     }
@@ -264,51 +328,70 @@ public class DocumentTextExtractor {
     /** 只尝试前 N 幅图片，单图失败不丢弃正文或已成功的图像描述。 */
     private ExtractedText describeImages(List<ExtractedText.Segment> segments, ImageLoader loader) throws IOException {
         long chars = segments.stream().filter(segment -> !imageCandidate(segment)).mapToLong(segment -> segment.text().length()).sum();
+
         if (chars > properties.getMaxChars()) return ExtractedText.skipped("正文超过解析长度上限");
+
         int limit = visionEnabled() ? Math.max(0, vision.limits().getMaxImages()) : 0;
         int attempted = 0, failed = 0, limited = 0, oversized = 0;
         List<ExtractedText.Segment> result = new ArrayList<>();
+
         for (var segment : segments) {
             if (!imageCandidate(segment)) {
                 if (!segment.text().isBlank()) result.add(segment);
+
                 continue;
             }
+
             if (attempted >= limit) {
                 limited++;
+
                 continue;
             }
+
             attempted++;
             RetrievalContext.check();
+
             try {
                 if (segment.imageRef() == null) throw new IOException("DOCX 内嵌图片关系无效");
+
                 var image = loader.read(segment.imageRef());
                 String description = "图像描述（模型生成） · " + segment.imageLabel() + "\n\n"
                         + vision.describe(image.content(), image.contentType());
+
                 if (chars + description.length() > properties.getMaxChars()) {
                     oversized++;
+
                     continue;
                 }
+
                 chars += description.length();
                 result.add(new ExtractedText.Segment(segment.pageNumber(), description, segment.imageRef(), segment.imageLabel()));
             } catch (IOException | RuntimeException error) {
                 // 运行已失效时不能降级后继续发图；普通单图错误则隔离。
                 RetrievalContext.check();
-                if (Thread.currentThread().isInterrupted()) throw new java.io.InterruptedIOException("图片解析已中断");
+
+                if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("图片解析已中断");
+
                 failed++;
                 log.warn("跳过失败图片: exceptionType={}", error.getClass().getSimpleName());
             }
         }
+
         if (failed + limited + oversized > 0) {
             log.warn("图片部分解析: attempted={}, failed={}, countLimited={}, charLimited={}", attempted, failed, limited, oversized);
         }
+
         if (result.isEmpty()) {
             return ExtractedText.skipped(attempted + limited > 0 ? "没有可用正文，图片理解失败或受限" : "没有可提取文本");
         }
+
         if (failed + limited + oversized > 0) {
             String notice = "图像解析说明：" + failed + " 幅图片解析失败，" + limited
                     + " 幅超出数量上限，" + oversized + " 幅描述超出正文预算；这些图片内容未纳入检索。";
+
             if (chars + notice.length() <= properties.getMaxChars()) result.add(new ExtractedText.Segment(null, notice));
         }
+
         return ExtractedText.of(result);
     }
 
@@ -324,12 +407,15 @@ public class DocumentTextExtractor {
 
     private static boolean causedBy(Throwable error, Class<? extends Throwable> type) {
         Throwable current = error;
+
         while (current != null) {
             if (type.isInstance(current)) {
                 return true;
             }
+
             current = current.getCause();
         }
+
         return false;
     }
 
@@ -337,10 +423,13 @@ public class DocumentTextExtractor {
         if (fileName == null) {
             return "";
         }
+
         int dot = fileName.lastIndexOf('.');
+
         if (dot < 0 || dot == fileName.length() - 1) {
             return "";
         }
+
         return fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 

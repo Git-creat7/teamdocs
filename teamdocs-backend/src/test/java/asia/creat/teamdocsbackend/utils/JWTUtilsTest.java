@@ -2,13 +2,10 @@ package asia.creat.teamdocsbackend.utils;
 
 import asia.creat.utils.JWTUtils;
 import io.jsonwebtoken.Claims;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
-
 import java.util.Map;
 import java.util.UUID;
-
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -18,13 +15,7 @@ class JWTUtilsTest {
 
     @BeforeEach
     void setUp() {
-        jwtUtils = new JWTUtils();
-        ReflectionTestUtils.setField(
-                jwtUtils,
-                "secret",
-                "0123456789012345678901234567890123456789"
-        );
-        ReflectionTestUtils.setField(jwtUtils, "expirationTime", 60_000L);
+        jwtUtils = new JWTUtils("0123456789012345678901234567890123456789", 60_000L);
     }
 
     @Test

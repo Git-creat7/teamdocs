@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="asia.creat.mapper.AgentTraceMapper">
+    <delete id="deleteSessionToolCalls">
+        DELETE t FROM agent_tool_call t
+        INNER JOIN agent_run r ON r.id = t.run_id
+        WHERE r.session_id = #{sessionId}
+    </delete>
+</mapper>

@@ -8,7 +8,9 @@ export const useUserStore = defineStore('user', () => {
 
   async function refresh() {
     if (loading.value) return
+
     loading.value = true
+
     try {
       userInfo.value = await getUserInfoApi()
     } catch (err) {

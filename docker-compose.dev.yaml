@@ -1,0 +1,52 @@
+name: teamdocs
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  elasticsearch:
+    ports:
+      - "127.0.0.1:${ES_PORT:-9200}:9200"
+    image: teamdocs/elasticsearch:local
+    build:
+      context: ./docker/elasticsearch
+      dockerfile: Dockerfile
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    mem_limit: 1536m
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+    logging: *default-logging
+    restart: unless-stopped
+
+  milvus-etcd:
+    extends:
+      file: ./docker-compose.semantic.yaml
+      service: milvus-etcd
+
+  milvus-storage:
+    extends:
+      file: ./docker-compose.semantic.yaml
+      service: milvus-storage
+
+  milvus:
+    extends:
+      file: ./docker-compose.semantic.yaml
+      service: milvus
+
+volumes:
+  elasticsearch_data:
+  milvus_etcd_data:
+  milvus_storage_data:
+  milvus_data:

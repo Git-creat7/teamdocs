@@ -9,6 +9,8 @@ import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
+import static com.baomidou.mybatisplus.extension.toolkit.ChainWrappers.lambdaQueryChain;
+
 @Mapper
 public interface DocumentMapper extends BaseMapper<Document> {
     IPage<Document> selectTrashedDocuments(IPage<Document> page,
@@ -20,9 +22,6 @@ public interface DocumentMapper extends BaseMapper<Document> {
 
     void updateDeleted(Long documentId, Long FolderId);
 
-    IPage<Document> listDocumentsByTag(IPage<Document> page,
-                                       @Param("spaceId") Long spaceId,
-                                       @Param("tagId") Long tagId);
 
     IPage<Document> searchDocuments(IPage<Document> page,
                                     @Param("spaceId") Long spaceId,
@@ -36,10 +35,11 @@ public interface DocumentMapper extends BaseMapper<Document> {
 
     Long lockUploadDirectory(@Param("spaceId") Long spaceId, @Param("folderId") Long folderId);
 
-    boolean existsActiveName(@Param("spaceId") Long spaceId,
-                             @Param("folderId") Long folderId,
-                             @Param("name") String name);
+    default boolean existsActiveName(Long spaceId, Long folderId, String name) {
+        return lambdaQueryChain(this)
+                .eq(Document::getSpaceId, spaceId).eq(Document::getFolderId, folderId).eq(Document::getName, name).exists();
+    }
 
-    // 逻辑删除会滤掉回收站记录，FOR UPDATE 也写不进 Wrapper
+    // 需锁定包含回收站在内的记录，保留 SQL 绕过逻辑删除过滤。
     Document lockById(@Param("id") Long id);
 }

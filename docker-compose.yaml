@@ -94,9 +94,6 @@ services:
 
   elasticsearch:
     image: ${IMAGE_REPOSITORY:-ghcr.io/git-creat7/teamdocs}/elasticsearch:${IMAGE_TAG:?IMAGE_TAG must be a published commit SHA}
-    build:
-      context: ./docker/elasticsearch
-      dockerfile: Dockerfile
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
@@ -104,7 +101,6 @@ services:
     mem_limit: 1536m
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
-    # 仅容器网络可访问；不将未启用认证的 9200 暴露给宿主机或公网。
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
       interval: 15s
@@ -114,77 +110,8 @@ services:
     logging: *default-logging
     restart: unless-stopped
 
-  milvus-etcd:
-    profiles: [semantic]
-    image: quay.io/coreos/etcd:v3.5.25
-    command: etcd --advertise-client-urls=http://milvus-etcd:2379 --listen-client-urls=http://0.0.0.0:2379 --data-dir=/etcd
-    environment:
-      ETCD_AUTO_COMPACTION_MODE: revision
-      ETCD_AUTO_COMPACTION_RETENTION: "1000"
-      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
-    volumes:
-      - milvus_etcd_data:/etcd
-    healthcheck:
-      test: ["CMD", "etcdctl", "endpoint", "health"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-    logging: *default-logging
-    restart: unless-stopped
-
-  milvus-storage:
-    profiles: [semantic]
-    image: ghcr.io/git-creat7/teamdocs/minio@sha256:648817f3b321ec7a2f86c594ba468fa19eff8ee3ac17a07c03acf7a8a35fda33
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MILVUS_STORAGE_USER:-teamdocs-vector}
-      MINIO_ROOT_PASSWORD: ${MILVUS_STORAGE_PASSWORD:-vector-local-change-me}
-    # 专用对象存储不映射宿主机端口，不复用业务 MinIO。
-    volumes:
-      - milvus_storage_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-    logging: *default-logging
-    restart: unless-stopped
-
-  milvus:
-    profiles: [semantic]
-    image: milvusdb/milvus:v3.0.2
-    command: ["milvus", "run", "standalone"]
-    environment:
-      ETCD_ENDPOINTS: milvus-etcd:2379
-      MINIO_ADDRESS: milvus-storage:9000
-      MINIO_ACCESS_KEY_ID: ${MILVUS_STORAGE_USER:-teamdocs-vector}
-      MINIO_SECRET_ACCESS_KEY: ${MILVUS_STORAGE_PASSWORD:-vector-local-change-me}
-      MINIO_REGION: us-east-1
-    ports:
-      - "127.0.0.1:${MILVUS_PORT:-19530}:19530"
-      - "127.0.0.1:${MILVUS_HEALTH_PORT:-9091}:9091"
-    volumes:
-      - milvus_data:/var/lib/milvus
-    mem_limit: ${MILVUS_MEMORY_LIMIT:-4g}
-    depends_on:
-      milvus-etcd:
-        condition: service_healthy
-      milvus-storage:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
-      interval: 15s
-      timeout: 5s
-      start_period: 90s
-      retries: 12
-    logging: *default-logging
-    restart: unless-stopped
-
   backend:
     image: ${IMAGE_REPOSITORY:-ghcr.io/git-creat7/teamdocs}/backend:${IMAGE_TAG:?IMAGE_TAG must be a published commit SHA}
-    build:
-      context: ./teamdocs-backend
-      dockerfile: Dockerfile
     depends_on:
       mysql:
         condition: service_healthy
@@ -210,24 +137,21 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
       MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-teamdocs-public}
       MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-teamdocs-private}
+      MODEL_CONFIG_ENCRYPTION_KEY: ${MODEL_CONFIG_ENCRYPTION_KEY:-}
+      AGENT_PROXY_URL: ${AGENT_PROXY_URL:-}
       AGENT_BASE_URL: ${AGENT_BASE_URL:-}
       AGENT_API_KEY: ${AGENT_API_KEY:-}
       AGENT_MODEL_NAME: ${AGENT_MODEL_NAME:-}
-      AGENT_TIMEOUT_SECONDS: ${AGENT_TIMEOUT_SECONDS:-60}
-      AGENT_STREAMING: ${AGENT_STREAMING:-true}
-      AGENT_HISTORY_TURNS: ${AGENT_HISTORY_TURNS:-50}
-      AGENT_HISTORY_MAX_INPUT_TOKENS: ${AGENT_HISTORY_MAX_INPUT_TOKENS:-100000}
+      AGENT_MAX_INPUT_TOKENS: ${AGENT_MAX_INPUT_TOKENS:-0}
       MCP_STEP_URL: ${MCP_STEP_URL:-}
       MCP_STEP_API_KEY: ${MCP_STEP_API_KEY:-}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
       EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1024}
-      EMBEDDING_TIMEOUT_SECONDS: ${EMBEDDING_TIMEOUT_SECONDS:-10}
       RERANK_BASE_URL: ${RERANK_BASE_URL:-}
       RERANK_API_KEY: ${RERANK_API_KEY:-}
       RERANK_MODEL: ${RERANK_MODEL:-}
-      RERANK_TIMEOUT_SECONDS: ${RERANK_TIMEOUT_SECONDS:-10}
       VISION_BASE_URL: ${VISION_BASE_URL:-}
       VISION_API_KEY: ${VISION_API_KEY:-}
       VISION_MODEL: ${VISION_MODEL:-}
@@ -240,15 +164,10 @@ services:
       MILVUS_URL: http://milvus:19530
       MILVUS_TOKEN: ${MILVUS_TOKEN:-}
       MILVUS_COLLECTION: ${MILVUS_COLLECTION:-teamdocs_qwen3_8b_d1024_v1}
-      MILVUS_TIMEOUT_SECONDS: ${MILVUS_TIMEOUT_SECONDS:-3}
       ES_ENABLED: ${ES_ENABLED:-true}
       ES_URL: http://elasticsearch:9200
       ES_INDEX: ${ES_INDEX:-teamdocs-chunks}
       PARSE_ENABLED: ${PARSE_ENABLED:-true}
-      PARSE_MAX_BYTES: ${PARSE_MAX_BYTES:-10485760}
-      PARSE_MAX_CHARS: ${PARSE_MAX_CHARS:-200000}
-      PARSE_TIMEOUT_SECONDS: ${PARSE_TIMEOUT_SECONDS:-120}
-      PARSE_RETRY_DELAY_SECONDS: ${PARSE_RETRY_DELAY_SECONDS:-5}
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
     healthcheck:
@@ -262,9 +181,6 @@ services:
 
   frontend:
     image: ${IMAGE_REPOSITORY:-ghcr.io/git-creat7/teamdocs}/frontend:${IMAGE_TAG:?IMAGE_TAG must be a published commit SHA}
-    build:
-      context: ./teamdocs-frontend
-      dockerfile: Dockerfile
     depends_on:
       backend:
         condition: service_healthy
@@ -280,9 +196,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  milvus_etcd_data:
-  milvus_storage_data:
-  milvus_data:
   elasticsearch_data:
   mysql_data:
   redis_data:

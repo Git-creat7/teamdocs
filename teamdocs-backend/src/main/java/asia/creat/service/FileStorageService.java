@@ -8,7 +8,9 @@ import java.util.Map;
 
 public interface FileStorageService {
     void upload(MultipartFile file, BucketType bucket, String objectKey);
+
     void delete(BucketType bucket, String objectKey);
+
     String getAccessUrl(BucketType bucket, String objectKey, Map<String, String> queryParams);
 
     // 解析任务按 objectKey 读原文件，调用方负责关闭流

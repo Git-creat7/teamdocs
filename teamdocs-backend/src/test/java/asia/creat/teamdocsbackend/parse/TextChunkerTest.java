@@ -37,6 +37,7 @@ class TextChunkerTest {
     @Test
     void englishIsEstimatedSmallerThanCharacterCount() {
         DocumentContent chunk = TextChunker.chunk("abcd efgh", null, 1000, 120).get(0);
+
         assertTrue(chunk.getTokenCount() < chunk.getContent().length());
     }
 
@@ -49,7 +50,9 @@ class TextChunkerTest {
     void prefersParagraphBoundaryAndKeepsExactOffsets() {
         String text = "第一段".repeat(200) + "\n" + "第二段".repeat(300);
         List<DocumentContent> chunks = TextChunker.chunk(text, null, 1000, 120);
+
         assertEquals(601, chunks.get(0).getCharEnd());
+
         for (DocumentContent chunk : chunks) {
             assertEquals(text.substring(chunk.getCharStart(), chunk.getCharEnd()), chunk.getContent());
         }
@@ -58,11 +61,13 @@ class TextChunkerTest {
     @Test
     void doesNotSplitSupplementaryCharacters() {
         String text = "甲😀𠀀".repeat(10);
+
         for (DocumentContent chunk : TextChunker.chunk(text, null, 4, 1)) {
             assertTrue(!Character.isLowSurrogate(chunk.getContent().charAt(0)));
             assertTrue(!Character.isHighSurrogate(chunk.getContent().charAt(chunk.getContent().length() - 1)));
             assertEquals(text.substring(chunk.getCharStart(), chunk.getCharEnd()), chunk.getContent());
         }
+
         assertEquals(2, TextChunker.estimateTokens("𠀀甲"));
     }
 }

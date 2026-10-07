@@ -24,6 +24,7 @@ class LangChain4jTimeoutTest {
         server.setExecutor(executor);
         server.createContext("/v1/chat/completions", exchange -> {
             requests.incrementAndGet();
+
             try {
                 release.await(5, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
@@ -33,6 +34,7 @@ class LangChain4jTimeoutTest {
             }
         });
         server.start();
+
         try {
             OpenAiChatModel model = OpenAiChatModel.builder()
                     .baseUrl("http://127.0.0.1:" + server.getAddress().getPort() + "/v1")
@@ -41,6 +43,7 @@ class LangChain4jTimeoutTest {
                     .timeout(Duration.ofMillis(250))
                     .maxRetries(0)
                     .build();
+
             assertTimeoutPreemptively(Duration.ofSeconds(3), () ->
                     assertThrows(RuntimeException.class, () -> model.generate("timeout sample")));
             assertEquals(1, requests.get());

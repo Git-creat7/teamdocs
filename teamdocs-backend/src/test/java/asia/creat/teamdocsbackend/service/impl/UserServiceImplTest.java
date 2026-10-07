@@ -84,6 +84,7 @@ class UserServiceImplTest {
     @BeforeAll
     static void initializeTableMetadata() {
         MybatisConfiguration configuration = new MybatisConfiguration();
+
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, ""), User.class);
     }
 
@@ -120,6 +121,7 @@ class UserServiceImplTest {
     @Test
     void loginShouldRejectWrongPassword() {
         User user = activeUser(HASH_STORED);
+
         when(userMapper.selectOne(any())).thenReturn(user);
         when(passwordEncoder.matches(PLAIN_WRONG, HASH_STORED)).thenReturn(false);
 
@@ -133,6 +135,7 @@ class UserServiceImplTest {
     @Test
     void changePasswordShouldUpdateEncodedPasswordAndInvalidateSessions() {
         User user = activeUser(HASH_PREV);
+
         when(userMapper.selectById(USER_ID)).thenReturn(user);
         when(passwordEncoder.matches(PLAIN_PREV, HASH_PREV)).thenReturn(true);
         when(passwordEncoder.matches(PLAIN_NEXT, HASH_PREV)).thenReturn(false);
@@ -142,7 +145,9 @@ class UserServiceImplTest {
         userService.changePassword(LOGIN_USER, PLAIN_PREV, PLAIN_NEXT);
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+
         verify(userMapper).updateById(userCaptor.capture());
+
         assertEquals(HASH_NEXT, userCaptor.getValue().getPassword());
         verify(passwordEncoder).encode(PLAIN_NEXT);
         verify(tokenRevocationService).invalidateAllForUser(USER_ID);
@@ -151,6 +156,7 @@ class UserServiceImplTest {
     @Test
     void changePasswordShouldRejectWrongOldPassword() {
         User user = activeUser(HASH_PREV);
+
         when(userMapper.selectById(USER_ID)).thenReturn(user);
         when(passwordEncoder.matches(PLAIN_WRONG, HASH_PREV)).thenReturn(false);
 
@@ -166,6 +172,7 @@ class UserServiceImplTest {
     @Test
     void changePasswordShouldRejectSamePassword() {
         User user = activeUser(HASH_PREV);
+
         when(userMapper.selectById(USER_ID)).thenReturn(user);
         when(passwordEncoder.matches(PLAIN_SAME, HASH_PREV)).thenReturn(true);
 
@@ -196,14 +203,19 @@ class UserServiceImplTest {
     @Test
     void changePasswordShouldRollbackWhenSessionInvalidationFails() {
         User user = activeUser(HASH_PREV);
+
         when(userMapper.selectById(USER_ID)).thenReturn(user);
         when(passwordEncoder.matches(PLAIN_PREV, HASH_PREV)).thenReturn(true);
         when(passwordEncoder.matches(PLAIN_NEXT, HASH_PREV)).thenReturn(false);
         when(passwordEncoder.encode(PLAIN_NEXT)).thenReturn(HASH_NEXT);
+
         List<String> updatedHashes = new ArrayList<>();
+
         when(userMapper.updateById(any(User.class))).thenAnswer(invocation -> {
             User arg = invocation.getArgument(0);
+
             updatedHashes.add(arg.getPassword());
+
             return 1;
         });
         doThrow(new BusinessException("会话失效失败，请稍后重试"))
@@ -220,6 +232,7 @@ class UserServiceImplTest {
     @Test
     void changePasswordShouldWarnWhenRollbackAlsoFails() {
         User user = activeUser(HASH_PREV);
+
         when(userMapper.selectById(USER_ID)).thenReturn(user);
         when(passwordEncoder.matches(PLAIN_PREV, HASH_PREV)).thenReturn(true);
         when(passwordEncoder.matches(PLAIN_NEXT, HASH_PREV)).thenReturn(false);
@@ -256,6 +269,7 @@ class UserServiceImplTest {
     @Test
     void updateProfileShouldUpdateNicknameAndEmail() {
         User user = activeUser(HASH_PREV);
+
         when(userMapper.selectById(USER_ID)).thenReturn(user);
         when(userMapper.selectCount(any())).thenReturn(0L);
         when(userMapper.update(any(), any())).thenReturn(1);
@@ -264,6 +278,7 @@ class UserServiceImplTest {
         UserProfileVO profile = userService.updateProfile(LOGIN_USER, dto);
 
         verify(userMapper).update(any(), any());
+
         assertEquals("Bob", profile.getNickname());
         assertEquals("bob@example.com", profile.getEmail());
         assertEquals("Bob", user.getNickname());
@@ -294,6 +309,7 @@ class UserServiceImplTest {
         UserProfileVO profile = userService.updateProfile(LOGIN_USER, new UpdateProfileDTO(null, "   "));
 
         verify(userMapper).update(any(), any());
+
         assertNull(user.getEmail());
         assertNull(profile.getEmail());
         verify(userMapper, never()).selectCount(any());
@@ -320,8 +336,11 @@ class UserServiceImplTest {
         UserProfileVO profile = userService.updateAvatar(LOGIN_USER, file);
 
         ArgumentCaptor<String> objectKeyCaptor = ArgumentCaptor.forClass(String.class);
+
         verify(fileStorageService).upload(eq(file), eq(BucketType.PUBLIC), objectKeyCaptor.capture());
+
         String newObjectKey = objectKeyCaptor.getValue();
+
         assertTrue(newObjectKey.startsWith("avatar/7/"));
         assertTrue(newObjectKey.endsWith(".png"));
         assertEquals(PUBLIC_ENDPOINT + "/" + PUBLIC_BUCKET + "/" + newObjectKey, profile.getAvatar());
@@ -331,6 +350,7 @@ class UserServiceImplTest {
     @Test
     void updateAvatarShouldRejectInvalidContentType() {
         User user = activeUser(HASH_PREV);
+
         when(userMapper.selectById(USER_ID)).thenReturn(user);
 
         MockMultipartFile file = new MockMultipartFile(
@@ -350,6 +370,7 @@ class UserServiceImplTest {
     @Test
     void updateAvatarShouldCleanupObjectWhenDatabaseUpdateFails() {
         User user = activeUser(HASH_PREV);
+
         when(userMapper.selectById(USER_ID)).thenReturn(user);
         when(userMapper.updateById(any(User.class))).thenReturn(0);
         when(fileStorageService.getAccessUrl(eq(BucketType.PUBLIC), anyString(), isNull()))
@@ -365,6 +386,7 @@ class UserServiceImplTest {
         assertThrows(BusinessException.class, () -> userService.updateAvatar(LOGIN_USER, file));
 
         ArgumentCaptor<String> objectKeyCaptor = ArgumentCaptor.forClass(String.class);
+
         verify(fileStorageService).upload(eq(file), eq(BucketType.PUBLIC), objectKeyCaptor.capture());
         verify(fileStorageService).delete(BucketType.PUBLIC, objectKeyCaptor.getValue());
     }
@@ -375,6 +397,7 @@ class UserServiceImplTest {
         user.setUsername("alice");
         user.setPassword(storedHash);
         user.setStatus(1);
+
         return user;
     }
 }

@@ -1,20 +1,20 @@
 package asia.creat.agent.mcp;
 
 import asia.creat.config.McpProperties;
+import asia.creat.retrieval.RetrievalHttp;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import okhttp3.*;
-import org.springframework.stereotype.Component;
-
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import okhttp3.*;
+import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
@@ -35,11 +35,14 @@ public class McpHttpClient {
     public void init() {
         if (!properties.isEnabled() || properties.getServers().isEmpty()) {
             log.info("MCP 功能未启用或无配置 Server");
+
             return;
         }
+
         for (var entry : properties.getServers().entrySet()) {
             String serverName = entry.getKey();
             var config = entry.getValue();
+
             try {
                 initializeAndDiscover(serverName, config);
             } catch (Exception e) {
@@ -58,18 +61,23 @@ public class McpHttpClient {
     private void initializeAndDiscover(String serverName, McpProperties.ServerConfig config) throws IOException {
         if (config.getUrl() == null || config.getUrl().isBlank()) {
             log.warn("MCP Server [{}] 未配置 URL，跳过", serverName);
+
             return;
         }
+
         if (config.getHeaders() != null) {
             String auth = config.getHeaders().get("Authorization");
+
             if (auth != null && auth.trim().toLowerCase(Locale.ROOT).startsWith("bearer")
-                    && !asia.creat.retrieval.RetrievalHttp.hasApiKey(auth.trim().substring(6).trim())) {
+                    && !RetrievalHttp.hasApiKey(auth.trim().substring(6).trim())) {
                 log.info("MCP Server [{}] 未配置有效 API Token (Authorization 为空)，跳过连接", serverName);
+
                 return;
             }
         }
 
         log.info("开始连接 MCP Server [{}] -> {}", serverName, config.getUrl());
+
         // 1. 发送 initialize 握手请求
         Map<String, Object> initPayload = Map.of(
                 "jsonrpc", "2.0",
@@ -81,13 +89,16 @@ public class McpHttpClient {
                         "clientInfo", Map.of("name", "TeamDocs", "version", "1.0.0")
                 )
         );
+
         try {
             sendJsonRpc(config, initPayload);
+
             Map<String, Object> initializedNotification = Map.of(
                     "jsonrpc", "2.0",
                     "method", "notifications/initialized",
                     "params", Map.of()
             );
+
             sendJsonRpc(config, initializedNotification);
         } catch (Exception e) {
             log.debug("MCP Server [{}] initialize 阶段响应 (可能为无状态端点): {}", serverName, e.getMessage());
@@ -102,10 +113,12 @@ public class McpHttpClient {
         );
         JsonNode response = sendJsonRpc(config, listPayload);
         JsonNode toolsNode = response.path("result").path("tools");
+
         if (toolsNode.isArray()) {
             for (JsonNode tool : toolsNode) {
                 String toolName = tool.path("name").asText();
                 String desc = tool.path("description").asText("");
+
                 toolToServer.put(toolName, config);
 
                 // 转换为 LangChain4j 规格
@@ -115,13 +128,16 @@ public class McpHttpClient {
 
                 // 读取参数 Schema
                 JsonNode schemaNode = tool.path("inputSchema");
+
                 if (schemaNode.isObject()) {
                     JsonObjectSchema.Builder objBuilder = JsonObjectSchema.builder();
+
                     schemaNode.path("properties").fields().forEachRemaining(field -> {
                         String fieldName = field.getKey();
                         JsonNode propDef = field.getValue();
                         String fieldDesc = propDef.path("description").asText("");
                         String type = propDef.path("type").asText("string");
+
                         if ("integer".equalsIgnoreCase(type) || "int".equalsIgnoreCase(type)) {
                             objBuilder.addIntegerProperty(fieldName, fieldDesc);
                         } else if ("number".equalsIgnoreCase(type)) {
@@ -132,13 +148,17 @@ public class McpHttpClient {
                             objBuilder.addStringProperty(fieldName, fieldDesc);
                         }
                     });
+
                     if (schemaNode.has("required") && schemaNode.path("required").isArray()) {
                         List<String> req = new ArrayList<>();
+
                         schemaNode.path("required").forEach(r -> req.add(r.asText()));
                         objBuilder.required(req);
                     }
+
                     spec.parameters(objBuilder.build());
                 }
+
                 mcpToolSpecs.add(spec.build());
                 log.info("成功注册 MCP 工具: [{}] 来自 Server [{}]", toolName, serverName);
             }
@@ -154,9 +174,11 @@ public class McpHttpClient {
      */
     public String callTool(String toolName, String argumentsJson) {
         var config = toolToServer.get(toolName);
+
         if (config == null) {
             throw new IllegalArgumentException("未知的 MCP 工具: " + toolName);
         }
+
         try {
             JsonNode args = mapper.readTree(argumentsJson);
             Map<String, Object> callPayload = Map.of(
@@ -166,26 +188,35 @@ public class McpHttpClient {
                     "params", Map.of("name", toolName, "arguments", args)
             );
             JsonNode resultNode = sendJsonRpc(config, callPayload);
+
             if (resultNode.has("error")) {
                 log.warn("MCP 工具 [{}] 服务端返回错误: {}", toolName, resultNode.get("error"));
+
                 return resultNode.get("error").toString();
             }
+
             JsonNode content = resultNode.path("result").path("content");
+
             if (content.isArray() && !content.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
+
                 for (JsonNode item : content) {
                     if ("text".equals(item.path("type").asText()) || item.has("text")) {
                         if (sb.length() > 0) sb.append("\n");
+
                         sb.append(item.path("text").asText());
                     }
                 }
+
                 if (sb.length() > 0) {
                     return sb.toString();
                 }
             }
+
             return mapper.writeValueAsString(resultNode.path("result"));
         } catch (Exception e) {
             log.error("执行 MCP 工具 [{}] 异常: {}", toolName, e.getMessage(), e);
+
             return "{\"error\":\"" + e.getMessage() + "\"}";
         }
     }
@@ -219,10 +250,12 @@ public class McpHttpClient {
                 }
             });
         }
+
         try (Response res = client.newCall(reqBuilder.build()).execute()) {
             if (!res.isSuccessful() || res.body() == null) {
                 throw new IOException("MCP 请求失败 HTTP " + res.code());
             }
+
             return mapper.readTree(res.body().string());
         }
     }

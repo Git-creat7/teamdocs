@@ -1,26 +1,48 @@
 package asia.creat.agent;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import java.time.LocalDateTime;
+import java.util.List;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.time.LocalDateTime;
-import java.util.List;
+import lombok.ToString;
 
 /** 本模块持久记录与对外 DTO；模型不能提供用户、空间或会话身份。 */
 public final class AgentData {
     private AgentData() { }
 
     public record NewSession(@NotBlank @Size(max = 80) String title) { }
+
     public record NewRun(@NotBlank @Size(max = 64) @Pattern(regexp = "[A-Za-z0-9_-]+") String clientRequestId,
-                         @NotBlank @Size(max = 2000) String question) { }
+                         @NotBlank @Size(max = 2000) String question,
+                         @Positive Long documentId,
+                         @Positive Long folderId,
+                         @Size(min = 1, max = 30) List<@NotNull @Positive Long> documentIds,
+                         @Size(max = 4) List<@NotBlank @Size(max = 36) String> attachmentIds) {
+        public NewRun(String clientRequestId, String question) { this(clientRequestId, question, null, null, null, null); }
+        public NewRun(String clientRequestId, String question, Long documentId, Long folderId, List<Long> documentIds) {
+            this(clientRequestId, question, documentId, folderId, documentIds, null);
+        }
+        public NewRun(String clientRequestId, String question, Long documentId, Long folderId) {
+            this(clientRequestId, question, documentId, folderId, null, null);
+        }
+    }
 
     @Data
+    @TableName("agent_session")
     public static class Session {
+        @TableId(type = IdType.AUTO)
         private Long id;
         private Long spaceId;
         private Long userId;
@@ -33,14 +55,21 @@ public final class AgentData {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
+    @TableName("agent_run")
     public static class Run {
+        @TableId(type = IdType.AUTO)
         private Long id;
         private Long sessionId;
         private Long spaceId;
         private Long userId;
         private String clientRequestId;
         private String requestHash;
+        private Long scopeDocumentId;
+        private Long scopeFolderId;
+        private String scopeDocumentIds;
         private String modelName;
+        @ToString.Exclude
+        private String modelConfigCiphertext;
         private String status;
         private String errorCode;
         private int modelCalls;
@@ -48,11 +77,13 @@ public final class AgentData {
         private int maxModelCalls;
         private int maxToolCalls;
         private int maxInputTokens;
+        /** 0 表示本次不指定输出 Token 上限。 */
         private int maxOutputTokens;
         private LocalDateTime createdAt;
         private LocalDateTime startedAt;
         private LocalDateTime finishedAt;
         private Long deadlineMs;
+        @TableField(exist = false)
         private String question;
     }
 
@@ -60,7 +91,9 @@ public final class AgentData {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
+    @TableName("agent_message")
     public static class Message {
+        @TableId(type = IdType.AUTO)
         private Long id;
         private Long sessionId;
         private Long runId;
@@ -68,6 +101,7 @@ public final class AgentData {
         private String body;
         private String dependencies;
         private String sources;
+        @TableField(exist = false)
         private String runStatus;
         private LocalDateTime createdAt;
     }
@@ -76,7 +110,9 @@ public final class AgentData {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
+    @TableName("agent_tool_call")
     public static class Trace {
+        @TableId(type = IdType.AUTO)
         private Long id;
         private Long runId;
         private int sequence;
@@ -93,12 +129,15 @@ public final class AgentData {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
+    @TableName("agent_model_call")
     public static class ModelCall {
+        @TableId(type = IdType.AUTO)
         private Long id;
         private Long runId;
         private Long userId;
         private int sequence;
         private int estimatedInput;
+        /** 0 表示未指定输出上限，仍记录实际用量。 */
         private int maxOutput;
         private Long inputTokens;
         private Long outputTokens;
@@ -107,7 +146,9 @@ public final class AgentData {
 
     public record Dependency(Long documentId, Integer parseVersion, String parseStatus,
                              String documentName, LocalDateTime updatedAt) { }
+
     public record Source(String id, Long documentId, Long chunkId, Integer parseVersion) { }
+
     public record Citation(String id, Long documentId, Long chunkId, Integer chunkIndex, Integer parseVersion, String documentName,
                            Integer pageNumber, Integer charStart, Integer charEnd, String excerpt, String url,
                            boolean imageSource, String imageLabel) {
@@ -118,7 +159,9 @@ public final class AgentData {
                     excerpt, url, false, null);
         }
     }
+
     public record ReasoningProgress(String content, Long durationMs, boolean truncated) { }
+
     public record MessageView(Long id, Long runId, String role, String text, boolean masked,
                               List<Citation> citations, LocalDateTime createdAt, String reasoningContent,
                               Long reasoningDurationMs, boolean reasoningTruncated, String runStatus) {
@@ -128,6 +171,7 @@ public final class AgentData {
             this(id, runId, role, text, masked, citations, createdAt, null, null, false, null);
         }
     }
+
     public record RunView(Long id, Long sessionId, String status, String errorCode, int modelCalls, int toolCalls,
                           long inputTokens, long outputTokens, boolean usageUnknown,
                           MessageView answer, List<Trace> tools, LocalDateTime createdAt, Long deadlineMs,

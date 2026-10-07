@@ -50,6 +50,7 @@ class FolderServiceImplTest {
     @BeforeAll
     static void initializeTableMetadata() {
         MybatisConfiguration configuration = new MybatisConfiguration();
+
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, ""), Folder.class);
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, ""), Document.class);
     }
@@ -78,12 +79,16 @@ class FolderServiceImplTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Wrapper<Folder>> folderQueryCaptor = ArgumentCaptor.forClass(Wrapper.class);
+
         verify(folderMapper).selectList(folderQueryCaptor.capture());
+
         assertTrue(folderQueryCaptor.getValue().getSqlSegment().contains("space_id"));
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Wrapper<Document>> documentQueryCaptor = ArgumentCaptor.forClass(Wrapper.class);
+
         verify(documentMapper).delete(documentQueryCaptor.capture());
+
         assertTrue(documentQueryCaptor.getValue().getSqlSegment().contains("space_id"));
         verify(folderMapper).deleteByIds(List.of(10L));
     }

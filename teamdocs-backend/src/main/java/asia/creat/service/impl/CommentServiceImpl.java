@@ -33,6 +33,7 @@ public class CommentServiceImpl implements CommentService {
     @RequireSpaceRole
     public void addComment(@SpaceId Long spaceId, @OperationTarget Long documentId, AddCommentDTO dto, LoginUser loginUser) {
         checkDocument(spaceId, documentId);
+
         if (dto.getReplyToId() != null) {
             /*
             * 检查回复的评论是否存在
@@ -40,6 +41,7 @@ public class CommentServiceImpl implements CommentService {
             * 检查该评论是否已被删除
             */
             Comment replyComment = commentMapper.selectById(dto.getReplyToId());
+
             if (replyComment == null
                     || !replyComment.getDocumentId().equals(documentId)
                     || Integer.valueOf(1).equals(replyComment.getDeleted())) {
@@ -50,12 +52,14 @@ public class CommentServiceImpl implements CommentService {
                 throw new BusinessException("该评论不存在或已被删除，无法回复");
             }
         }
+
         Comment comment = Comment.builder()
                 .documentId(documentId)
                 .userId(loginUser.getUserId())
                 .content(dto.getContent().strip())
                 .replyToId(dto.getReplyToId())
                 .build();
+
         commentMapper.insert(comment);
     }
 
@@ -63,6 +67,7 @@ public class CommentServiceImpl implements CommentService {
     @RequireSpaceRole
     public PageResult<CommentVO> listComments(@SpaceId Long spaceId, Long documentId, PageQuery pageQuery, LoginUser loginUser) {
         checkDocument(spaceId, documentId);
+
         return PageResult.from(commentMapper.listByDocumentId(pageQuery.toPage(), documentId));
     }
 
@@ -71,12 +76,15 @@ public class CommentServiceImpl implements CommentService {
     @RequireSpaceRole
     public void deleteComment(@SpaceId Long spaceId, @OperationTarget Long documentId, Long commentId, LoginUser loginUser) {
         checkDocument(spaceId, documentId);
+
         Comment comment = commentMapper.selectById(commentId);
+
         if (comment == null || !comment.getDocumentId().equals(documentId)) {
             throw new BusinessException("评论不存在");
         }
 
         SpaceMember member = SpaceContext.getSpaceMember();
+
         permissionHelper.checkOwnerOrCreator(member, comment.getUserId(), loginUser.getUserId());
         comment.setDeleted(1);
         commentMapper.updateById(comment);
@@ -84,6 +92,7 @@ public class CommentServiceImpl implements CommentService {
 
     private void checkDocument(Long spaceId, Long documentId){
         Document doc = documentMapper.selectById(documentId);
+
         if (doc == null || !doc.getSpaceId().equals(spaceId)){
             throw new BusinessException("文档不存在或不属于当前空间");
         }

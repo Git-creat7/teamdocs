@@ -3,6 +3,7 @@ package asia.creat.teamdocsbackend.agent;
 import asia.creat.agent.model.OpenAiReasoningChatModel;
 import asia.creat.agent.model.OpenAiReasoningChatModel.RequestControl;
 import asia.creat.config.AgentProperties;
+import asia.creat.agent.AttachmentMessage;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -47,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class OpenAiReasoningChatModelTest {
     private static final List<ChatMessage> MESSAGES = List.of(UserMessage.from("问题"));
     private static final String DONE = "data: [DONE]\n\n";
+
     private final ObjectMapper mapper = new ObjectMapper();
     private final List<CapturedRequest> requests = new CopyOnWriteArrayList<>();
     private final AtomicReference<HttpHandler> handler = new AtomicReference<>();
@@ -70,6 +72,7 @@ class OpenAiReasoningChatModelTest {
                 exchange.close();
             }
         });
+
         handler.set(exchange -> reply(exchange, "application/json", json("回答", null, "stop", null), 0));
         server.start();
         properties = new AgentProperties();
@@ -80,12 +83,45 @@ class OpenAiReasoningChatModelTest {
         properties.setTimeoutSeconds(3);
     }
 
+    /** 流式和非流式请求均不添加 charset，正文仍保留 UTF-8 中文。 */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void sendsPlainApplicationJsonWithUtf8Body(boolean streaming) {
+        AtomicReference<String> contentType = new AtomicReference<>();
+        handler.set(exchange -> {
+            contentType.set(exchange.getRequestHeaders().getFirst("Content-Type"));
+            reply(exchange, "application/json", json("回答", null, "stop", null), 0);
+        });
+        properties.setStreaming(streaming);
+
+        assertEquals("回答", model().generate(MESSAGES).content().text());
+        assertEquals("application/json", contentType.get());
+        assertEquals("问题", requests.get(0).body().path("messages").get(0).path("content").asText());
+    }
+
+    @Test
+    void attachmentPayloadUsesNativeImagesAndLabeledDocumentText() {
+        properties.setStreaming(false);
+        var message = new AttachmentMessage("read", List.of(
+                new AttachmentMessage.Part("image.png", "image/png", "aW1hZ2U="),
+                new AttachmentMessage.Part("data.json", "application/json", "e30=")));
+        assertEquals("回答", model().generate(List.of(message)).content().text());
+        var parts = requests.get(0).body().path("messages").get(0).path("content");
+        assertEquals("image_url", parts.get(2).path("type").asText());
+        assertEquals("data:image/png;base64,aW1hZ2U=", parts.get(2).path("image_url").path("url").asText());
+        assertEquals("text", parts.get(3).path("type").asText());
+        assertTrue(parts.get(3).path("text").asText().contains("data.json"));
+        assertTrue(parts.get(3).path("text").asText().endsWith("{}"));
+        assertFalse(parts.toString().contains("file_data"));
+    }
+
     /** 释放测试服务器和工作线程。 */
     @AfterEach
     void tearDown() {
         if (server != null) {
             server.stop(0);
         }
+
         if (serverExecutor != null) {
             serverExecutor.shutdownNow();
         }
@@ -100,7 +136,9 @@ class OpenAiReasoningChatModelTest {
                 + delta(Map.of("reasoning_content", "中文\uD83D\uDE03"))
                 + delta(Map.of("content", "正文\uD83D\uDE00")) + finish("stop")
                 + usage(11, 7, 18) + DONE;
+
         handler.set(exchange -> reply(exchange, "text/event-stream; charset=utf-8", stream, 1));
+
         List<Observation> observed = new ArrayList<>();
 
         Response<AiMessage> response = model().generate(MESSAGES, List.of(),
@@ -117,7 +155,9 @@ class OpenAiReasoningChatModelTest {
         assertTrue(observed.get(1).duration() >= 0);
         assertFalse(observed.get(1).truncated());
         assertEquals(1, requests.size());
+
         CapturedRequest request = requests.get(0);
+
         assertEquals("POST", request.method());
         assertEquals("/gateway/v1/chat/completions", request.path());
         assertEquals("Bearer test-secret-key", request.authorization());
@@ -132,6 +172,7 @@ class OpenAiReasoningChatModelTest {
         properties.setStreaming(false);
         handler.set(exchange -> reply(exchange, "application/json", json("正文", "私有推理", "length",
                 Map.of("prompt_tokens", 3, "completion_tokens", 5, "total_tokens", 8)), 2));
+
         List<Observation> observed = new ArrayList<>();
 
         Response<AiMessage> result = model().generate(MESSAGES, List.of(),
@@ -159,10 +200,13 @@ class OpenAiReasoningChatModelTest {
     void worksWithoutReasoningOrObserver() throws Exception {
         String stream = delta(Map.of("reasoning_content", "")) + delta(Map.of("content", "答案"))
                 + finish("stop") + DONE;
+
         handler.set(exchange -> reply(exchange, "text/event-stream", stream, 0));
+
         OpenAiReasoningChatModel model = model();
         Response<AiMessage> result = model.generate(MESSAGES, List.of(),
                 (text, duration, truncated) -> fail("不应收到推理回调"), new RequestControl());
+
         assertEquals("答案", result.content().text());
         assertNull(result.tokenUsage());
         assertEquals("答案", model.generate(MESSAGES).content().text());
@@ -174,8 +218,11 @@ class OpenAiReasoningChatModelTest {
     void drainsReasoningWhenObserverIsAbsent() throws Exception {
         String stream = delta(Map.of("reasoning_content", "不写入答案")) + delta(Map.of("content", "答案"))
                 + finish("stop") + usage(5, 9, 14) + DONE;
+
         handler.set(exchange -> reply(exchange, "text/event-stream", stream, 0));
+
         Response<AiMessage> result = model().generate(MESSAGES, List.of());
+
         assertEquals("答案", result.content().text());
         assertEquals(9, result.tokenUsage().outputTokenCount());
     }
@@ -187,7 +234,9 @@ class OpenAiReasoningChatModelTest {
                 + delta(Map.of("tool_calls", List.of(tool(0, "call-a", "search", "{\"q\":\"中"))))
                 + delta(Map.of("tool_calls", List.of(tool(1, null, null, "7}"), tool(0, null, null, "文\"}"))))
                 + finish("tool_calls") + usage(13, 4, 17) + DONE;
+
         handler.set(exchange -> reply(exchange, "text/event-stream", stream, 3));
+
         ToolExecutionRequest earlier = ToolExecutionRequest.builder().id("previous-call").name("search")
                 .arguments("{\"q\":\"旧\"}").build();
         List<ChatMessage> history = List.of(SystemMessage.from("系统"), UserMessage.from("用户"),
@@ -199,7 +248,9 @@ class OpenAiReasoningChatModelTest {
 
         assertNull(response.content().text());
         assertEquals(FinishReason.TOOL_EXECUTION, response.finishReason());
+
         List<ToolExecutionRequest> tools = response.content().toolExecutionRequests();
+
         assertEquals(2, tools.size());
         assertEquals("call-a", tools.get(0).id());
         assertEquals("search", tools.get(0).name());
@@ -207,7 +258,9 @@ class OpenAiReasoningChatModelTest {
         assertEquals("call-b", tools.get(1).id());
         assertEquals("{\"id\":7}", tools.get(1).arguments());
         assertEquals(13, response.tokenUsage().inputTokenCount());
+
         JsonNode request = requests.get(0).body();
+
         assertEquals("system", request.at("/messages/0/role").asText());
         assertEquals("user", request.at("/messages/1/role").asText());
         assertEquals("assistant", request.at("/messages/2/role").asText());
@@ -225,13 +278,17 @@ class OpenAiReasoningChatModelTest {
     @Test
     void parsesJsonToolCalls() throws Exception {
         properties.setStreaming(false);
+
         String body = mapper.writeValueAsString(Map.of("choices", List.of(Map.of("message",
                 Map.of("content", "先查文档", "reasoning_content", "内部分析", "tool_calls",
                         List.of(Map.of("id", "call-json", "type", "function", "function",
                                 Map.of("name", "search", "arguments", "{\"q\":\"文档\"}")))),
                 "finish_reason", "tool_calls"))));
+
         handler.set(exchange -> reply(exchange, "application/json", body, 0));
+
         Response<AiMessage> response = model().generate(MESSAGES);
+
         assertEquals("先查文档", response.content().text());
         assertEquals("call-json", response.content().toolExecutionRequests().get(0).id());
         assertEquals("{\"q\":\"文档\"}", response.content().toolExecutionRequests().get(0).arguments());
@@ -243,8 +300,11 @@ class OpenAiReasoningChatModelTest {
     void acceptsUsageOnlyFrameAfterFinish() throws Exception {
         String stream = delta(Map.of("content", "答案")) + finish("stop")
                 + "data: {\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3}}\n\n" + DONE;
+
         handler.set(exchange -> reply(exchange, "text/event-stream", stream, 0));
+
         Response<AiMessage> response = model().generate(MESSAGES);
+
         assertEquals(2, response.tokenUsage().inputTokenCount());
         assertEquals(3, response.tokenUsage().outputTokenCount());
         assertNull(response.tokenUsage().totalTokenCount());
@@ -256,7 +316,9 @@ class OpenAiReasoningChatModelTest {
         properties.setStreaming(false);
         handler.set(exchange -> reply(exchange, "application/json", json("回答", null, "stop",
                 Map.of("prompt_tokens", 0)), 0));
+
         Response<AiMessage> response = model().generate(MESSAGES);
+
         assertEquals(0, response.tokenUsage().inputTokenCount());
         assertNull(response.tokenUsage().outputTokenCount());
         assertNull(response.tokenUsage().totalTokenCount());
@@ -267,14 +329,18 @@ class OpenAiReasoningChatModelTest {
     void neverSendsReasoningBackInHistory() throws Exception {
         String stream = delta(Map.of("reasoning_content", "独立推理")) + delta(Map.of("content", "公开回答"))
                 + finish("stop") + DONE;
+
         handler.set(exchange -> reply(exchange, "text/event-stream", stream, 0));
+
         List<String> observed = new ArrayList<>();
         OpenAiReasoningChatModel model = model();
         RequestControl control = new RequestControl();
         Response<AiMessage> first = model.generate(MESSAGES, List.of(),
                 (text, duration, truncated) -> observed.add(text), control);
+
         model.generate(List.of(MESSAGES.get(0), first.content(), UserMessage.from("追问")), List.of(),
                 (text, duration, truncated) -> observed.add(text), control);
+
         assertEquals(List.of("独立推理", "独立推理"), observed);
         assertFalse(requests.get(1).body().toString().contains("独立推理"));
         assertFalse(requests.get(1).body().toString().contains("reasoning_content"));
@@ -288,10 +354,13 @@ class OpenAiReasoningChatModelTest {
         String stream = delta(Map.of("reasoning_content", prefix + "\uD83D\uDE00后续"))
                 + delta(Map.of("reasoning_content", "仍在推理")) + delta(Map.of("content", "完整正文"))
                 + finish("stop") + usage(8, 10, 18) + DONE;
+
         handler.set(exchange -> reply(exchange, "text/event-stream", stream, 0));
+
         List<Observation> observed = new ArrayList<>();
         Response<AiMessage> result = model().generate(MESSAGES, List.of(),
                 (text, duration, truncated) -> observed.add(new Observation(text, duration, truncated)), new RequestControl());
+
         assertEquals(2, observed.size());
         assertEquals(prefix, observed.get(0).text());
         assertEquals(prefix, observed.get(1).text());
@@ -305,11 +374,16 @@ class OpenAiReasoningChatModelTest {
     @Test
     void boundsJsonReasoningAtExactLimit() throws Exception {
         properties.setStreaming(false);
+
         String reasoning = "a".repeat(32766) + "\uD83D\uDE00";
+
         handler.set(exchange -> reply(exchange, "application/json", json("答案", reasoning, "stop", null), 0));
+
         List<Observation> observed = new ArrayList<>();
+
         model().generate(MESSAGES, List.of(),
                 (text, duration, truncated) -> observed.add(new Observation(text, duration, truncated)), new RequestControl());
+
         assertEquals(List.of(new Observation(reasoning, null, true)), observed);
     }
 
@@ -319,9 +393,13 @@ class OpenAiReasoningChatModelTest {
         String stream = "data: {\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"\\uD83D\"}}]}\n\n"
                 + "data: {\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"\\uDE00\"}}]}\n\n"
                 + delta(Map.of("content", "答案")) + finish("stop") + DONE;
+
         handler.set(exchange -> reply(exchange, "text/event-stream", stream, 0));
+
         List<String> observed = new ArrayList<>();
+
         model().generate(MESSAGES, List.of(), (text, duration, truncated) -> observed.add(text), new RequestControl());
+
         assertEquals(List.of("", "\uD83D\uDE00"), observed);
     }
 
@@ -330,6 +408,7 @@ class OpenAiReasoningChatModelTest {
     @CsvSource({"stop,STOP", "length,LENGTH", "content_filter,CONTENT_FILTER", "tool_calls,TOOL_EXECUTION", "custom,OTHER"})
     void mapsFinishReasons(String wire, FinishReason expected) throws Exception {
         handler.set(exchange -> reply(exchange, "application/json", json("回答", null, wire, null), 0));
+
         assertEquals(expected, model().generate(MESSAGES).finishReason());
     }
 
@@ -341,16 +420,22 @@ class OpenAiReasoningChatModelTest {
         handler.set(exchange -> {
             if (requests.size() > 1) {
                 reply(exchange, "application/json", json("不应重试", null, "stop", null), 0);
+
                 return;
             }
+
             exchange.getResponseHeaders().set("Location", baseUrl() + "/redirected");
             exchange.getResponseHeaders().set("Retry-After", "0");
+
             byte[] bytes = "provider-body-secret test-secret-key query-secret".getBytes(StandardCharsets.UTF_8);
+
             exchange.sendResponseHeaders(status, bytes.length);
             exchange.getResponseBody().write(bytes);
         });
+
         OpenAiReasoningChatModel.CallFailure error = assertThrows(OpenAiReasoningChatModel.CallFailure.class,
                 () -> model().generate(MESSAGES));
+
         assertSanitized(error);
         assertEquals(status, error.httpStatus());
         assertEquals(status == 429 ? OpenAiReasoningChatModel.FailureCategory.RATE_LIMIT
@@ -370,6 +455,7 @@ class OpenAiReasoningChatModelTest {
     })
     void rejectsBadOrIncompleteStreamsWithoutReplay(String stream) {
         handler.set(exchange -> reply(exchange, "text/event-stream", stream, 0));
+
         assertSanitized(assertThrows(RuntimeException.class, () -> model().generate(MESSAGES)));
         assertEquals(1, requests.size());
     }
@@ -379,11 +465,16 @@ class OpenAiReasoningChatModelTest {
     void acceptsBomBeforeFirstSseFrame() throws Exception {
         String stream = "﻿" + delta(Map.of("content", "你")) + delta(Map.of("content", "好"))
                 + finish("stop") + DONE;
+
         handler.set(exchange -> reply(exchange, "text/event-stream", stream, 1));
+
         assertEquals("你好", model().generate(MESSAGES).content().text());
+
         String tools = "﻿" + delta(Map.of("tool_calls", List.of(tool(0, "bom-call", "search", "{}"))))
                 + finish("tool_calls") + DONE;
+
         handler.set(exchange -> reply(exchange, "text/event-stream", tools, 1));
+
         assertEquals("bom-call", model().generate(MESSAGES).content().toolExecutionRequests().get(0).id());
     }
 
@@ -393,7 +484,9 @@ class OpenAiReasoningChatModelTest {
     void rejectsEofAfterFinishReasonWithoutDone(String ending) throws Exception {
         String stream = delta(Map.of("tool_calls", List.of(tool(0, "call-a", "search", "{}"))))
                 + "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}" + ending;
+
         handler.set(exchange -> reply(exchange, "text/event-stream", stream, 0));
+
         assertSanitized(assertThrows(RuntimeException.class, () -> model().generate(MESSAGES)));
         assertEquals(1, requests.size());
     }
@@ -403,7 +496,9 @@ class OpenAiReasoningChatModelTest {
     void rejectsIncompleteToolArgumentsEvenWithFinishReason() throws Exception {
         String stream = delta(Map.of("tool_calls", List.of(tool(0, "call-a", "search", "{\"q\":"))))
                 + finish("tool_calls") + DONE;
+
         handler.set(exchange -> reply(exchange, "text/event-stream", stream, 0));
+
         assertSanitized(assertThrows(RuntimeException.class, () -> model().generate(MESSAGES)));
         assertEquals(1, requests.size());
     }
@@ -413,6 +508,7 @@ class OpenAiReasoningChatModelTest {
     @ValueSource(strings = {"application/json", "text/html"})
     void rejectsUnexpectedResponseBodies(String contentType) {
         handler.set(exchange -> reply(exchange, contentType, "provider-body-secret", 0));
+
         assertSanitized(assertThrows(RuntimeException.class, () -> model().generate(MESSAGES)));
         assertEquals(1, requests.size());
     }
@@ -421,7 +517,9 @@ class OpenAiReasoningChatModelTest {
     @Test
     void rejectsOversizedFrame() {
         String stream = ":" + "x".repeat(256 * 1024) + "\n\n";
+
         handler.set(exchange -> reply(exchange, "text/event-stream", stream, 0));
+
         assertSanitized(assertThrows(RuntimeException.class, () -> model().generate(MESSAGES)));
         assertEquals(1, requests.size());
     }
@@ -430,7 +528,9 @@ class OpenAiReasoningChatModelTest {
     @Test
     void rejectsOversizedStreamAcrossFrames() {
         String stream = (":" + "x".repeat(32 * 1024) + "\n\n").repeat(65);
+
         handler.set(exchange -> reply(exchange, "text/event-stream", stream, 0));
+
         assertSanitized(assertThrows(RuntimeException.class, () -> model().generate(MESSAGES)));
         assertEquals(1, requests.size());
     }
@@ -439,7 +539,9 @@ class OpenAiReasoningChatModelTest {
     @Test
     void rejectsOversizedJson() throws Exception {
         String json = json("x".repeat(2 * 1024 * 1024), null, "stop", null);
+
         handler.set(exchange -> reply(exchange, "application/json", json, 0));
+
         assertSanitized(assertThrows(RuntimeException.class, () -> model().generate(MESSAGES)));
         assertEquals(1, requests.size());
     }
@@ -450,7 +552,9 @@ class OpenAiReasoningChatModelTest {
         RequestControl control = new RequestControl();
         control.cancel();
         control.cancel();
+
         OpenAiReasoningChatModel model = model();
+
         assertSanitized(assertThrows(RuntimeException.class,
                 () -> model.generate(MESSAGES, List.of(), null, control)));
         assertTrue(requests.isEmpty());
@@ -460,9 +564,11 @@ class OpenAiReasoningChatModelTest {
     @Test
     void cancelsInFlightRead() throws Exception {
         properties.setTimeoutSeconds(90);
+
         CountDownLatch observed = new CountDownLatch(1);
         CountDownLatch releaseServer = new CountDownLatch(1);
         String firstFrame = delta(Map.of("reasoning_content", "开始分析"));
+
         handler.set(exchange -> {
             exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
             exchange.sendResponseHeaders(200, 0);
@@ -470,15 +576,20 @@ class OpenAiReasoningChatModelTest {
             exchange.getResponseBody().flush();
             awaitServer(releaseServer);
         });
+
         ExecutorService worker = Executors.newSingleThreadExecutor();
         RequestControl control = new RequestControl();
         OpenAiReasoningChatModel model = model();
+
         try {
             Future<Response<AiMessage>> future = worker.submit(() -> model.generate(MESSAGES, List.of(),
                     (text, duration, truncated) -> observed.countDown(), control));
+
             assertTrue(observed.await(3, TimeUnit.SECONDS));
             control.cancel();
+
             ExecutionException failure = assertThrows(ExecutionException.class, () -> future.get(2, TimeUnit.SECONDS));
+
             assertSanitized((RuntimeException) failure.getCause());
             assertEquals(1, requests.size());
         } finally {
@@ -491,8 +602,10 @@ class OpenAiReasoningChatModelTest {
     @Test
     void abortsWhenObserverThrows() throws Exception {
         properties.setTimeoutSeconds(90);
+
         CountDownLatch releaseServer = new CountDownLatch(1);
         String firstFrame = delta(Map.of("reasoning_content", "开始"));
+
         handler.set(exchange -> {
             exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
             exchange.sendResponseHeaders(200, 0);
@@ -500,17 +613,22 @@ class OpenAiReasoningChatModelTest {
             exchange.getResponseBody().flush();
             awaitServer(releaseServer);
         });
+
         ExecutorService worker = Executors.newSingleThreadExecutor();
         RequestControl control = new RequestControl();
         OpenAiReasoningChatModel model = model();
+
         try {
             Future<Response<AiMessage>> future = worker.submit(() -> model.generate(MESSAGES, List.of(),
                     (text, duration, truncated) -> { throw new IllegalStateException("provider-body-secret"); }, control));
             ExecutionException failure = assertThrows(ExecutionException.class, () -> future.get(3, TimeUnit.SECONDS));
+
             assertSanitized((RuntimeException) failure.getCause());
             assertEquals(1, requests.size());
+
             releaseServer.countDown();
             handler.set(exchange -> reply(exchange, "application/json", json("回答", null, "stop", null), 0));
+
             // 异常退出也必须清理旧 Call 引用，后续注册不受影响。
             assertEquals("回答", model.generate(MESSAGES, List.of(), null, control).content().text());
         } finally {
@@ -524,28 +642,54 @@ class OpenAiReasoningChatModelTest {
     void honorsCancellationFromObserver() throws Exception {
         String stream = delta(Map.of("reasoning_content", "分析")) + delta(Map.of("content", "答案"))
                 + finish("stop") + DONE;
+
         handler.set(exchange -> reply(exchange, "text/event-stream", stream, 0));
+
         RequestControl control = new RequestControl();
+
         assertSanitized(assertThrows(RuntimeException.class, () -> model().generate(MESSAGES, List.of(),
                 (text, duration, truncated) -> control.cancel(), control)));
         assertEquals(1, requests.size());
     }
 
-    /** 根路径补标准前缀，并沿用最大输出边界。 */
+    /** 显式限制原样发送，辅助请求保持小预算，不再截断到4096。 */
     @ParameterizedTest
-    @CsvSource({"-1,1", "99999,4096"})
+    @CsvSource({"32,32", "512,512", "8192,8192", "99999,99999"})
     void usesRootUrlAndTokenBounds(int configured, int expected) {
         properties.setBaseUrl(baseUrl() + "/");
         properties.setMaxOutputTokens(configured);
         model().generate(MESSAGES);
+
         assertEquals("/v1/chat/completions", requests.get(0).path());
         assertEquals(expected, requests.get(0).body().path("max_tokens").asInt());
+    }
+
+    /** 普通问答默认交由供应商决定输出长度，流式和非流式行为一致。 */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void defaultRequestsOmitOutputTokenLimit(boolean streaming) {
+        assertEquals(0, properties.getMaxOutputTokens());
+        properties.setStreaming(streaming);
+        model().generate(MESSAGES);
+
+        JsonNode body = requests.get(0).body();
+        assertFalse(body.has("max_tokens"));
+        assertFalse(body.has("max_completion_tokens"));
+        assertEquals(streaming, body.path("stream").asBoolean());
+    }
+
+    @Test
+    void nonPositiveConfigurationDoesNotSendZeroOrNegativeTokenLimit() {
+        properties.setMaxOutputTokens(-1);
+        model().generate(MESSAGES);
+        assertFalse(requests.get(0).body().has("max_tokens"));
     }
 
     /** 连接在响应头之前关闭也不能触发传输层重试。 */
     @Test
     void neverRetriesDisconnectedTransport() {
         handler.set(HttpExchange::close);
+
         assertSanitized(assertThrows(RuntimeException.class, () -> model().generate(MESSAGES)));
         assertEquals(1, requests.size());
     }
@@ -554,13 +698,18 @@ class OpenAiReasoningChatModelTest {
     @Test
     void clampsZeroTimeoutToOneSecond() throws Exception {
         properties.setTimeoutSeconds(0);
+
         CountDownLatch releaseServer = new CountDownLatch(1);
+
         handler.set(exchange -> awaitServer(releaseServer));
+
         ExecutorService worker = Executors.newSingleThreadExecutor();
         OpenAiReasoningChatModel model = model();
+
         try {
             Future<Response<AiMessage>> future = worker.submit(() -> model.generate(MESSAGES));
             ExecutionException failure = assertThrows(ExecutionException.class, () -> future.get(3, TimeUnit.SECONDS));
+
             assertSanitized((RuntimeException) failure.getCause());
             assertEquals(1, requests.size());
         } finally {
@@ -575,17 +724,21 @@ class OpenAiReasoningChatModelTest {
     void streamingUsesReadIdleTimeoutRatherThanCallTimeout(boolean streaming) throws Exception {
         properties.setTimeoutSeconds(1);
         properties.setStreaming(streaming);
+
         String ending = streaming ? delta(Map.of("content", "回答")) + finish("stop") + DONE
                 : json("回答", null, "stop", null);
+
         handler.set(exchange -> {
             exchange.getResponseHeaders().set("Content-Type", streaming ? "text/event-stream" : "application/json");
             exchange.sendResponseHeaders(200, 0);
+
             try {
                 for (int i = 0; i < 7; i++) {
                     exchange.getResponseBody().write((streaming ? ": active\n\n" : " ").getBytes(StandardCharsets.UTF_8));
                     exchange.getResponseBody().flush();
                     Thread.sleep(200);
                 }
+
                 exchange.getResponseBody().write(ending.getBytes(StandardCharsets.UTF_8));
                 exchange.getResponseBody().flush();
             } catch (InterruptedException e) {
@@ -594,13 +747,16 @@ class OpenAiReasoningChatModelTest {
                 // 非流式用例应在一秒后主动关闭连接。
             }
         });
+
         if (streaming) {
             assertEquals("回答", model().generate(MESSAGES).content().text());
         } else {
             var error = assertThrows(OpenAiReasoningChatModel.CallFailure.class, () -> model().generate(MESSAGES));
+
             assertSanitized(error);
             assertEquals(OpenAiReasoningChatModel.FailureCategory.TIMEOUT, error.category());
         }
+
         assertEquals(1, requests.size());
     }
 
@@ -608,7 +764,9 @@ class OpenAiReasoningChatModelTest {
     @Test
     void stalledStreamIsClassifiedAsTimeout() {
         properties.setTimeoutSeconds(1);
+
         CountDownLatch release = new CountDownLatch(1);
+
         handler.set(exchange -> {
             exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
             exchange.sendResponseHeaders(200, 0);
@@ -616,8 +774,10 @@ class OpenAiReasoningChatModelTest {
             exchange.getResponseBody().flush();
             awaitServer(release);
         });
+
         try {
             var error = assertThrows(OpenAiReasoningChatModel.CallFailure.class, () -> model().generate(MESSAGES));
+
             assertSanitized(error);
             assertEquals(OpenAiReasoningChatModel.FailureCategory.TIMEOUT, error.category());
         } finally {
@@ -629,6 +789,7 @@ class OpenAiReasoningChatModelTest {
     @Test
     void clampsExcessiveTimeout() {
         properties.setTimeoutSeconds(Integer.MAX_VALUE);
+
         assertEquals("回答", model().generate(MESSAGES).content().text());
     }
 
@@ -638,6 +799,7 @@ class OpenAiReasoningChatModelTest {
         assertSanitized(assertThrows(RuntimeException.class,
                 () -> new OpenAiReasoningChatModel(new AgentProperties(), mapper)));
         properties.setBaseUrl("not a url?test-secret-key");
+
         assertSanitized(assertThrows(RuntimeException.class, this::model));
         assertTrue(requests.isEmpty());
     }
@@ -656,14 +818,19 @@ class OpenAiReasoningChatModelTest {
     private String json(String content, String reasoning, String finish, Map<String, Integer> usage) throws IOException {
         var root = mapper.createObjectNode();
         var choice = root.putArray("choices").addObject();
+
         choice.put("index", 0).put("finish_reason", finish);
+
         var message = choice.putObject("message").put("role", "assistant").put("content", content);
+
         if (reasoning != null) {
             message.put("reasoning_content", reasoning);
         }
+
         if (usage != null) {
             root.set("usage", mapper.valueToTree(usage));
         }
+
         return mapper.writeValueAsString(root);
     }
 
@@ -687,22 +854,30 @@ class OpenAiReasoningChatModelTest {
     /** 生成工具参数分片，首片之外允许省略标识和名称。 */
     private JsonNode tool(int index, String id, String name, String arguments) {
         var tool = mapper.createObjectNode().put("index", index);
+
         if (id != null) {
             tool.put("id", id).put("type", "function");
         }
+
         var function = tool.putObject("function").put("arguments", arguments);
+
         if (name != null) {
             function.put("name", name);
         }
+
         return tool;
     }
 
     /** 用可控字节边界写响应，模拟 UTF-8 网络分片。 */
     private void reply(HttpExchange exchange, String type, String body, int chunkBytes) throws IOException {
         exchange.getResponseHeaders().set("Content-Type", type);
+
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+
         exchange.sendResponseHeaders(200, chunkBytes > 0 ? 0 : bytes.length);
+
         int step = chunkBytes > 0 ? chunkBytes : bytes.length;
+
         for (int offset = 0; offset < bytes.length; offset += step) {
             exchange.getResponseBody().write(bytes, offset, Math.min(step, bytes.length - offset));
             exchange.getResponseBody().flush();
@@ -717,6 +892,7 @@ class OpenAiReasoningChatModelTest {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+
             throw new IOException("测试服务器已停止");
         }
     }
@@ -732,5 +908,6 @@ class OpenAiReasoningChatModelTest {
     }
 
     private record CapturedRequest(String method, String path, String authorization, JsonNode body) { }
+
     private record Observation(String text, Long duration, boolean truncated) { }
 }

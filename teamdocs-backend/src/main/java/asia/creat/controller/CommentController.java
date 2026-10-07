@@ -22,6 +22,7 @@ public class CommentController {
                              @RequestBody @Validated AddCommentDTO dto,
                              @AuthenticationPrincipal LoginUser loginUser) {
         commentService.addComment(spaceId, documentId, dto, loginUser);
+
         return Result.success();
     }
 
@@ -39,6 +40,7 @@ public class CommentController {
                                 @PathVariable Long commentId,
                                 @AuthenticationPrincipal LoginUser loginUser) {
         commentService.deleteComment(spaceId, documentId, commentId, loginUser);
+
         return Result.success();
     }
 }

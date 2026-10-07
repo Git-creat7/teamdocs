@@ -9,18 +9,19 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
+import java.util.Date;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -70,6 +71,7 @@ class JwtAuthenticationFilterTest {
         filter.doFilter(request, response, filterChain);
 
         verify(filterChain).doFilter(request, response);
+
         assertNull(SecurityContextHolder.getContext().getAuthentication());
     }
 
@@ -77,21 +79,25 @@ class JwtAuthenticationFilterTest {
     void shouldAuthenticateValidBearerToken() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/space/list");
         request.addHeader("Authorization", "Bearer valid-token");
+
         MockHttpServletResponse response = new MockHttpServletResponse();
+
         when(jwtUtils.parseToken("valid-token")).thenReturn(claims);
         when(claims.getId()).thenReturn("token-id");
         when(tokenRevocationService.isRevoked("token-id")).thenReturn(false);
         when(claims.get("userId", Long.class)).thenReturn(7L);
         when(claims.get("username", String.class)).thenReturn("alice");
-        when(claims.getIssuedAt()).thenReturn(new java.util.Date());
-        when(tokenRevocationService.isUserSessionInvalid(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any()))
+        when(claims.getIssuedAt()).thenReturn(new Date());
+        when(tokenRevocationService.isUserSessionInvalid(ArgumentMatchers.eq(7L), ArgumentMatchers.any()))
                 .thenReturn(false);
 
         filter.doFilter(request, response, filterChain);
 
         verify(filterChain).doFilter(request, response);
+
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         LoginUser principal = assertInstanceOf(LoginUser.class, authentication.getPrincipal());
+
         assertEquals(7L, principal.getUserId());
         assertEquals("alice", principal.getUsername());
     }
@@ -100,19 +106,22 @@ class JwtAuthenticationFilterTest {
     void shouldRejectTokenWhenUserSessionInvalidated() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/space/list");
         request.addHeader("Authorization", "Bearer old-token");
+
         MockHttpServletResponse response = new MockHttpServletResponse();
+
         when(jwtUtils.parseToken("old-token")).thenReturn(claims);
         when(claims.getId()).thenReturn("token-id");
         when(tokenRevocationService.isRevoked("token-id")).thenReturn(false);
         when(claims.get("userId", Long.class)).thenReturn(7L);
         when(claims.get("username", String.class)).thenReturn("alice");
-        when(claims.getIssuedAt()).thenReturn(new java.util.Date(System.currentTimeMillis() - 60_000L));
-        when(tokenRevocationService.isUserSessionInvalid(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any()))
+        when(claims.getIssuedAt()).thenReturn(new Date(System.currentTimeMillis() - 60_000L));
+        when(tokenRevocationService.isUserSessionInvalid(ArgumentMatchers.eq(7L), ArgumentMatchers.any()))
                 .thenReturn(true);
 
         filter.doFilter(request, response, filterChain);
 
         verify(filterChain, never()).doFilter(request, response);
+
         assertUnauthorizedResult(response);
     }
 
@@ -120,14 +129,17 @@ class JwtAuthenticationFilterTest {
     void shouldRejectTokenWithoutJwtId() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/space/list");
         request.addHeader("Authorization", "Bearer legacy-token");
+
         MockHttpServletResponse response = new MockHttpServletResponse();
+
         when(jwtUtils.parseToken("legacy-token")).thenReturn(claims);
         when(claims.getId()).thenReturn(null);
 
         filter.doFilter(request, response, filterChain);
 
         verify(filterChain, never()).doFilter(request, response);
-        verify(tokenRevocationService, never()).isRevoked(org.mockito.ArgumentMatchers.anyString());
+        verify(tokenRevocationService, never()).isRevoked(ArgumentMatchers.anyString());
+
         assertUnauthorizedResult(response);
     }
 
@@ -135,7 +147,9 @@ class JwtAuthenticationFilterTest {
     void shouldRejectRevokedToken() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/space/list");
         request.addHeader("Authorization", "Bearer revoked-token");
+
         MockHttpServletResponse response = new MockHttpServletResponse();
+
         when(jwtUtils.parseToken("revoked-token")).thenReturn(claims);
         when(claims.getId()).thenReturn("revoked-id");
         when(tokenRevocationService.isRevoked("revoked-id")).thenReturn(true);
@@ -143,6 +157,7 @@ class JwtAuthenticationFilterTest {
         filter.doFilter(request, response, filterChain);
 
         verify(filterChain, never()).doFilter(request, response);
+
         assertUnauthorizedResult(response);
     }
 
@@ -150,7 +165,9 @@ class JwtAuthenticationFilterTest {
     void shouldRejectTokenWhenRevocationCheckFails() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/space/list");
         request.addHeader("Authorization", "Bearer valid-token");
+
         MockHttpServletResponse response = new MockHttpServletResponse();
+
         when(jwtUtils.parseToken("valid-token")).thenReturn(claims);
         when(claims.getId()).thenReturn("token-id");
         when(tokenRevocationService.isRevoked("token-id"))
@@ -159,6 +176,7 @@ class JwtAuthenticationFilterTest {
         filter.doFilter(request, response, filterChain);
 
         verify(filterChain, never()).doFilter(request, response);
+
         assertUnauthorizedResult(response);
     }
 
@@ -166,12 +184,15 @@ class JwtAuthenticationFilterTest {
     void shouldReturnResultBodyWhenTokenIsInvalid() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/space/list");
         request.addHeader("Authorization", "Bearer invalid-token");
+
         MockHttpServletResponse response = new MockHttpServletResponse();
+
         when(jwtUtils.parseToken("invalid-token")).thenThrow(new RuntimeException("expired"));
 
         filter.doFilter(request, response, filterChain);
 
         verify(filterChain, never()).doFilter(request, response);
+
         assertUnauthorizedResult(response);
     }
 
@@ -179,11 +200,13 @@ class JwtAuthenticationFilterTest {
     void shouldReturnResultBodyWhenAuthorizationHeaderIsMalformed() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/space/list");
         request.addHeader("Authorization", "Basic abc");
+
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, filterChain);
 
         verify(filterChain, never()).doFilter(request, response);
+
         assertUnauthorizedResult(response);
     }
 
@@ -192,7 +215,9 @@ class JwtAuthenticationFilterTest {
         assertTrue(MediaType.APPLICATION_JSON.isCompatibleWith(
                 MediaType.parseMediaType(response.getContentType())
         ));
+
         JsonNode body = objectMapper.readTree(response.getContentAsString());
+
         assertEquals(0, body.get("code").asInt());
         assertEquals("未登录或登录状态已失效", body.get("msg").asText());
     }

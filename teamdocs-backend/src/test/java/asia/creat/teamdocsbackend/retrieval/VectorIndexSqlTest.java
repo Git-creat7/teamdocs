@@ -1,11 +1,12 @@
 package asia.creat.teamdocsbackend.retrieval;
 
 import asia.creat.mapper.VectorIndexMapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.MybatisSqlSessionFactoryBuilder;
+import java.util.List;
 import org.apache.ibatis.mapping.Environment;
-import org.apache.ibatis.session.Configuration;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
-import org.apache.ibatis.session.SqlSessionFactoryBuilder;
 import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -17,7 +18,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.testcontainers.containers.MySQLContainer;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 /** 只有显式开启才启动隔离 MySQL，不连接业务数据库。 */
@@ -33,16 +33,19 @@ class VectorIndexSqlTest {
         mysql = new MySQLContainer<>("mysql:8.4");
         mysql.start();
         dataSource = new DriverManagerDataSource(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
+
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
         jdbc.execute("CREATE TABLE space(id BIGINT PRIMARY KEY,deleted INT NOT NULL)");
         jdbc.execute("CREATE TABLE document(id BIGINT PRIMARY KEY,space_id BIGINT,parse_version INT,parse_status VARCHAR(16),deleted INT)");
+
         try (var connection = dataSource.getConnection()) {
             ScriptUtils.executeSqlScript(connection, new FileSystemResource("../sql/vector_index.sql"));
         }
-        Configuration config = new Configuration(new Environment("vector-test", new JdbcTransactionFactory(), dataSource));
+
+        MybatisConfiguration config = new MybatisConfiguration(new Environment("vector-test", new JdbcTransactionFactory(), dataSource));
         config.setMapUnderscoreToCamelCase(true);
         config.addMapper(VectorIndexMapper.class);
-        sessions = new SqlSessionFactoryBuilder().build(config);
+        sessions = new MybatisSqlSessionFactoryBuilder().build(config);
     }
 
     /** 仅停止本测试创建的容器。 */
@@ -67,9 +70,11 @@ class VectorIndexSqlTest {
     void enqueueRollsBackWithBusinessTransaction() {
         try (SqlSession session = sessions.openSession(false)) {
             VectorIndexMapper mapper = session.getMapper(VectorIndexMapper.class);
+
             assertTrue(mapper.snapshot(10L).isReady());
             mapper.enqueue(10L, "v1");
             session.rollback();
+
             assertNull(mapper.task(10L));
         }
     }
@@ -82,11 +87,15 @@ class VectorIndexSqlTest {
             mapper.enqueue(10L, "v1");
             mapper.complete(10L, 1);
             mapper.enqueue(10L, "v1");
+
             assertEquals("DONE", mapper.task(10L).getState());
+
             mapper.enqueue(10L, "v2");
             mapper.complete(10L, 1);
             mapper.fail(10L, 1, 100);
+
             var current = mapper.task(10L);
+
             assertEquals(2, current.getGeneration());
             assertEquals("PENDING", current.getState());
             assertEquals(0, current.getAttempts());
@@ -99,15 +108,20 @@ class VectorIndexSqlTest {
         try (SqlSession session = sessions.openSession(true)) {
             VectorIndexMapper mapper = session.getMapper(VectorIndexMapper.class);
             mapper.enqueue(10L, "v1");
-            assertEquals(1, mapper.reserve(10L, 1, 0, 100));
-            assertEquals(0, mapper.reserve(10L, 1, 0, 100));
+
+            assertTrue(mapper.reserve(10L, 1, 0, 100));
+            assertFalse(mapper.reserve(10L, 1, 0, 100));
+
             mapper.fail(10L, 1, 10);
-            assertEquals(1, mapper.reserve(10L, 1, 10, 100));
+
+            assertTrue(mapper.reserve(10L, 1, 10, 100));
             mapper.fail(10L, 1, 20);
-            assertEquals(1, mapper.reserve(10L, 1, 20, 100));
+
+            assertTrue(mapper.reserve(10L, 1, 20, 100));
             mapper.fail(10L, 1, 30);
+
             assertEquals("FAILED", mapper.task(10L).getState());
-            assertEquals(0, mapper.reserve(10L, 1, 1000, 2000));
+            assertFalse(mapper.reserve(10L, 1, 1000, 2000));
             assertNull(mapper.next(1000));
         }
     }
@@ -120,9 +134,12 @@ class VectorIndexSqlTest {
             mapper.enqueue(10L, "v1");
             new JdbcTemplate(dataSource).update("DELETE FROM document WHERE id=10");
             session.clearCache();
+
             assertNull(mapper.snapshot(10L));
-            assertEquals(java.util.List.of(10L), mapper.deletedDocumentIds());
+            assertEquals(List.of(10L), mapper.deletedDocumentIds());
+
             mapper.enqueue(10L, "deleted");
+
             assertTrue(mapper.deletedDocumentIds().isEmpty());
         }
     }

@@ -16,6 +16,7 @@ function createSidebarState(initialCollapsed = false, initialAutoCollapse = true
 
   const detailSidebarExpanded = ref(false)
   const agentSidebarExpanded = ref(false)
+
   const isAgentPage = computed(() => route.value.name === 'SpaceAgent')
   const hasDocumentDetail = computed(() =>
     route.value.name === 'SpaceWorkbench' && Number(route.value.query?.doc) > 0
@@ -40,28 +41,39 @@ function createSidebarState(initialCollapsed = false, initialAutoCollapse = true
 
   function toggleSidebar() {
     if (isMobile.value) return
+
     if (effectiveCollapsed.value) {
       if (automaticAgentCollapse.value && !collapsed.value) {
         agentSidebarExpanded.value = true
+
         return
       }
+
       if (automaticDetailCollapse.value && !collapsed.value) {
         detailSidebarExpanded.value = true
+
         return
       }
+
       collapsed.value = false
       agentSidebarExpanded.value = true
       detailSidebarExpanded.value = true
+
       return
     }
+
     if (isAgentPage.value && agentSidebarExpanded.value && !collapsed.value) {
       agentSidebarExpanded.value = false
+
       return
     }
+
     if (hasDocumentDetail.value && detailSidebarExpanded.value && !collapsed.value) {
       detailSidebarExpanded.value = false
+
       return
     }
+
     collapsed.value = true
   }
 
@@ -91,6 +103,7 @@ function createSidebarState(initialCollapsed = false, initialAutoCollapse = true
 
 test('entering agent page automatically collapses the sidebar', async () => {
   const state = createSidebarState(false)
+
   assert.equal(state.effectiveCollapsed.value, false, 'initially expanded on Home')
 
   // Navigate to Agent page
@@ -101,6 +114,7 @@ test('entering agent page automatically collapses the sidebar', async () => {
     query: {}
   }
   await nextTick()
+
   assert.equal(state.isAgentPage.value, true)
   assert.equal(state.effectiveCollapsed.value, true, 'automatically collapsed on Agent page')
   assert.equal(state.collapsed.value, false, 'global preference remains unmutated')
@@ -117,16 +131,19 @@ test('manually toggling sidebar on agent page expands and collapses it without a
     query: {}
   }
   await nextTick()
+
   assert.equal(state.effectiveCollapsed.value, true, 'auto-collapsed upon entry')
 
   // User expands sidebar while on Agent page
   state.toggleSidebar()
+
   assert.equal(state.effectiveCollapsed.value, false, 'expanded after toggle')
   assert.equal(state.agentSidebarExpanded.value, true)
   assert.equal(state.collapsed.value, false, 'base preference is still false')
 
   // User collapses sidebar again while on Agent page
   state.toggleSidebar()
+
   assert.equal(state.effectiveCollapsed.value, true, 're-collapsed after second toggle')
   assert.equal(state.agentSidebarExpanded.value, false)
   assert.equal(state.collapsed.value, false, 'base preference is still false')
@@ -142,6 +159,7 @@ test('navigating away from agent page restores normal expanded state', async () 
     query: {}
   }
   await nextTick()
+
   assert.equal(state.effectiveCollapsed.value, true, 'collapsed on Agent page')
 
   // Navigate back to Home
@@ -152,6 +170,7 @@ test('navigating away from agent page restores normal expanded state', async () 
     query: {}
   }
   await nextTick()
+
   assert.equal(state.effectiveCollapsed.value, false, 'restored to expanded on Home')
 })
 
@@ -166,6 +185,7 @@ test('switching between spaces re-triggers auto-collapse for agent page', async 
   }
   await nextTick()
   state.toggleSidebar() // user temporarily expanded on space 1
+
   assert.equal(state.effectiveCollapsed.value, false)
 
   // User switches to space 2 agent page
@@ -176,5 +196,6 @@ test('switching between spaces re-triggers auto-collapse for agent page', async 
     query: {}
   }
   await nextTick()
+
   assert.equal(state.effectiveCollapsed.value, true, 'auto-collapses again on space switch')
 })

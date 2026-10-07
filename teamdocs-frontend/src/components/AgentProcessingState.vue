@@ -62,7 +62,9 @@ import { getAgentProgress } from '@/utils/agentProgress'
 import { agentError } from '@/utils/agentErrors'
 
 const props = defineProps({ run: { type: Object, default: null } })
+
 const progress = computed(() => getAgentProgress(props.run))
+
 const expanded = ref(false)
 
 // 运行期间默认展开，允许手动收起；结束或切换运行后重置。
@@ -72,7 +74,9 @@ watch([() => props.run?.id, () => progress.value.active], ([, active]) => {
 
 function durationLabel(step) {
   if (step.state === 'running') return '进行中'
+
   if (step.state === 'stopped') return '已停止'
+
   if (step.state !== 'succeeded') return '未完成'
 
   return `${Math.max(0.1, (step.durationMs || 0) / 1000).toFixed(1)} 秒`
@@ -84,6 +88,7 @@ function durationLabel(step) {
 .agent-activity {
   margin-top: 10px;
 }
+
 .activity-summary {
   display: inline-flex;
   align-items: center;
@@ -97,30 +102,38 @@ function durationLabel(step) {
   cursor: pointer;
   list-style: none;
 }
+
 .activity-summary::-webkit-details-marker { display: none; }
+
 .agent-run-indicator {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--app-text-muted);
 }
+
 .agent-run-indicator.live {
   background: #10b981;
   animation: agent-indicator-pulse 1.6s ease-in-out infinite;
 }
+
 @keyframes agent-indicator-pulse {
   50% { opacity: 0.35; }
 }
+
 .activity-label {
   font-weight: 500;
   color: var(--app-text-2);
 }
+
 .activity-arrow {
   transition: transform .15s ease;
 }
+
 details[open] > .activity-summary .activity-arrow {
   transform: rotate(180deg);
 }
+
 .activity-details-panel {
   margin-top: 6px;
   padding: 8px 12px;
@@ -128,6 +141,7 @@ details[open] > .activity-summary .activity-arrow {
   border: 1px solid var(--app-border);
   border-radius: 6px;
 }
+
 .agent-tool-list {
   list-style: none;
   margin: 0;
@@ -136,42 +150,59 @@ details[open] > .activity-summary .activity-arrow {
   flex-direction: column;
   gap: 4px;
 }
+
 .agent-tool-list li {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: .8125rem;
 }
+
 .tool-status-icon {
   flex-shrink: 0;
 }
+
 .tool-status-icon.is-ok { color: #10b981; }
+
 .tool-status-icon.is-running { color: var(--app-accent); }
+
 .tool-status-icon.is-err { color: #ef4444; }
+
 .tool-action-name { color: var(--app-text-2); }
+
 .agent-parse-note, .agent-run-reason {
   margin: 6px 0 0;
   font-size: .8125rem;
 }
+
 .agent-run-reason { color: #ef4444; }
+
 .agent-parse-note { color: var(--app-text-muted); }
 
 .activity-summary.is-passive { cursor: default; }
+
 .activity-summary:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 3px; }
+
 .activity-count { margin: 0 0 8px; font-size: .75rem; color: var(--app-text-muted); }
+
 .tool-desc { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
 .agent-progress-spin {
   display: inline-block;
   transform-box: fill-box;
   transform-origin: center;
   animation: agent-progress-spin 1s linear infinite;
 }
+
 @keyframes agent-progress-spin {
   0% { transform: rotate(0deg); }
+
   100% { transform: rotate(360deg); }
 }
+
 @media (prefers-reduced-motion: reduce) {
   .agent-run-indicator.live { animation: none; }
+
   .activity-summary, .activity-arrow { transition: none; }
 }
 
@@ -184,8 +215,11 @@ details[open] > .activity-summary .activity-arrow {
   font-size: .8125rem;
   line-height: 1.6;
 }
+
 .activity-waiting:first-child { margin-top: 0; }
+
 .activity-waiting svg { flex-shrink: 0; margin-top: 3px; }
+
 .activity-technical {
   margin-top: 12px;
   border-top: 1px solid var(--app-border);
@@ -193,9 +227,14 @@ details[open] > .activity-summary .activity-arrow {
   color: var(--app-text-muted);
   font-size: .75rem;
 }
+
 .activity-technical > summary { cursor: pointer; padding: 4px 0; }
+
 .activity-technical .activity-count { margin: 8px 0; }
+
 .activity-metrics { display: grid; gap: 6px; list-style: none; margin: 0; padding: 0; }
+
 .activity-metrics li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+
 .activity-metrics li > span:first-child { flex: 1; min-width: 120px; }
 </style>

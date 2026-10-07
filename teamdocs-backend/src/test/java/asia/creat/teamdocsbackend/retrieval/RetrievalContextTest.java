@@ -13,8 +13,10 @@ class RetrievalContextTest {
     void limitsHttpTimeoutByRunDeadline() {
         try (var scope = RetrievalContext.open(System.currentTimeMillis() + 500, () -> { }, hit -> { })) {
             long timeout = RetrievalContext.timeoutMillis(10_000);
+
             assertTrue(timeout > 0 && timeout <= 500);
         }
+
         assertEquals(10_000, RetrievalContext.timeoutMillis(10_000));
     }
 
@@ -31,13 +33,17 @@ class RetrievalContextTest {
     void nestedScopesRestoreAndThenClearContext() {
         AtomicInteger outer = new AtomicInteger();
         AtomicInteger inner = new AtomicInteger();
+
         try (var first = RetrievalContext.open(Long.MAX_VALUE, outer::incrementAndGet, hit -> { })) {
             try (var second = RetrievalContext.open(Long.MAX_VALUE, inner::incrementAndGet, hit -> { })) {
                 RetrievalContext.check();
             }
+
             RetrievalContext.check();
         }
+
         RetrievalContext.check();
+
         assertEquals(1, outer.get());
         assertEquals(1, inner.get());
     }

@@ -43,21 +43,29 @@ public class OperationLogAspect {
         if (expression == null || expression.isBlank()) {
             return null;
         }
+
         try {
             StandardEvaluationContext context = new StandardEvaluationContext();
             String[] paramNames = parameterNameDiscoverer.getParameterNames(method);
+
             for (int i = 0; i < args.length; i++) {
                 String name = (paramNames != null && i < paramNames.length) ? paramNames[i] : "p" + i;
+
                 context.setVariable(name, args[i]);
             }
+
             Object value = spelParser.parseExpression(expression).getValue(context);
+
             if (value == null) {
                 return null;
             }
+
             String text = value.toString();
+
             return text.length() > 255 ? text.substring(0, 255) : text;
         } catch (Exception e) {
             log.warn("操作日志: resourceName 表达式求值失败: {}", expression, e);
+
             return null;
         }
     }
@@ -98,8 +106,10 @@ public class OperationLogAspect {
         }
 
         var requestAttributes = RequestContextHolder.getRequestAttributes();
+
         if (requestAttributes instanceof ServletRequestAttributes attributes) {
             HttpServletRequest request = attributes.getRequest();
+
             requestMethod = request.getMethod();
             requestUri = request.getRequestURI();
         }
@@ -113,16 +123,19 @@ public class OperationLogAspect {
 
         try {
             Object result = pjp.proceed();
+
             if (resourceId == null
                     && operationLog.resourceIdFromResult()
                     && result instanceof Number number) {
                 resourceId = number.longValue();
             }
+
             return result;
         } catch (Throwable throwable) {
             success = 0;
             errorMessage = throwable.getMessage();
             log.error("操作日志: 操作名称={}, 资源类型={}, 方法执行异常: {}", operationName, resourceType, errorMessage);
+
             throw throwable;
         } finally {
             if (userId == null) {
@@ -131,11 +144,13 @@ public class OperationLogAspect {
 
                 long endTime = System.currentTimeMillis();
                 long duration = endTime - startTime;
+
                 if (errorMessage != null) {
                     errorMessage = errorMessage.length() > 512
                             ? errorMessage.substring(0, 512)
                             : errorMessage;
                 }
+
                 log.debug("操作日志: 操作名称={}, 资源类型={}, 耗时={}ms", operationName, resourceType, duration);
 
                 OperationLogRecord operationLogRecord = OperationLogRecord.builder()

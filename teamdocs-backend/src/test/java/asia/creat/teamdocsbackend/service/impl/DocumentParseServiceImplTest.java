@@ -99,6 +99,7 @@ class DocumentParseServiceImplTest {
     @AfterEach
     void tearDown() {
         SpaceContext.clear();
+
         SOURCE_CACHE.invalidateAll();
         SOURCE_CACHE.cleanUp();
     }
@@ -130,8 +131,10 @@ class DocumentParseServiceImplTest {
         Document document = document(4L);
         document.setName("notes.txt");
         document.setFileType("text/plain");
+
         byte[] original = new byte[]{1, 2, 3, 4};
         ByteArrayInputStream input = new ByteArrayInputStream(original);
+
         when(documentMapper.selectById(9L)).thenReturn(document);
         when(documentMapper.update(isNull(), any())).thenReturn(1);
         when(fileStorageService.open(BucketType.PRIVATE, document.getFilePath())).thenReturn(input);
@@ -141,7 +144,9 @@ class DocumentParseServiceImplTest {
         service.parseDocument(9L);
 
         ArgumentCaptor<byte[]> bytes = ArgumentCaptor.forClass(byte[].class);
+
         verify(textExtractor).extractSource(eq("notes.txt"), eq("text/plain"), bytes.capture());
+
         assertArrayEquals(original, bytes.getValue());
         assertSame(SOURCE_CACHE.getIfPresent("9:2"), bytes.getValue());
         assertEquals(0, input.available());
@@ -153,9 +158,11 @@ class DocumentParseServiceImplTest {
     @ValueSource(longs = 4)
     void actualStreamLimitAppliesWhenFileSizeIsMissingOrInaccurate(Long declaredSize) throws IOException {
         properties.setMaxBytes(32);
+
         Document document = document(declaredSize);
         document.setName("notes.txt");
         document.setFileType("text/plain");
+
         AtomicBoolean closed = new AtomicBoolean();
         ByteArrayInputStream input = new ByteArrayInputStream(new byte[4096]) {
             @Override
@@ -163,6 +170,7 @@ class DocumentParseServiceImplTest {
                 closed.set(true);
             }
         };
+
         when(documentMapper.selectById(9L)).thenReturn(document);
         when(documentMapper.update(isNull(), any())).thenReturn(1);
         when(fileStorageService.open(BucketType.PRIVATE, document.getFilePath())).thenReturn(input);
@@ -216,7 +224,9 @@ class DocumentParseServiceImplTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<DocumentContent>> chunks = ArgumentCaptor.forClass(List.class);
+
         verify(documentContentService).publishIfParsing(eq(9L), eq(1L), eq(2), chunks.capture());
+
         assertEquals(0, chunks.getValue().get(0).getChunkIndex());
         assertEquals(1, chunks.getValue().get(0).getPageNumber());
         assertEquals(1, chunks.getValue().get(1).getChunkIndex());
@@ -245,6 +255,7 @@ class DocumentParseServiceImplTest {
         document.setUploadBy(8L);
         document.setParseStatus(ParseStatus.FAILED);
         when(documentMapper.selectById(9L)).thenReturn(document);
+
         SpaceMember member = new SpaceMember();
         member.setRole(SpaceRole.MEMBER);
         SpaceContext.set(member);
@@ -260,6 +271,7 @@ class DocumentParseServiceImplTest {
         document.setChunkCount(3);
         when(documentMapper.selectById(9L)).thenReturn(document);
         when(documentMapper.update(isNull(), any())).thenReturn(1);
+
         SpaceMember member = new SpaceMember();
         member.setRole(SpaceRole.OWNER);
         SpaceContext.set(member);
@@ -277,11 +289,13 @@ class DocumentParseServiceImplTest {
         document.setParseStatus(ParseStatus.PARSING);
         when(documentMapper.selectById(9L)).thenReturn(document);
         when(documentMapper.update(isNull(), any())).thenReturn(0);
+
         SpaceMember member = new SpaceMember();
         member.setRole(SpaceRole.OWNER);
         SpaceContext.set(member);
 
         BusinessException error = assertThrows(BusinessException.class, () -> service.reparse(1L, 9L, OWNER));
+
         assertEquals("当前状态不能重新解析", error.getMessage());
     }
 
@@ -296,6 +310,7 @@ class DocumentParseServiceImplTest {
         document.setFilePath("space/1/notes.txt");
         document.setParseVersion(2);
         document.setParseStatus(ParseStatus.PENDING);
+
         return document;
     }
 }

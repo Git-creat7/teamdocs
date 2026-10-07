@@ -177,6 +177,7 @@ function openRecentDoc(doc) {
 
 @media (max-width: 768px) {
   .recent-page { padding: 1.1rem 1rem 2rem; }
+
   .row-time { display: none; }
 }
 </style>

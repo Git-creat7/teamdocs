@@ -1,16 +1,26 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 const LandingView = () => import('@/views/LandingView.vue')
+
 const LoginView = () => import('@/views/LoginView.vue')
+
 const AppShell = () => import('@/layouts/AppShell.vue')
+
 const HomeView = () => import('@/views/HomeView.vue')
+
 const RecentView = () => import('@/views/RecentView.vue')
+
 const ActivityView = () => import('@/views/ActivityView.vue')
+
 const TrashView = () => import('@/views/TrashView.vue')
-const TagManageView = () => import('@/views/TagManageView.vue')
+
+
 const SettingsView = () => import('@/views/SettingsView.vue')
+
 const AgentView = () => import('@/views/AgentView.vue')
+
 const SpaceWorkbenchView = () => import('@/views/SpaceWorkbenchView.vue')
+
 const DocumentPreviewPage = () => import('@/views/DocumentPreviewPage.vue')
 
 const routes = [
@@ -36,7 +46,6 @@ const routes = [
       { path: 'home', name: 'Home', component: HomeView },
       { path: 'recent', name: 'Recent', component: RecentView },
       { path: 'activities', name: 'Activities', component: ActivityView },
-      { path: 'tags', name: 'Tags', component: TagManageView },
       { path: 'trash', name: 'Trash', component: TrashView },
       { path: 'settings', name: 'Settings', component: SettingsView },
       // 兼容旧路径

@@ -8,17 +8,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import static asia.creat.utils.RedisConstants.TOKEN_REVOKED_PREFIX;
-import static asia.creat.utils.RedisConstants.TOKEN_REVOKED_PREFIX;
-import static asia.creat.utils.RedisConstants.TOKEN_USER_INVALID_BEFORE_PREFIX;
 import static asia.creat.utils.RedisConstants.TOKEN_USER_INVALID_BEFORE_PREFIX;
 
 import java.time.Duration;
 import java.util.Date;
 
-import static asia.creat.utils.RedisConstants.TOKEN_REVOKED_PREFIX;
-import static asia.creat.utils.RedisConstants.TOKEN_REVOKED_PREFIX;
-import static asia.creat.utils.RedisConstants.TOKEN_USER_INVALID_BEFORE_PREFIX;
-import static asia.creat.utils.RedisConstants.TOKEN_USER_INVALID_BEFORE_PREFIX;
 
 @Service
 public class TokenRevocationServiceImpl implements TokenRevocationService {
@@ -39,11 +33,13 @@ public class TokenRevocationServiceImpl implements TokenRevocationService {
         Claims claims = jwtUtils.parseToken(token);
         String tokenId = claims.getId();
         Date expiration = claims.getExpiration();
+
         if (tokenId == null || tokenId.isBlank() || expiration == null) {
             throw new BusinessException("Token 信息不完整");
         }
 
         long ttlMillis = expiration.getTime() - System.currentTimeMillis();
+
         if (ttlMillis <= 0) {
             throw new BusinessException("Token 已过期");
         }
@@ -62,6 +58,7 @@ public class TokenRevocationServiceImpl implements TokenRevocationService {
     @Override
     public boolean isRevoked(String tokenId) {
         Boolean revoked;
+
         try {
             revoked = stringRedisTemplate.hasKey(TOKEN_REVOKED_PREFIX + tokenId);
         } catch (RuntimeException e) {
@@ -71,6 +68,7 @@ public class TokenRevocationServiceImpl implements TokenRevocationService {
         if (revoked == null) {
             throw new BusinessException("Token 撤销状态校验无结果");
         }
+
         return revoked;
     }
 
@@ -79,6 +77,7 @@ public class TokenRevocationServiceImpl implements TokenRevocationService {
         if (userId == null) {
             throw new BusinessException("用户信息不完整");
         }
+
         try {
             stringRedisTemplate.opsForValue().set(
                     TOKEN_USER_INVALID_BEFORE_PREFIX + userId,
@@ -95,15 +94,19 @@ public class TokenRevocationServiceImpl implements TokenRevocationService {
         if (userId == null || issuedAt == null) {
             throw new BusinessException("Token 信息不完整");
         }
+
         String watermark;
+
         try {
             watermark = stringRedisTemplate.opsForValue().get(TOKEN_USER_INVALID_BEFORE_PREFIX + userId);
         } catch (RuntimeException e) {
             throw new BusinessException("Token 撤销状态校验失败", e);
         }
+
         if (watermark == null || watermark.isBlank()) {
             return false;
         }
+
         try {
             return issuedAt.getTime() < Long.parseLong(watermark);
         } catch (NumberFormatException e) {

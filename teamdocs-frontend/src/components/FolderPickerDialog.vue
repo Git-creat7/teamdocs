@@ -74,11 +74,13 @@ function handleOpen() {
 
 async function loadNode(node, resolve) {
   const parentId = node.level === 0 ? 0 : node.data.id
+
   try {
     const list = await listSubFoldersApi(props.spaceId, parentId)
     const nodes = list
       .filter((f) => !props.disabledIds.includes(f.id))
       .map((f) => ({ id: f.id, name: f.name, leaf: false }))
+
     resolve(nodes)
   } catch (err) {
     resolve([])
@@ -87,6 +89,7 @@ async function loadNode(node, resolve) {
 
 async function handleConfirm() {
   confirming.value = true
+
   try {
     await Promise.resolve(emit('confirm', selectedId.value))
     visible.value = false

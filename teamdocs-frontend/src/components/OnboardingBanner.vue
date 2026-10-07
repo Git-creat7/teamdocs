@@ -47,6 +47,7 @@ const doneDismissed = ref(localStorage.getItem(DONE_KEY) === '1')
 
 const steps = computed(() => {
   const list = props.spaces
+
   return [
     { name: '创建空间', done: list.length > 0 },
     { name: '上传文档', done: list.some((s) => Number(s.docCount) > 0) },

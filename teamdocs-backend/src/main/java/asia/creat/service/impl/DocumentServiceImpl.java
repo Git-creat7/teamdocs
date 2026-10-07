@@ -11,16 +11,12 @@ import asia.creat.dto.MoveDocumentDTO;
 import asia.creat.dto.PageQuery;
 import asia.creat.dto.RenameDocumentDTO;
 import asia.creat.entity.Document;
-import asia.creat.entity.DocumentTag;
 import asia.creat.entity.Folder;
 import asia.creat.entity.ParseStatus;
 import asia.creat.entity.SpaceMember;
-import asia.creat.entity.Tag;
 import asia.creat.helper.ResourcePermissionHelper;
 import asia.creat.mapper.DocumentMapper;
-import asia.creat.mapper.DocumentTagMapper;
 import asia.creat.mapper.FolderMapper;
-import asia.creat.mapper.TagMapper;
 import asia.creat.security.LoginUser;
 import asia.creat.security.SpaceContext;
 import asia.creat.service.DocumentContentService;
@@ -32,7 +28,6 @@ import asia.creat.vo.DocumentDetailVO;
 import asia.creat.vo.DocumentPreviewVO;
 import asia.creat.vo.FolderPathItemVO;
 import asia.creat.vo.RestoreDocumentVO;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
@@ -50,6 +45,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.baomidou.mybatisplus.extension.toolkit.ChainWrappers.lambdaQueryChain;
+
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -59,8 +56,6 @@ public class DocumentServiceImpl implements DocumentService {
     private final ResourcePermissionHelper permissionHelper;
     private final FolderMapper folderMapper;
     private final RecentDocumentService recentDocumentService;
-    private final DocumentTagMapper documentTagMapper;
-    private final TagMapper tagMapper;
     private final DocumentContentService documentContentService;
     private final DocumentIndexSync documentIndexSync;
     private final PlatformTransactionManager transactionManager;
@@ -76,10 +71,13 @@ public class DocumentServiceImpl implements DocumentService {
     public Long upload(@SpaceId Long spaceId, Long folderId, MultipartFile file, LoginUser loginUser) {
 
         String originalName = file.getOriginalFilename();
+
         if (originalName == null) {
             throw new BusinessException("文件名不能为空");
         }
+
         folderId = requireFolderInSpace(spaceId, folderId);
+
         String ext = originalName.contains(".")
                 ? originalName.substring(originalName.lastIndexOf("."))
                 : "";
@@ -92,6 +90,7 @@ public class DocumentServiceImpl implements DocumentService {
         );
 
         fileStorageService.upload(file, BucketType.PRIVATE, objectKey);
+
         Document doc = Document.builder()
                 .spaceId(spaceId)
                 .folderId(folderId)
@@ -104,13 +103,16 @@ public class DocumentServiceImpl implements DocumentService {
                 .chunkCount(0)
                 .parseVersion(0)
                 .build();
+
         try {
             // 文件流已上传完成，只在分配名称和写入记录期间锁定目标目录。
             new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
                 if (documentMapper.lockUploadDirectory(doc.getSpaceId(), doc.getFolderId()) == null) {
                     throw new BusinessException("目标目录不存在或已删除");
                 }
+
                 doc.setName(availableUploadName(doc.getSpaceId(), doc.getFolderId(), originalName));
+
                 if (documentMapper.insert(doc) != 1) {
                     throw new BusinessException("文件信息保存失败");
                 }
@@ -122,10 +124,12 @@ public class DocumentServiceImpl implements DocumentService {
                 log.error("文件信息保存失败，清理 MinIO 对象失败: objectKey={}", objectKey, cleanupException);
                 e.addSuppressed(cleanupException);
             }
+
             throw e;
         }
 
         log.debug("用户 {} 上传了文件 {} 到空间 {} 的文件夹 {}", loginUser.getUserId(), originalName, spaceId, folderId);
+
         return doc.getId();
     }
 
@@ -134,12 +138,10 @@ public class DocumentServiceImpl implements DocumentService {
     public PageResult<Document> listByFolder(@SpaceId Long spaceId, Long folderId, PageQuery pageQuery, LoginUser loginUser) {
         folderId = requireFolderInSpace(spaceId, folderId);
 
-        LambdaQueryWrapper<Document> lqw = new LambdaQueryWrapper<>();
-        lqw.eq(Document::getSpaceId, spaceId)
+        return PageResult.from(lambdaQueryChain(documentMapper).eq(Document::getSpaceId, spaceId)
                 .eq(Document::getFolderId, folderId)
                 .orderByDesc(Document::getUpdatedAt)
-                .orderByDesc(Document::getId);
-        return PageResult.from(documentMapper.selectPage(pageQuery.toPage(), lqw));
+                .orderByDesc(Document::getId).page(pageQuery.toPage()));
     }
 
     @Override
@@ -150,6 +152,7 @@ public class DocumentServiceImpl implements DocumentService {
         Document doc = checkDocument(documentId, spaceId);
 
         SpaceMember member = SpaceContext.getSpaceMember();
+
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
         doc.setName(dto.getNewName());
@@ -166,6 +169,7 @@ public class DocumentServiceImpl implements DocumentService {
         Document doc = checkDocument(documentId, spaceId);
 
         SpaceMember member = SpaceContext.getSpaceMember();
+
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
         documentMapper.deleteById(documentId);
@@ -185,6 +189,7 @@ public class DocumentServiceImpl implements DocumentService {
         Long targetFolderId = requireFolderInSpace(spaceId, dto.getTargetFolderId());
 
         SpaceMember member = SpaceContext.getSpaceMember();
+
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
         doc.setFolderId(targetFolderId);
@@ -199,17 +204,14 @@ public class DocumentServiceImpl implements DocumentService {
 
         Document doc = checkDocument(documentId, spaceId);
 
-        List<Long> tagIds = documentTagMapper.selectList(new LambdaQueryWrapper<DocumentTag>()
-                        .eq(DocumentTag::getDocumentId, documentId))
-                .stream().map(DocumentTag::getTagId).toList();
-        List<Tag> tags = tagIds.isEmpty() ? List.of() : tagMapper.selectBatchIds(tagIds);
-
         DocumentDetailVO vo = new DocumentDetailVO();
+
         BeanUtils.copyProperties(doc, vo);
-        vo.setTags(tags);
+
         vo.setFolderPath(buildFolderPath(doc.getFolderId()));
 
         recentDocumentService.recordRecentDocument(loginUser.getUserId(), documentId);
+
         return vo;
     }
 
@@ -218,15 +220,20 @@ public class DocumentServiceImpl implements DocumentService {
     private List<FolderPathItemVO> buildFolderPath(Long folderId) {
         List<FolderPathItemVO> path = new ArrayList<>();
         Long pid = folderId;
+
         while (pid != null && pid != 0) {
             Folder folder = folderMapper.selectById(pid);
+
             if (folder == null) break;
+
             FolderPathItemVO item = new FolderPathItemVO();
             item.setId(folder.getId());
             item.setName(folder.getName());
+
             path.add(0, item);
             pid = folder.getParentId();
         }
+
         return path;
     }
 
@@ -241,7 +248,9 @@ public class DocumentServiceImpl implements DocumentService {
                     doc.getFilePath(),
                     Map.of("response-content-disposition", buildContentDisposition("attachment", doc.getName()))
                 );
+
         recentDocumentService.recordRecentDocument(loginUser.getUserId(), documentId);
+
         return url;
     }
 
@@ -289,13 +298,17 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         SpaceMember member = SpaceContext.getSpaceMember();
+
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
         boolean originalFolderDeleted = false;
+
         if (targetFolderId == null) {
             targetFolderId = doc.getFolderId();
+
             if (targetFolderId != 0) {
                 Folder originalFolder = folderMapper.selectById(targetFolderId);
+
                 if (originalFolder == null || !originalFolder.getSpaceId().equals(spaceId)) {
                     originalFolderDeleted = true;
                     targetFolderId = 0L;
@@ -303,6 +316,7 @@ public class DocumentServiceImpl implements DocumentService {
             }
         } else if (targetFolderId != 0) {
             Folder folder = folderMapper.selectById(targetFolderId);
+
             if (folder == null || !folder.getSpaceId().equals(spaceId)) {
                 throw new BusinessException("目标文件夹不存在");
             }
@@ -310,6 +324,7 @@ public class DocumentServiceImpl implements DocumentService {
 
         documentMapper.updateDeleted(documentId, targetFolderId);
         documentIndexSync.afterCommit(documentId);
+
         return new RestoreDocumentVO(targetFolderId, originalFolderDeleted);
     }
 
@@ -330,16 +345,15 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         SpaceMember member = SpaceContext.getSpaceMember();
+
         permissionHelper.checkOwnerOrCreator(member, doc.getUploadBy(), loginUser.getUserId());
 
         fileStorageService.delete(BucketType.PRIVATE, doc.getFilePath());
 
-        LambdaQueryWrapper<DocumentTag> relationQuery = new LambdaQueryWrapper<>();
-        relationQuery.eq(DocumentTag::getDocumentId, documentId);
-        documentTagMapper.delete(relationQuery);
 
         // 先锁文档行，避免解析任务在删分块之后又写回孤立切片
         Document locked = documentMapper.lockById(documentId);
+
         if (locked == null || !Integer.valueOf(1).equals(locked.getDeleted())) {
             throw new BusinessException("文件不存在");
         }
@@ -350,8 +364,10 @@ public class DocumentServiceImpl implements DocumentService {
 
         if (!flag) {
             log.error("彻底删除文件 {} 失败", documentId);
+
             throw new BusinessException("文件删除失败");
         }
+
         documentIndexSync.afterCommit(documentId);
     }
 
@@ -361,9 +377,11 @@ public class DocumentServiceImpl implements DocumentService {
         if (keyword == null || keyword.trim().isEmpty()) {
             throw new BusinessException("搜索关键字不能为空");
         }
+
         var page = pageQuery.<Document>toPage();
         // DISTINCT + JOIN 需要用原查询计算准确总数。
         page.setOptimizeCountSql(false);
+
         return PageResult.from(documentMapper.searchDocuments(page, spaceId, keyword.trim()));
     }
 
@@ -385,6 +403,7 @@ public class DocumentServiceImpl implements DocumentService {
     private String buildContentDisposition(String type, String filename) {
         String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8)
                 .replace("+", "%20");
+
         return type + "; filename*=UTF-8''" + encodedFilename;
     }
 
@@ -399,12 +418,16 @@ public class DocumentServiceImpl implements DocumentService {
         for (int number = 1; documentMapper.existsActiveName(spaceId, folderId, candidate); number++) {
             String suffix = "(" + number + ")";
             int available = 255 - extensionLength - suffix.length();
+
             if (available < 1) {
                 throw new BusinessException("文件名过长，无法添加重名编号");
             }
+
             int end = stem.offsetByCodePoints(0, Math.min(stemLength, available));
+
             candidate = stem.substring(0, end) + suffix + extension;
         }
+
         return candidate;
     }
 
@@ -412,11 +435,13 @@ public class DocumentServiceImpl implements DocumentService {
         if (folderId == null || folderId == 0) {
             return 0L;
         }
-        if (folderMapper.selectCount(new LambdaQueryWrapper<Folder>()
+
+        if (lambdaQueryChain(folderMapper)
                 .eq(Folder::getId, folderId)
-                .eq(Folder::getSpaceId, spaceId)) == 0) {
+                .eq(Folder::getSpaceId, spaceId).count() == 0) {
             throw new BusinessException("目标文件夹不存在");
         }
+
         return folderId;
     }
 

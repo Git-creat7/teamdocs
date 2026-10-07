@@ -27,6 +27,7 @@ public class DocumentController {
                                  @RequestParam MultipartFile file,
                                  @AuthenticationPrincipal LoginUser loginUser) {
         documentService.upload(spaceId, folderId, file, loginUser);
+
         return Result.success();
     }
 
@@ -43,6 +44,7 @@ public class DocumentController {
                                  @PathVariable Long documentId,
                                  @AuthenticationPrincipal LoginUser loginUser) {
         documentService.deleteDocument(spaceId, documentId, loginUser);
+
         return Result.success();
     }
 
@@ -52,6 +54,7 @@ public class DocumentController {
                                  @RequestBody @Validated RenameDocumentDTO dto,
                                  @AuthenticationPrincipal LoginUser loginUser) {
         documentService.renameDocument(spaceId, documentId, dto, loginUser);
+
         return Result.success();
     }
 
@@ -61,6 +64,7 @@ public class DocumentController {
                                @RequestBody @Validated MoveDocumentDTO dto,
                                @AuthenticationPrincipal LoginUser loginUser) {
         documentService.moveDocument(spaceId, documentId, dto, loginUser);
+
         return Result.success();
     }
 
@@ -90,6 +94,7 @@ public class DocumentController {
                                    @PathVariable Long documentId,
                                    @AuthenticationPrincipal LoginUser loginUser) {
         String url = documentService.downloadDocument(spaceId, documentId, loginUser);
+
         return Result.success(url);
     }
 
@@ -114,6 +119,7 @@ public class DocumentController {
                                   @AuthenticationPrincipal LoginUser loginUser) {
         // 未指定目标时优先恢复原目录，原目录不存在则由 Service 回退到根目录。
         Long targetFolderId = dto != null ? dto.getTargetFolderId() : null;
+
         return Result.success(documentService.restoreDocument(spaceId, documentId, targetFolderId, loginUser));
     }
 
@@ -122,6 +128,7 @@ public class DocumentController {
                                 @PathVariable Long documentId,
                                 @AuthenticationPrincipal LoginUser loginUser) {
         documentService.purgeDocument(spaceId, documentId, loginUser);
+
         return Result.success();
     }
 

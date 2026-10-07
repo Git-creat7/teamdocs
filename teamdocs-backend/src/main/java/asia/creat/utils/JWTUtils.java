@@ -16,11 +16,14 @@ import javax.crypto.SecretKey;
 @Component
 public class JWTUtils {
 
-    @Value("${jwt.secret}")
-    private String secret;
+    private final String secret;
+    private final long expirationTime;
 
-    @Value("${jwt.expiration}")
-    private long expirationTime;
+    public JWTUtils(@Value("${jwt.secret}") String secret,
+                    @Value("${jwt.expiration}") long expirationTime) {
+        this.secret = secret;
+        this.expirationTime = expirationTime;
+    }
 
     private SecretKey getSecretKey() {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
@@ -28,6 +31,7 @@ public class JWTUtils {
 
     public String generateJWT(Map<String, Object> claims) {
         Date issuedAt = new Date();
+
         return Jwts.builder()
                 .claims(claims)
                 .id(UUID.randomUUID().toString())

@@ -48,6 +48,7 @@ public class LangChain4jRealModelLiveTest {
     static void loadEnv() {
         Dotenv dotenv = null;
         File rootEnv = new File("../.env");
+
         if (rootEnv.exists()) {
             dotenv = Dotenv.configure().directory("..").ignoreIfMissing().load();
         } else {
@@ -57,7 +58,9 @@ public class LangChain4jRealModelLiveTest {
         apiKey = dotenv.get("AGENT_API_KEY", System.getenv("AGENT_API_KEY"));
         baseUrl = dotenv.get("AGENT_BASE_URL", System.getenv("AGENT_BASE_URL"));
         modelName = dotenv.get("AGENT_MODEL_NAME", System.getenv("AGENT_MODEL_NAME"));
+
         String enabledStr = dotenv.get("AGENT_ENABLED", System.getenv("AGENT_ENABLED"));
+
         enabled = Boolean.parseBoolean(enabledStr);
         assumeTrue(enabled && apiKey != null && !apiKey.isBlank()
                 && modelName != null && !modelName.isBlank(), "未配置在线模型测试所需参数");
@@ -68,6 +71,7 @@ public class LangChain4jRealModelLiveTest {
         properties.setApiKey(apiKey);
         properties.setModelName(modelName);
         properties.setBaseUrl(customBaseUrl);
+
         return new AgentModelConfiguration(properties).chatLanguageModel();
     }
 
@@ -89,20 +93,26 @@ public class LangChain4jRealModelLiveTest {
 
         assertNotNull(response);
         assertNotNull(response.content());
+
         String text = response.content().text();
+
         System.out.println("模型回复文本: " + text);
         System.out.println("耗时: " + elapsed + " ms");
 
         TokenUsage usage = response.tokenUsage();
+
         assertNotNull(usage, "模型必须返回 TokenUsage");
+
         if (usage != null) {
             System.out.println("Token 用量: input=" + usage.inputTokenCount()
                     + ", output=" + usage.outputTokenCount()
                     + ", total=" + usage.totalTokenCount());
+
             assertTrue(usage.totalTokenCount() > 0, "总 Token 数应大于 0");
         } else {
             System.out.println("[WARN] 当前提供商未在响应中返回 TokenUsage");
         }
+
         assertNotNull(text);
         assertFalse(text.isBlank());
     }
@@ -134,26 +144,36 @@ public class LangChain4jRealModelLiveTest {
         long elapsed = System.currentTimeMillis() - start;
 
         assertNotNull(response);
+
         AiMessage aiMessage = response.content();
+
         assertNotNull(aiMessage);
 
         System.out.println("Tool Calling 耗时: " + elapsed + " ms");
         System.out.println("是否有工具调用请求: " + aiMessage.hasToolExecutionRequests());
+
         assertTrue(aiMessage.hasToolExecutionRequests(), "应返回原生工具调用，不能以普通文本代替");
 
         if (aiMessage.hasToolExecutionRequests()) {
             List<ToolExecutionRequest> requests = aiMessage.toolExecutionRequests();
             List<String> keywords = new ArrayList<>();
+
             for (ToolExecutionRequest req : requests) {
                 System.out.println("成功触发工具调用: ID=" + req.id() + ", Name=" + req.name() + ", Args=" + req.arguments());
+
                 assertEquals("search_documents", req.name());
                 assertNotNull(req.arguments());
+
                 JsonNode arguments = new ObjectMapper().readTree(req.arguments());
+
                 assertTrue(arguments.path("keyword").isTextual());
+
                 String keyword = arguments.path("keyword").asText();
+
                 assertFalse(keyword.isBlank());
                 keywords.add(keyword);
             }
+
             // 模型可能把问题拆成几次并行调用，比如单独查“数据恢复”，只要求至少一次查的是这个主题
             assertTrue(keywords.stream().anyMatch(k -> k.contains("数据库") || k.contains("备份") || k.contains("恢复")));
         } else {
@@ -161,8 +181,10 @@ public class LangChain4jRealModelLiveTest {
         }
 
         TokenUsage usage = response.tokenUsage();
+
         assertNotNull(usage, "工具调用必须返回 TokenUsage");
         assertTrue(usage.totalTokenCount() > 0);
+
         if (usage != null) {
             System.out.println("Tool Calling Token 用量: input=" + usage.inputTokenCount()
                     + ", output=" + usage.outputTokenCount()

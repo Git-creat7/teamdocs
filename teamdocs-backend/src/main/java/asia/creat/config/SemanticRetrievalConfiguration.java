@@ -21,6 +21,7 @@ public class SemanticRetrievalConfiguration {
         scheduler.setThreadNamePrefix("vector-index-");
         scheduler.setRemoveOnCancelPolicy(true);
         scheduler.setWaitForTasksToCompleteOnShutdown(false);
+
         return scheduler;
     }
 }

@@ -44,13 +44,19 @@ class MilvusVectorClientTest {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
             JsonNode body = json.readTree(exchange.getRequestBody());
+
             requests.add(new Request(exchange.getRequestURI().getPath(), body,
                     exchange.getRequestHeaders().getFirst("Authorization")));
+
             String response = responses.poll();
+
             if (response == null) response = "{\"code\":999,\"message\":\"unexpected request\"}";
+
             byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+
             exchange.getResponseHeaders().set("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, bytes.length);
+
             try (var output = exchange.getResponseBody()) {
                 output.write(bytes);
             }
@@ -76,6 +82,7 @@ class MilvusVectorClientTest {
     @Test
     void disabledClientDoesNotCallServer() {
         properties.setEnabled(false);
+
         assertFalse(client.enabled());
         assertThrows(RetrievalException.class, client::ensureCollection);
         assertTrue(requests.isEmpty());
@@ -85,6 +92,7 @@ class MilvusVectorClientTest {
     @Test
     void searchFiltersBeforeLimitAndReturnsOnlyCandidateMetadata() {
         enqueue(description(true));
+
         ObjectNode candidate = candidate();
         candidate.put("chunk_id", "9007199254740993");
         candidate.put("id", "9007199254740993");
@@ -96,7 +104,9 @@ class MilvusVectorClientTest {
         assertEquals(9007199254740993L, hits.get(0).getChunkId());
         assertEquals(2L, hits.get(0).getDocumentId());
         assertEquals(3, hits.get(0).getParseVersion());
+
         Request search = requests.get(1);
+
         assertEquals("/v2/vectordb/entities/search", search.path());
         assertEquals("space_id == 1 and document_id == 2", search.body().path("filter").asText());
         assertEquals(6, search.body().path("limit").asInt());
@@ -112,6 +122,7 @@ class MilvusVectorClientTest {
     @Test
     void missingCollectionIsNotCreatedBySearch() {
         enqueue(json.valueToTree(Map.of("code", 100)));
+
         assertThrows(RetrievalException.class, () -> client.search(1L, null, vector(), 20));
         assertEquals(1, requests.size());
         assertEquals("/v2/vectordb/collections/describe", requests.get(0).path());
@@ -123,6 +134,7 @@ class MilvusVectorClientTest {
         enqueue(description(true));
         enqueue(response(Map.of()));
         client.ensureCollection();
+
         assertEquals(List.of("/v2/vectordb/collections/describe", "/v2/vectordb/collections/load"),
                 requests.stream().map(Request::path).toList());
     }
@@ -139,18 +151,24 @@ class MilvusVectorClientTest {
         client.ensureCollection();
 
         assertEquals(5, requests.size());
+
         JsonNode create = requests.get(1).body();
+
         assertEquals("/v2/vectordb/collections/create", requests.get(1).path());
         assertEquals("teamdocs-vector-v1|model=Qwen/Qwen3-Embedding-8B|dimensions=2",
                 create.path("description").asText());
         assertFalse(create.path("schema").path("autoId").asBoolean(true));
         assertFalse(create.path("schema").path("enableDynamicField").asBoolean(true));
+
         JsonNode fields = create.path("schema").path("fields");
+
         assertEquals(5, fields.size());
         assertEquals("chunk_id", fields.get(0).path("fieldName").asText());
         assertTrue(fields.get(0).path("isPrimary").asBoolean());
         assertEquals("2", fields.get(4).path("elementTypeParams").path("dim").asText());
+
         JsonNode index = requests.get(3).body().path("indexParams").get(0);
+
         assertEquals("/v2/vectordb/indexes/create", requests.get(3).path());
         assertEquals("FLAT", index.path("indexType").asText());
         assertEquals("COSINE", index.path("metricType").asText());
@@ -165,6 +183,7 @@ class MilvusVectorClientTest {
         enqueue(description(true));
         enqueue(response(Map.of()));
         client.ensureCollection();
+
         assertEquals(4, requests.size());
         assertFalse(requests.stream().anyMatch(request -> request.path().contains("drop")));
     }
@@ -173,7 +192,9 @@ class MilvusVectorClientTest {
     @Test
     void protocolPermissionErrorIsNotTreatedAsMissingCollection() {
         enqueue(json.valueToTree(Map.of("code", 1800, "message", "secret-document-token")));
+
         var error = assertThrows(RetrievalException.class, client::ensureCollection);
+
         assertEquals(1, requests.size());
         assertFalse(error.getMessage().contains("secret-document-token"));
         assertTrue(error.getMessage().contains("1800"));
@@ -183,17 +204,27 @@ class MilvusVectorClientTest {
     @Test
     void incompatibleSchemaIsNeverModified() {
         ObjectNode wrongModel = description(true);
+
         ((ObjectNode) wrongModel.get("data")).put("description", "another-model");
+
         ObjectNode wrongDimension = description(true);
+
         ((ObjectNode) wrongDimension.path("data").path("fields").get(4).path("params").get(0)).put("value", "3");
+
         ObjectNode wrongType = description(true);
+
         ((ObjectNode) wrongType.path("data").path("fields").get(1)).put("type", "VarChar");
+
         ObjectNode dynamic = description(true);
+
         ((ObjectNode) dynamic.get("data")).put("enableDynamicField", true);
+
         for (ObjectNode invalid : List.of(wrongModel, wrongDimension, wrongType, dynamic)) {
             enqueue(invalid);
+
             assertThrows(RetrievalException.class, client::ensureCollection);
         }
+
         assertEquals(4, requests.size());
         assertTrue(requests.stream().allMatch(request -> request.path().endsWith("/describe")));
     }
@@ -202,8 +233,10 @@ class MilvusVectorClientTest {
     @Test
     void incompatibleIndexIsRejected() {
         ObjectNode wrongMetric = description(true);
+
         ((ObjectNode) wrongMetric.path("data").path("indexes").get(0)).put("metricType", "L2");
         enqueue(wrongMetric);
+
         assertThrows(RetrievalException.class, client::ensureCollection);
         assertEquals(1, requests.size());
     }
@@ -214,9 +247,13 @@ class MilvusVectorClientTest {
         enqueue(description(true));
         enqueue(response(Map.of("upsertCount", 1)));
         client.upsert(List.of(chunk()), List.of(vector()));
+
         Request request = requests.get(1);
+
         assertEquals("/v2/vectordb/entities/upsert", request.path());
+
         JsonNode row = request.body().path("data").get(0);
+
         assertEquals(5, row.size());
         assertEquals(10, row.path("chunk_id").asLong());
         assertEquals(2, row.path("embedding").size());
@@ -231,6 +268,7 @@ class MilvusVectorClientTest {
     void upsertRejectsInvalidAcknowledgementAndDuplicateKeys() {
         enqueue(description(true));
         enqueue(response(Map.of("upsertCount", 0)));
+
         assertThrows(RetrievalException.class, () -> client.upsert(List.of(chunk()), List.of(vector())));
         assertThrows(RetrievalException.class,
                 () -> client.upsert(List.of(chunk(), chunk()), List.of(vector(), vector())));
@@ -243,10 +281,12 @@ class MilvusVectorClientTest {
         enqueue(description(true));
         enqueue(response(Map.of("deleteCount", 1)));
         client.deleteDocument(2L);
+
         assertEquals("document_id == 2", requests.get(1).body().path("filter").asText());
         assertEquals("/v2/vectordb/entities/delete", requests.get(1).path());
         enqueue(json.valueToTree(Map.of("code", 100)));
         client.deleteDocument(2L);
+
         assertEquals(3, requests.size());
         assertThrows(RetrievalException.class, () -> client.deleteDocument(-1L));
         assertEquals(3, requests.size());
@@ -257,19 +297,26 @@ class MilvusVectorClientTest {
     void forgedCandidatesAreRejected() {
         ObjectNode otherSpace = candidate();
         otherSpace.put("space_id", 99);
+
         ObjectNode otherDocument = candidate();
         otherDocument.put("document_id", 99);
+
         ObjectNode fractionalVersion = candidate();
         fractionalVersion.put("parse_version", 3.5);
+
         ObjectNode inconsistentId = candidate();
         inconsistentId.put("id", 999);
+
         for (ObjectNode invalid : List.of(otherSpace, otherDocument, fractionalVersion, inconsistentId)) {
             enqueue(description(true));
             enqueue(response(List.of(invalid)));
+
             assertThrows(RetrievalException.class, () -> client.search(1L, 2L, vector(), 6));
         }
+
         enqueue(description(true));
         enqueue(response(List.of(candidate(), candidate())));
+
         assertThrows(RetrievalException.class, () -> client.search(1L, 2L, vector(), 6));
     }
 
@@ -281,7 +328,9 @@ class MilvusVectorClientTest {
         assertThrows(RetrievalException.class, () -> client.search(1L, null, List.of(Float.NaN, 1f), 6));
         assertThrows(RetrievalException.class, () -> client.search(1L, null, List.of(Float.POSITIVE_INFINITY, 1f), 6));
         assertThrows(RetrievalException.class, () -> client.search(1L, null, vector(), 21));
+
         properties.setCollection("other_collection; drop");
+
         assertThrows(RetrievalException.class, client::ensureCollection);
         assertTrue(requests.isEmpty());
     }
@@ -294,10 +343,12 @@ class MilvusVectorClientTest {
         enqueue(description(true));
         enqueue(response(Map.of("upsertCount", 1)));
         client.upsert(List.of(firstVersion), List.of(vector()));
+
         ObjectNode zeroVersion = candidate();
         zeroVersion.put("parse_version", 0);
         enqueue(description(true));
         enqueue(response(List.of(zeroVersion)));
+
         assertEquals(0, client.search(1L, 2L, vector(), 6).get(0).getParseVersion());
     }
 
@@ -305,6 +356,7 @@ class MilvusVectorClientTest {
     @Test
     void missingStatusCodeIsRejected() {
         enqueue(json.valueToTree(Map.of("data", Map.of())));
+
         assertThrows(RetrievalException.class, client::ensureCollection);
         assertEquals(1, requests.size());
     }
@@ -312,12 +364,15 @@ class MilvusVectorClientTest {
     /** 按官方描述响应格式构造集合，维度位于 params 键值对数组。 */
     private ObjectNode description(boolean indexed) {
         List<Map<String, Object>> fields = new ArrayList<>();
+
         for (String name : List.of("chunk_id", "document_id", "space_id", "parse_version", "embedding")) {
             String type = "embedding".equals(name) ? "FloatVector" : "parse_version".equals(name) ? "Int32" : "Int64";
+
             fields.add(Map.of("name", name, "type", type, "primaryKey", "chunk_id".equals(name),
                     "autoId", false, "nullable", false,
                     "params", "embedding".equals(name) ? List.of(Map.of("key", "dim", "value", "2")) : List.of()));
         }
+
         return response(Map.of("collectionName", properties.getCollection(),
                 "description", "teamdocs-vector-v1|model=" + embedding.getModelName() + "|dimensions=2",
                 "autoId", false, "enableDynamicField", false, "fields", fields,
@@ -339,6 +394,7 @@ class MilvusVectorClientTest {
         chunk.setParseVersion(3);
         chunk.setExcerpt("private-document-content");
         chunk.setDocumentName("private-document-name");
+
         return chunk;
     }
 

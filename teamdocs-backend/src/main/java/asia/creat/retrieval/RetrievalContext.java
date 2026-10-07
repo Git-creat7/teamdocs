@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 /** 将运行截止时间、取消检查和出站来源记录传入检索调用。 */
 public final class RetrievalContext implements AutoCloseable {
     private static final ThreadLocal<RetrievalContext> CURRENT = new ThreadLocal<>();
+
     private final RetrievalContext previous;
     private final long deadlineMs;
     private final Runnable checkpoint;
@@ -35,8 +36,10 @@ public final class RetrievalContext implements AutoCloseable {
     /** 检查本轮是否仍可执行，取消和超时不能作为远端故障吞掉。 */
     public static void check() {
         RetrievalContext context = CURRENT.get();
+
         if (context != null) {
             context.checkpoint.run();
+
             if (System.currentTimeMillis() >= context.deadlineMs) {
                 throw new IllegalStateException("检索运行已超时");
             }
@@ -50,11 +53,14 @@ public final class RetrievalContext implements AutoCloseable {
      */
     public static long timeoutMillis(long configuredMillis) {
         check();
+
         RetrievalContext context = CURRENT.get();
         long bounded = Math.max(1, Math.min(30_000, configuredMillis));
+
         if (context == null) {
             return bounded;
         }
+
         return Math.max(1, Math.min(bounded, context.deadlineMs - System.currentTimeMillis()));
     }
 
@@ -64,7 +70,9 @@ public final class RetrievalContext implements AutoCloseable {
      */
     public static void record(ChunkHitVO hit) {
         check();
+
         RetrievalContext context = CURRENT.get();
+
         if (context != null) {
             context.dependency.accept(hit);
         }

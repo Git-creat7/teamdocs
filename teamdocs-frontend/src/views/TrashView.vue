@@ -77,31 +77,18 @@ const loading = ref(false)
 const items = ref([])
 const total = ref(0)
 const current = ref(1)
-const PAGE_SIZE = 50
 
-onMounted(async () => {
-  // 先定 query 里的空间，再兜底空间列表首个，全部定下来后只发一次请求
-  const fromQuery = Number(route.query.spaceId)
-  if (!isNaN(fromQuery) && fromQuery > 0) {
-    activeSpaceId.value = fromQuery
-  }
-  if (spaces.value.length === 0) {
-    await refreshSpaces()
-  }
-  if (!activeSpaceId.value && spaces.value.length > 0) {
-    activeSpaceId.value = spaces.value[0].id
-  }
-  if (activeSpaceId.value) {
-    loadTrash()
-  }
-})
+const PAGE_SIZE = 50
 
 async function loadTrash() {
   if (!activeSpaceId.value) return
+
   loading.value = true
   current.value = 1
+
   try {
     const page = await listTrashedDocumentsApi(activeSpaceId.value, 1, PAGE_SIZE)
+
     items.value = page.records
     total.value = page.total
   } catch (err) {
@@ -114,8 +101,10 @@ async function loadTrash() {
 
 async function loadMore() {
   const next = current.value + 1
+
   try {
     const page = await listTrashedDocumentsApi(activeSpaceId.value, next, PAGE_SIZE)
+
     items.value = [...items.value, ...page.records]
     current.value = next
   } catch (err) {
@@ -126,10 +115,13 @@ async function loadMore() {
 async function handleRestore(doc) {
   try {
     const res = await restoreDocumentApi(activeSpaceId.value, doc.id)
+
     ElMessage.success(`"${doc.name}" 已恢复`)
+
     if (res?.originalFolderDeleted) {
       ElMessage.info('原文件夹已删除，文档已恢复到根目录')
     }
+
     window.dispatchEvent(new CustomEvent('teamdocs:recent-docs-changed'))
     await loadTrash()
   } catch (err) {
@@ -153,6 +145,27 @@ function handlePurge(doc) {
     }
   }).catch(() => {})
 }
+
+onMounted(async () => {
+  // 先定 query 里的空间，再兜底空间列表首个，全部定下来后只发一次请求
+  const fromQuery = Number(route.query.spaceId)
+
+  if (!isNaN(fromQuery) && fromQuery > 0) {
+    activeSpaceId.value = fromQuery
+  }
+
+  if (spaces.value.length === 0) {
+    await refreshSpaces()
+  }
+
+  if (!activeSpaceId.value && spaces.value.length > 0) {
+    activeSpaceId.value = spaces.value[0].id
+  }
+
+  if (activeSpaceId.value) {
+    loadTrash()
+  }
+})
 </script>
 
 <style scoped>

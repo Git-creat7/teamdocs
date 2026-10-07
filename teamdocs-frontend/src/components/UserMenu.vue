@@ -41,6 +41,7 @@ const displayName = computed(() =>
 
 const avatarFallback = computed(() => {
   const name = displayName.value
+
   return name ? name.charAt(0).toUpperCase() : 'U'
 })
 

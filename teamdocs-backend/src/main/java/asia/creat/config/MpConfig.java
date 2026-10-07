@@ -14,6 +14,7 @@ public class MpConfig {
         PaginationInnerInterceptor pagination = new PaginationInnerInterceptor(DbType.MYSQL);
         pagination.setMaxLimit(100L);
         interceptor.addInnerInterceptor(pagination);
+
         return interceptor;
     }
 }

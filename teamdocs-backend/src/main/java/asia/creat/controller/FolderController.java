@@ -22,6 +22,7 @@ public class FolderController {
                                @RequestBody @Validated CreateFolderDTO dto,
                                @AuthenticationPrincipal LoginUser loginUser) {
         folderService.createFolder(spaceId, dto, loginUser);
+
         return Result.success();
     }
 
@@ -38,6 +39,7 @@ public class FolderController {
                                @RequestBody @Validated RenameFolderDTO dto,
                                @AuthenticationPrincipal LoginUser loginUser) {
         folderService.renameFolder(spaceId, folderId, dto, loginUser);
+
         return Result.success();
     }
 
@@ -46,6 +48,7 @@ public class FolderController {
                                @PathVariable Long folderId,
                                @AuthenticationPrincipal LoginUser loginUser) {
         folderService.deleteFolder(spaceId, folderId, loginUser);
+
         return Result.success();
     }
 
@@ -55,6 +58,7 @@ public class FolderController {
                              @RequestBody @Validated MoveFolderDTO dto,
                              @AuthenticationPrincipal LoginUser loginUser) {
         folderService.moveFolder(spaceId, folderId, dto, loginUser);
+
         return Result.success();
     }
 

@@ -49,6 +49,7 @@ class MinioRuntimeIntegrationTest {
                      .withExposedPorts(9000)
                      .waitingFor(Wait.forHttp("/minio/health/live").forPort(9000))) {
             server.start();
+
             assertTrue(server.execInContainer("minio", "--version").getStdout().contains("RELEASE.2024-05-28T17-19-04Z"));
 
             for (int attempt = 0; attempt < 2; attempt++) {
@@ -62,6 +63,7 @@ class MinioRuntimeIntegrationTest {
                         .withCommand(new String[]{"mc --version; " + script})
                         .withStartupCheckStrategy(new OneShotStartupCheckStrategy().withTimeout(Duration.ofSeconds(90)))) {
                     init.start();
+
                     assertEquals(0L, init.getCurrentContainerInfo().getState().getExitCodeLong());
                     assertTrue(init.getLogs().contains("RELEASE.2025-08-13T08-35-41Z"));
                 }
@@ -71,6 +73,7 @@ class MinioRuntimeIntegrationTest {
             MinioClient client = MinioClient.builder().endpoint(endpoint)
                     .credentials("runtime-test-access", "runtime-test-secret").region("us-east-1").build();
             byte[] payload = "仅用于隔离存储验收，不包含业务文档。".getBytes(StandardCharsets.UTF_8);
+
             for (String bucket : List.of("runtime-public", "runtime-private")) {
                 assertTrue(client.bucketExists(BucketExistsArgs.builder().bucket(bucket).build()));
                 client.putObject(PutObjectArgs.builder().bucket(bucket).object("sample.txt")
@@ -79,11 +82,14 @@ class MinioRuntimeIntegrationTest {
             }
 
             HttpClient http = HttpClient.newHttpClient();
+
             assertEquals(200, get(http, endpoint + "/runtime-public/sample.txt").statusCode());
             assertEquals(403, get(http, endpoint + "/runtime-private/sample.txt").statusCode());
+
             String signed = client.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
                     .method(Method.GET).bucket("runtime-private").object("sample.txt").expiry(60).build());
             HttpResponse<byte[]> preview = get(http, signed);
+
             assertEquals(200, preview.statusCode());
             assertArrayEquals(payload, preview.body());
 
@@ -91,6 +97,7 @@ class MinioRuntimeIntegrationTest {
                     .header("Origin", origin).header("Access-Control-Request-Method", "GET")
                     .timeout(Duration.ofSeconds(10)).method("OPTIONS", HttpRequest.BodyPublishers.noBody()).build(),
                     HttpResponse.BodyHandlers.discarding());
+
             assertTrue(cors.statusCode() >= 200 && cors.statusCode() < 300);
             assertEquals(origin, cors.headers().firstValue("access-control-allow-origin").orElse(""));
         }

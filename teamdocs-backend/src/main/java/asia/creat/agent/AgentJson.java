@@ -22,14 +22,20 @@ public class AgentJson {
 
     public JsonNode object(String text, Set<String> fields) {
         if (text == null || text.length() > 16000) throw new AgentFailure("INVALID_JSON");
+
         try (JsonParser parser = mapper.getFactory().createParser(text)) {
             parser.enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
             parser.enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS.mappedFeature());
             parser.enable(JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER.mappedFeature());
+
             JsonNode node = mapper.readTree(parser);
+
             if (node == null || !node.isObject() || parser.nextToken() != null) throw new AgentFailure("INVALID_JSON");
+
             var names = node.fieldNames();
+
             while (names.hasNext()) if (!fields.contains(names.next())) throw new AgentFailure("UNKNOWN_ARGUMENT");
+
             return node;
         } catch (AgentFailure e) { throw e; }
         catch (Exception e) { throw new AgentFailure("INVALID_JSON"); }

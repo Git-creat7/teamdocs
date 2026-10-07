@@ -1,6 +1,12 @@
 const labels = {
+  ATTACHMENT_CONTENT_UNAVAILABLE: '附件无法完整读取：可能已加密、损坏、超出文本／页数／解压或处理时间限制，请检查或拆分文件。',
+  ATTACHMENT_MODEL_REJECTED: '模型接口拒绝了附件内容。文本文件已提取为文字；若含图片或扫描页，请确认模型支持视觉输入。未自动切换模型。',
+  ATTACHMENTS_UNSUPPORTED: '当前模型客户端不支持附件消息，请使用兼容的问答模型接口。',
+  DOCUMENT_OUTSIDE_SCOPE: '本次读取超出了你选择的文档范围，已停止执行。',
+  TOOL_OUTSIDE_SCOPE: '限定文档范围时不能调用外部工具，已停止执行。',
   AI_NOT_AUTHORIZED: '文档问答尚未启用，请联系管理员确认文档出站授权。',
   AI_MODEL_NOT_CONFIGURED: '尚未配置模型名称，请联系管理员。',
+  MODEL_OUTPUT_TRUNCATED: '模型生成达到输出上限（可能包含思考与回答），未生成完整内容。请检查供应商限制、要求简短回答或拆分问题后重试。',
   MODEL_CALL_LIMIT: '已达到本次处理上限，请缩小问题范围后再问。',
   TOOL_CALL_LIMIT: '已达到本次检索上限，可根据已有来源继续提问。',
   CONTEXT_LIMIT: '本次资料超出处理上限，请指定文档或缩小问题范围。',
@@ -17,10 +23,12 @@ const labels = {
 
 export function agentError(error) {
   const message = typeof error === 'string' ? error : error?.message || ''
+
   return Object.entries(labels).find(([key]) => message.includes(key))?.[1] || message || '暂时无法完成操作，请重试。'
 }
 
 export function accessLost(error) {
   const message = error?.message || String(error || '')
+
   return error?.status === 401 || error?.response?.status === 401 || /ACCESS_REVOKED|不是该空间成员|空间不存在|会话不存在|运行不存在/.test(message)
 }

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="asia.creat.mapper.ChatAttachmentMapper">
+    <select id="expired" resultType="asia.creat.entity.ChatAttachment">
+        SELECT a.* FROM agent_attachment a LEFT JOIN agent_run r ON r.id=a.run_id
+        WHERE (a.run_id IS NULL AND a.created_at &lt; DATE_SUB(NOW(), INTERVAL 1 DAY))
+           OR (a.run_id IS NOT NULL AND r.id IS NULL)
+        ORDER BY a.created_at LIMIT 50
+    </select>
+</mapper>

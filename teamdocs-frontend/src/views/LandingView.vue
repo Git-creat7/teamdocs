@@ -59,7 +59,7 @@
       </h1>
 
       <p class="lp-subtitle">
-        空间隔离、文件夹层级、标签分类、全文搜索与评论协作，为团队知识建立秩序。
+        空间隔离、文件夹层级、文档检索、全文搜索与评论协作，为团队知识建立秩序。
       </p>
 
       <!-- CTA -->
@@ -138,7 +138,7 @@
             从整理到协作，<br />都在<span class="lp-serif">一个工作台</span>完成。
           </h2>
           <p class="lp-section-sub">
-            团队可在独立空间中管理成员，按目录与标签整理文档，在线预览常见格式，
+            团队可在独立空间中管理成员，按目录整理文档，在线预览常见格式，
             并通过搜索、评论、动态和最近浏览持续协作。
           </p>
           <ul class="lp-craft-list">
@@ -179,7 +179,6 @@ import {
   ChevronDown,
   LayoutGrid,
   FileSearch,
-  Tags,
   Search,
   MessageSquare,
   ShieldCheck
@@ -189,13 +188,12 @@ import { loginApi } from '@/api/user'
 const router = useRouter()
 const demoLoading = ref(false)
 
-const tickerItems = ['空间协作', '文档管理', '标签分类', '全文搜索', '评论讨论', '回收站', '权限管理', '操作日志']
+const tickerItems = ['空间协作', '文档管理', '文档检索', '全文搜索', '评论讨论', '回收站', '权限管理', '操作日志']
 
 const features = [
   { icon: LayoutGrid, title: '空间隔离', desc: '每个团队独立空间，Owner / Admin / Member 三级角色，注解式切面统一鉴权。' },
   { icon: FileSearch, title: '在线预览', desc: '图片、文本、PDF、Word、表格、演示文稿与 OFD 均可直接在线查看。' },
-  { icon: Tags, title: '标签分类', desc: '空间内多对多打标，按标签一键筛选，同名标签全站同色。' },
-  { icon: Search, title: '全文搜索', desc: 'MySQL FULLTEXT + ngram 中文分词，文档名与标签一次命中。' },
+  { icon: Search, title: '全文搜索', desc: 'MySQL FULLTEXT + ngram 中文分词，文档名与描述一次命中。' },
   { icon: MessageSquare, title: '评论协作', desc: '文档级评论与回复，删除保留占位不断上下文。' },
   { icon: ShieldCheck, title: '安全边界', desc: 'JWT 双撤销机制：jti 黑名单 + 用户级时间水位，改密全端下线。' }
 ]
@@ -203,7 +201,7 @@ const features = [
 const craftItems = [
   '空间成员与 Owner / Admin / Member 角色管理',
   '文档上传、在线预览、下载、移动与重命名',
-  '文档名、描述与标签检索',
+  '文档名与描述检索',
   '评论回复、团队动态与最近浏览',
   '已删除文档可恢复或彻底删除'
 ]
@@ -265,9 +263,11 @@ onBeforeUnmount(() => {
 // 一键体验：演示账号直接登录进工作台
 async function handleDemo() {
   demoLoading.value = true
+
   try {
     const res = await loginApi({ username: 'demo', password: 'demo123456' })
     const token = typeof res === 'string' ? res : res?.token
+
     if (token) {
       localStorage.setItem('teamdocs_token', token)
       ElMessage.success('已进入演示账号')
@@ -401,6 +401,7 @@ async function handleDemo() {
 }
 
 .lp-lines-left { left: 0; }
+
 .lp-lines-right { right: 0; }
 
 .lp-line {
@@ -450,8 +451,11 @@ async function handleDemo() {
 
 @keyframes line-pulse {
   0% { opacity: 0; }
+
   15% { opacity: 0.9; }
+
   70% { opacity: 0.4; }
+
   100% { opacity: 0; }
 }
 
@@ -489,6 +493,7 @@ async function handleDemo() {
 
 @keyframes marquee-left {
   from { transform: translateX(0); }
+
   to { transform: translateX(-50%); }
 }
 
@@ -862,11 +867,14 @@ async function handleDemo() {
   }
 
   .lp-logo { font-size: 38px; }
+
   .lp-nav-actions { gap: 8px; }
+
   .lp-nav-login {
     font-size: 18px;
     padding: 12px 20px;
   }
+
   .lp-pill-btn {
     font-size: 18px;
     padding: 12px 25px;
@@ -882,7 +890,9 @@ async function handleDemo() {
     height: 45px;
     margin-bottom: 35px;
   }
+
   .lp-ticker-track { gap: 10px; }
+
   .lp-ticker-item {
     font-size: 16px;
     padding: 8px 18px;
@@ -893,24 +903,31 @@ async function handleDemo() {
     margin-bottom: 28px;
     font-size: 80px;
   }
+
   .lp-subtitle {
     max-width: 650px;
     margin-bottom: 42px;
     font-size: 20px;
   }
+
   .lp-cta-row { gap: 20px; }
+
   .lp-cta-primary,
   .lp-cta-book {
     height: 70px;
     font-size: 18px;
   }
+
   .lp-cta-primary { padding: 22px 38px; }
+
   .lp-cta-book { padding-inline: 35px; }
+
   .lp-scroll-cue {
     bottom: 30px;
     width: 50px;
     height: 50px;
   }
+
   .lp-scroll-cue svg {
     width: 28px;
     height: 28px;
@@ -922,16 +939,20 @@ async function handleDemo() {
     padding: 45px;
     gap: 50px;
   }
+
   .lp-trusted-label {
     max-width: 225px;
     font-size: 18px;
   }
+
   .lp-trusted-track { gap: 60px; }
+
   .lp-tech-logo { font-size: 20px; }
 }
 
 @media (max-width: 1200px) {
   .lp-hero { padding: 140px 32px 100px; }
+
   .lp-nav-inner { padding: 19px 32px; }
 }
 
@@ -940,49 +961,68 @@ async function handleDemo() {
     min-height: 760px;
     padding: 120px 24px 96px;
   }
+
   .lp-lines { display: none; }
+
   .lp-lines-top { display: block; }
+
   .lp-title { font-size: clamp(38px, 11vw, 52px); }
+
   .lp-cta-row {
     flex-direction: column;
     width: 100%;
     max-width: 320px;
   }
+
   .lp-cta-primary,
   .lp-cta-book {
     width: 100%;
     justify-content: center;
   }
+
   .lp-trusted {
     flex-direction: column;
     align-items: flex-start;
     gap: 20px;
   }
+
   .lp-trusted-label { max-width: none; }
+
   .lp-nav-inner { padding: 14px 20px; }
+
   .lp-logo { font-size: 26px; }
+
   .lp-nav-login,
   .lp-pill-btn { min-height: 44px; }
+
   .lp-feature-grid { grid-template-columns: 1fr; }
+
   .lp-craft-inner {
     padding: 64px 24px;
   }
+
   .lp-features { padding: 64px 24px; }
+
   .lp-final { padding: 80px 24px; }
 }
 
 @media (max-width: 360px) {
   .lp-nav-inner { padding-inline: 16px; }
+
   .lp-logo { font-size: 24px; }
+
   .lp-nav-actions {
     flex-shrink: 0;
     gap: 2px;
   }
+
   .lp-nav-login,
   .lp-pill-btn {
     white-space: nowrap;
   }
+
   .lp-nav-login { padding-inline: 10px; }
+
   .lp-pill-btn { padding-inline: 14px; }
 }
 </style>

@@ -1,5 +1,6 @@
 package asia.creat.teamdocsbackend.agent;
 
+import asia.creat.agent.model.OpenAiReasoningChatModel;
 import asia.creat.config.AgentModelConfiguration;
 import asia.creat.config.AgentProperties;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
@@ -8,15 +9,13 @@ import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
-import asia.creat.agent.model.OpenAiReasoningChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.output.TokenUsage;
+import java.time.Duration;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-
-import java.time.Duration;
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -39,6 +38,7 @@ class LangChain4jCandidateVerificationTest {
                 .withPropertyValues("teamdocs.agent.enabled=false")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
+
                     assertFalse(context.containsBean("chatLanguageModel"));
                 });
     }
@@ -54,6 +54,7 @@ class LangChain4jCandidateVerificationTest {
                 )
                 .run(context -> {
                     assertThat(context).hasNotFailed();
+
                     assertNull(context.getBeanProvider(ChatLanguageModel.class).getIfAvailable());
                 });
     }
@@ -71,8 +72,11 @@ class LangChain4jCandidateVerificationTest {
                 )
                 .run(context -> {
                     assertThat(context).hasNotFailed();
+
                     assertTrue(context.containsBean("chatLanguageModel"));
+
                     ChatLanguageModel model = context.getBean(ChatLanguageModel.class);
+
                     assertNotNull(model);
                     assertInstanceOf(OpenAiReasoningChatModel.class, model);
                 });
@@ -95,6 +99,7 @@ class LangChain4jCandidateVerificationTest {
     void testToolExecutionMessageFlow() {
         // 1. 用户输入
         UserMessage userMessage = UserMessage.from("查询上线检查清单");
+
         assertEquals("查询上线检查清单", userMessage.singleText());
 
         // 2. 模拟模型决定调用工具：生成 ToolExecutionRequest 与包含请求的 AiMessage
@@ -105,6 +110,7 @@ class LangChain4jCandidateVerificationTest {
                 .build();
 
         AiMessage aiMessage = AiMessage.from(toolRequest);
+
         assertTrue(aiMessage.hasToolExecutionRequests());
         assertEquals(1, aiMessage.toolExecutionRequests().size());
         assertEquals("call_test_001", aiMessage.toolExecutionRequests().get(0).id());
@@ -138,7 +144,7 @@ class LangChain4jCandidateVerificationTest {
     @DisplayName("验证 OpenAiChatModel Builder 超时与非空安全约束")
     void testOpenAiChatModelBuilderConstraints() {
         assertDoesNotThrow(() -> {
-            var model = dev.langchain4j.model.openai.OpenAiChatModel.builder()
+            var model = OpenAiChatModel.builder()
                     .apiKey("mock-key")
                     .modelName("generic-model")
                     .baseUrl("https://localhost:9999/v1")
@@ -147,6 +153,7 @@ class LangChain4jCandidateVerificationTest {
                     .logRequests(false)
                     .logResponses(false)
                     .build();
+
             assertNotNull(model);
         });
     }

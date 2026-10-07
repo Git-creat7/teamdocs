@@ -101,13 +101,9 @@ const loading = ref(true)
 const activities = ref([])
 const activeSpaceId = ref(null)
 
-onMounted(() => {
-  spacesStore.refresh()
-  loadActivities()
-})
-
 async function loadActivities() {
   loading.value = true
+
   try {
     activities.value = await getActivitiesApi(50, activeSpaceId.value ?? undefined)
   } catch (err) {
@@ -119,17 +115,24 @@ async function loadActivities() {
 
 function switchSpace(spaceId) {
   if (activeSpaceId.value === spaceId) return
+
   activeSpaceId.value = spaceId
   loadActivities()
 }
 
 function openActivityDoc(act) {
   if (!canOpenActivityDocument(act) || !act.spaceId) return
+
   openDocument({
     spaceId: act.spaceId,
     documentId: act.resourceId
   })
 }
+
+onMounted(() => {
+  spacesStore.refresh()
+  loadActivities()
+})
 </script>
 
 <style scoped>
@@ -285,6 +288,7 @@ function openActivityDoc(act) {
 
 @media (max-width: 768px) {
   .activity-page { padding: 1.1rem 1rem 2rem; }
+
   .row-time { display: none; }
 }
 </style>

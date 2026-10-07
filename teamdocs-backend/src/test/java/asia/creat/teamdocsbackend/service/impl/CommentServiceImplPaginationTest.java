@@ -68,7 +68,9 @@ class CommentServiceImplPaginationTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<IPage<CommentVO>> pageCaptor = ArgumentCaptor.forClass(IPage.class);
+
         verify(commentMapper).listByDocumentId(pageCaptor.capture(), eq(documentId));
+
         assertEquals(4, pageCaptor.getValue().getCurrent());
         assertEquals(6, pageCaptor.getValue().getSize());
         assertEquals(13, result.getTotal());

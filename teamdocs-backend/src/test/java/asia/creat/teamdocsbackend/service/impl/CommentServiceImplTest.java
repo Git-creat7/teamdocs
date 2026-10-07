@@ -49,6 +49,7 @@ class CommentServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new CommentServiceImpl(commentMapper, documentMapper, new ResourcePermissionHelper());
+
         SpaceMember member = new SpaceMember();
         member.setRole(SpaceRole.MEMBER);
         SpaceContext.set(member);
@@ -72,8 +73,11 @@ class CommentServiceImplTest {
         );
 
         ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+
         verify(commentMapper).insert(captor.capture());
+
         Comment inserted = captor.getValue();
+
         assertEquals(DOCUMENT_ID, inserted.getDocumentId());
         assertEquals(USER_ID, inserted.getUserId());
         assertEquals("回复内容", inserted.getContent());
@@ -143,7 +147,9 @@ class CommentServiceImplTest {
         service.deleteComment(SPACE_ID, DOCUMENT_ID, COMMENT_ID, LOGIN_USER);
 
         ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+
         verify(commentMapper).updateById(captor.capture());
+
         assertEquals(1, captor.getValue().getDeleted());
     }
 
@@ -202,6 +208,7 @@ class CommentServiceImplTest {
         comment.setDocumentId(documentId);
         comment.setUserId(userId);
         comment.setDeleted(deleted);
+
         return comment;
     }
 }

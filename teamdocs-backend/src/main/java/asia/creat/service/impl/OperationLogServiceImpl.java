@@ -33,6 +33,7 @@ public class OperationLogServiceImpl implements OperationLogService {
     @Override
     public List<ActivityVO> listRecentActivities(Long userId, Long spaceId, Integer limit) {
         int capped = (limit == null || limit < 1) ? 20 : Math.min(limit, 50);
+
         return operationLogMapper.selectRecentActivities(userId, spaceId, capped);
     }
 }

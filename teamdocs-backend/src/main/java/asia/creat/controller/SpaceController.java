@@ -26,6 +26,7 @@ public class SpaceController {
     public Result createSpace(@RequestBody @Validated CreateSpaceDTO dto,
                               @AuthenticationPrincipal LoginUser loginUser) {
         spaceService.createSpace(dto, loginUser);
+
         return Result.success();
     }
 
@@ -38,6 +39,7 @@ public class SpaceController {
     public Result getSpace(@PathVariable("id") Long spaceId,
                            @AuthenticationPrincipal LoginUser loginUser) {
         Space space = spaceService.getSpaceById(spaceId, loginUser);
+
         return Result.success(space);
     }
 
@@ -45,6 +47,7 @@ public class SpaceController {
     public Result deleteSpace(@PathVariable("id") Long spaceId,
                               @AuthenticationPrincipal LoginUser loginUser) {
         spaceService.deleteSpace(spaceId, loginUser);
+
         return Result.success();
     }
 
@@ -53,6 +56,7 @@ public class SpaceController {
                               @RequestBody @Validated UpdateSpaceDTO dto,
                               @AuthenticationPrincipal LoginUser loginUser) {
         spaceService.updateSpace(spaceId, dto, loginUser);
+
         return Result.success();
     }
 
@@ -61,6 +65,7 @@ public class SpaceController {
                             @RequestBody @Validated AddMemberDTO dto,
                             @AuthenticationPrincipal LoginUser loginUser) {
         spaceService.addMember(spaceId, dto, loginUser);
+
         return Result.success();
     }
 
@@ -68,6 +73,7 @@ public class SpaceController {
     public Result listMembers(@PathVariable("id") Long spaceId,
                               @AuthenticationPrincipal LoginUser loginUser) {
         List<SpaceMemberVO> members = spaceService.listMembers(spaceId, loginUser);
+
         return Result.success(members);
     }
 
@@ -76,6 +82,7 @@ public class SpaceController {
                                @PathVariable("userId") Long targetUserId,
                                @AuthenticationPrincipal LoginUser loginUser) {
         spaceService.removeMember(spaceId, targetUserId, loginUser);
+
         return Result.success();
     }
 
@@ -85,6 +92,7 @@ public class SpaceController {
                                    @RequestBody @Validated UpdateMemberRoleDTO dto,
                                    @AuthenticationPrincipal LoginUser loginUser) {
         spaceService.updateMemberRole(spaceId, targetUserId, dto, loginUser);
+
         return Result.success();
     }
 

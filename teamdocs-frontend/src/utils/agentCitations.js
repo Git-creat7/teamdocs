@@ -1,4 +1,5 @@
 const hasPage = (source) => Number.isInteger(source.pageNumber) && source.pageNumber > 0
+
 const hasChunk = (source) => Number.isInteger(source.chunkIndex) && source.chunkIndex >= 0
 
 export function citationLocation(source) {
@@ -11,9 +12,11 @@ export function groupAgentCitations(citations = []) {
 
   for (const source of citations) {
     const key = source.documentId == null ? `citation:${source.id}` : `${source.documentId}:${source.parseVersion}`
+
     if (!groups.has(key)) groups.set(key, { key, documentName: source.documentName, sources: [] })
 
     const group = groups.get(key)
+
     if (!group.sources.some((item) => item.id === source.id)) group.sources.push(source)
   }
 
@@ -37,5 +40,6 @@ export function groupAgentCitations(citations = []) {
 
 export function findMessageCitation(messages, runId, citationId) {
   const message = messages.find((item) => item.role === 'ASSISTANT' && !item.masked && String(item.runId) === String(runId))
+
   return message?.citations?.find((source) => source.id === citationId)
 }

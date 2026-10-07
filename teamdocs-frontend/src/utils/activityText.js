@@ -39,16 +39,21 @@ export function activityMeta(act) {
 
 export function activityName(act) {
   const meta = activityMeta(act)
+
   if (!meta.style) return ''
+
   if (act.operationName === '添加评论') {
     return act.resourceType === 'DOCUMENT' ? (act.resourceName || act.documentName || '') : ''
   }
+
   return act.documentName || act.resourceName || ''
 }
 
 export function activityVerb(act) {
   const meta = activityMeta(act)
+
   if (!meta.short) return act.operationName
+
   return activityName(act) ? meta.short : meta.full
 }
 
@@ -64,11 +69,14 @@ export function canOpenActivityDocument(act) {
 // '添加评论' 的短动词自带引号（在“），排除避免出现 ““X””
 export function shouldWrapActivityName(act) {
   if (activityMeta(act).style !== 'doc') return false
+
   if (canOpenActivityDocument(act)) return false
+
   return act.operationName !== '添加评论'
 }
 
 export function truncateText(s, max = 40) {
   const str = String(s || '')
+
   return str.length > max ? str.slice(0, max) + '…' : str
 }

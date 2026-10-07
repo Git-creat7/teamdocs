@@ -109,10 +109,13 @@ const addForm = reactive({ username: '', role: 'MEMBER' })
 const canManage = computed(() => props.myRole === 'OWNER' || props.myRole === 'ADMIN')
 
 const ROLE_ORDER = { OWNER: 0, ADMIN: 1, MEMBER: 2 }
+
 const sortedMembers = computed(() =>
   [...props.members].sort((a, b) => {
     const r = (ROLE_ORDER[a.role] ?? 9) - (ROLE_ORDER[b.role] ?? 9)
+
     if (r !== 0) return r
+
     return new Date(a.joinedAt || 0) - new Date(b.joinedAt || 0)
   })
 )
@@ -124,7 +127,9 @@ function canChangeRole(member) {
 
 function canRemove(member) {
   if (member.role === 'OWNER') return false
+
   if (props.myRole === 'OWNER') return true
+
   // ADMIN 只能移除 MEMBER
   return props.myRole === 'ADMIN' && member.role === 'MEMBER'
 }
@@ -132,9 +137,12 @@ function canRemove(member) {
 async function handleAddMember() {
   if (!addForm.username) {
     ElMessage.warning('请输入对方账号')
+
     return
   }
+
   adding.value = true
+
   try {
     await addMemberApi(props.spaceId, {
       username: addForm.username,
@@ -153,6 +161,7 @@ async function handleAddMember() {
 
 async function handleRoleChange(member, newRole) {
   if (newRole === member.role) return
+
   try {
     await updateMemberRoleApi(props.spaceId, member.userId, newRole)
     ElMessage.success(`已将 ${member.username} 设为${newRole === 'ADMIN' ? '管理员' : '成员'}`)

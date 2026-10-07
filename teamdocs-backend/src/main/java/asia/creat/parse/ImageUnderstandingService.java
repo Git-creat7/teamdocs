@@ -27,6 +27,7 @@ public class ImageUnderstandingService {
             （最多8000字符）；transcription 是可辨识文本（最多16000字符）。按阅读顺序保留文字，不补全缺失值。
             不存在的内容标记“无”，无法确认的内容标记“无法辨识”。
             """;
+
     private final VisionProperties properties;
     private final RetrievalHttp http;
 
@@ -45,8 +46,10 @@ public class ImageUnderstandingService {
     /** 单次请求生成经过校验的三段式描述。 */
     public String describe(byte[] image, String mime) {
         if (!enabled()) throw new IllegalStateException("未配置图像理解服务");
+
         try {
             if (properties.getMaxOutputTokens() < 1) throw new IOException("输出限额无效");
+
             DocumentImageReader.Preview prepared = DocumentImageReader.prepare(image, mime, properties, true);
             String dataUrl = "data:" + prepared.contentType() + ";base64," + Base64.getEncoder().encodeToString(prepared.content());
             Map<String, Object> payload = Map.of("model", properties.getModelName(), "stream", false,
@@ -57,13 +60,21 @@ public class ImageUnderstandingService {
             JsonNode response = http.post(properties.getBaseUrl(), "/chat/completions", properties.getApiKey(),
                     payload, properties.getTimeoutSeconds());
             JsonNode choices = response.path("choices");
+
             if (!choices.isArray() || choices.size() != 1) throw new IOException("响应结构无效");
+
             JsonNode choice = choices.get(0);
+
             if (!"stop".equals(choice.path("finish_reason").asText())) throw new IOException("模型输出未完整结束");
+
             JsonNode content = choice.path("message").path("content");
+
             if (!content.isTextual() || content.textValue().length() > 32000) throw new IOException("描述超过长度上限");
+
             JsonNode fields = JSON.readTree(content.textValue());
+
             if (fields == null || !fields.isObject() || fields.size() != 3) throw new IOException("描述字段无效");
+
             return "### 概要\n" + field(fields, "summary", 4000) + "\n\n### 数据/逻辑流\n"
                     + field(fields, "logicFlow", 8000) + "\n\n### 可辨识文本\n" + field(fields, "transcription", 16000);
         } catch (IOException | RuntimeException e) {
@@ -74,9 +85,11 @@ public class ImageUnderstandingService {
     /** 校验有界文本字段并转义 Markdown。 */
     private static String field(JsonNode fields, String name, int limit) throws IOException {
         JsonNode node = fields.get(name);
+
         if (node == null || !node.isTextual() || node.textValue().isBlank() || node.textValue().length() > limit) {
             throw new IOException("描述字段无效");
         }
+
         return node.textValue().strip().replace("\\", "\\\\").replaceAll("([`*_{}\\[\\]<>#!])", "\\\\$1");
     }
 }

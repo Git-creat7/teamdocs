@@ -29,6 +29,15 @@ class DocumentTextExtractorTest {
     private final DocumentTextExtractor extractor = new DocumentTextExtractor(properties);
 
     @Test
+    void readsJsonAsKnowledgeBaseTextWithoutExecutingContent() throws IOException {
+        String content = "{\"name\":\"示例\",\"nested\":{\"enabled\":true}}";
+        var result = extractor.extract("data.json", "application/json",
+                new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
+        assertFalse(result.isSkipped());
+        assertEquals(content, result.getSegments().get(0).text());
+    }
+
+    @Test
     void readsUtf8Text() throws IOException {
         ExtractedText extracted = extractor.extract(
                 "笔记.md",
@@ -56,8 +65,10 @@ class DocumentTextExtractorTest {
     @Test
     void byteArrayEntryPointAlsoEnforcesTheConfiguredLimit() {
         properties.setMaxBytes(32);
+
         assertThrows(IOException.class, () -> extractor.extractSource("notes.txt", "text/plain", new byte[33]));
         properties.setMaxBytes(0);
+
         assertThrows(IOException.class, () -> extractor.extractSource("notes.txt", "text/plain", new byte[0]));
     }
 
@@ -68,17 +79,20 @@ class DocumentTextExtractorTest {
                 "text/plain",
                 new ByteArrayInputStream(new byte[]{(byte) 0x80})
         ));
+
         assertTrue(error.getMessage().contains("UTF-8"));
     }
 
     @Test
     void skipsOversizedTextAndUnsupportedFiles() throws IOException {
         properties.setMaxChars(4);
+
         ExtractedText oversized = extractor.extract(
                 "notes.txt",
                 "text/plain",
                 new ByteArrayInputStream("你好世界啊".getBytes(StandardCharsets.UTF_8))
         );
+
         assertTrue(oversized.isSkipped());
         assertEquals("正文超过解析长度上限", oversized.getReason());
 
@@ -87,6 +101,7 @@ class DocumentTextExtractorTest {
                 "image/png",
                 new ByteArrayInputStream(new byte[]{1, 2, 3})
         );
+
         assertTrue(image.isSkipped());
         assertEquals("未配置图像理解服务", image.getReason());
     }
@@ -98,6 +113,7 @@ class DocumentTextExtractorTest {
                 "text/plain",
                 new ByteArrayInputStream(" \n".getBytes(StandardCharsets.UTF_8))
         );
+
         assertTrue(extracted.isSkipped());
         assertEquals("没有可提取文本", extracted.getReason());
     }
@@ -105,11 +121,13 @@ class DocumentTextExtractorTest {
     @Test
     void readsPdfPageTextAndSkipsBlankPdf() throws IOException {
         ExtractedText extracted = extractor.extract("report.pdf", "application/pdf", pdf("Hello TeamDocs"));
+
         assertFalse(extracted.isSkipped());
         assertEquals(1, extracted.getSegments().get(0).pageNumber());
         assertTrue(extracted.getSegments().get(0).text().contains("Hello TeamDocs"));
 
         ExtractedText blank = extractor.extract("blank.pdf", "application/pdf", pdf(null));
+
         assertTrue(blank.isSkipped());
         assertEquals("没有可提取文本", blank.getReason());
     }
@@ -121,6 +139,7 @@ class DocumentTextExtractorTest {
                 "application/octet-stream",
                 docx("上线检查清单")
         );
+
         assertFalse(extracted.isSkipped());
         assertTrue(extracted.getSegments().get(0).text().contains("上线检查清单"));
     }
@@ -134,6 +153,7 @@ class DocumentTextExtractorTest {
     @Test
     void rejectsHighlyCompressedDocx() throws IOException {
         ByteArrayInputStream bomb = docx("a".repeat(1_000_000));
+
         assertThrows(IOException.class, () -> extractor.extract("bomb.docx", "application/octet-stream", bomb));
     }
 
@@ -143,7 +163,9 @@ class DocumentTextExtractorTest {
             document.addPage(new PDPage());
             document.protect(new StandardProtectionPolicy("owner-password", "user-password", new AccessPermission()));
             document.save(output);
+
             ExtractedText result = extractor.extract("encrypted.pdf", "application/pdf", new ByteArrayInputStream(output.toByteArray()));
+
             assertTrue(result.isSkipped());
             assertEquals("文件已加密", result.getReason());
         }
@@ -153,7 +175,9 @@ class DocumentTextExtractorTest {
         try (PDDocument document = new PDDocument();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             PDPage page = new PDPage();
+
             document.addPage(page);
+
             if (text != null) {
                 try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
                     stream.beginText();
@@ -163,7 +187,9 @@ class DocumentTextExtractorTest {
                     stream.endText();
                 }
             }
+
             document.save(out);
+
             return new ByteArrayInputStream(out.toByteArray());
         }
     }
@@ -173,6 +199,7 @@ class DocumentTextExtractorTest {
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             document.createParagraph().createRun().setText(text);
             document.write(out);
+
             return new ByteArrayInputStream(out.toByteArray());
         }
     }

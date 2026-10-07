@@ -5,11 +5,10 @@ import asia.creat.dto.PageQuery;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
-import org.junit.jupiter.api.Test;
-
 import java.util.List;
 import java.util.Set;
-
+import java.util.stream.Collectors;
+import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -31,7 +30,8 @@ class PaginationModelTest {
 
         Set<String> invalidFields = validator.validate(invalid).stream()
                 .map(violation -> violation.getPropertyPath().toString())
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
+
         assertEquals(Set.of("current", "size"), invalidFields);
     }
 

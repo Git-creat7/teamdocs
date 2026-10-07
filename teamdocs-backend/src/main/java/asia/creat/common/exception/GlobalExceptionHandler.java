@@ -14,21 +14,25 @@ public class GlobalExceptionHandler {
     @ExceptionHandler
     public Result handleException(Exception e) {
         log.error("发生异常: ", e);
+
         return Result.error("服务器发生异常，请稍后再试");
     }
 
     @ExceptionHandler(BusinessException.class)
     public Result handleBusinessException(BusinessException e) {
         log.error("发生业务异常: ", e);
+
         return Result.error("业务异常：" + e.getMessage());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public Result handleMethodArgumentNotValidException(MethodArgumentNotValidException e) {
         log.error("参数验证失败: ", e);
+
         String msg = e.getBindingResult().getFieldErrors().stream()
                 .map(err->err.getField() + ": " + err.getDefaultMessage())
                 .collect(Collectors.joining("; "));
+
         return Result.error("参数验证失败: " + msg);
     }
 

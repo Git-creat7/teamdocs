@@ -23,8 +23,10 @@ import { getFileTypeColor } from '@/utils/format'
 const icons = import.meta.glob('@/assets/fileicons/*.svg', { eager: true, import: 'default', query: '?url' })
 
 const ICON_MAP = {}
+
 for (const [path, url] of Object.entries(icons)) {
   const name = path.split('/').pop().replace('.svg', '').toUpperCase()
+
   ICON_MAP[name] = url
 }
 
@@ -46,6 +48,7 @@ const props = defineProps({
 
 const iconSrc = computed(() => {
   const key = String(props.ext || '').toUpperCase()
+
   return ICON_MAP[key] || ICON_MAP[ALIAS[key]] || null
 })
 

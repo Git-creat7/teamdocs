@@ -12,7 +12,6 @@ import asia.creat.mapper.SpaceMemberMapper;
 import asia.creat.parse.DocumentImageReader;
 import asia.creat.security.LoginUser;
 import asia.creat.vo.ChunkHitVO;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -20,6 +19,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Objects;
 import java.util.concurrent.Semaphore;
+
+import static com.baomidou.mybatisplus.extension.toolkit.ChainWrappers.lambdaQueryChain;
 
 @Service
 @RequiredArgsConstructor
@@ -45,12 +46,17 @@ public class DocumentImageService {
                                             Integer parseVersion, LoginUser user) {
         ChunkHitVO source = readable(spaceId, documentId, chunkId, parseVersion, user);
         Document document = documents.selectById(documentId);
+
         if (document == null || !Objects.equals(document.getSpaceId(), spaceId)) throw inaccessible();
+
         if (!slots.tryAcquire()) throw new BusinessException("图片预览繁忙，请稍后再试");
+
         try (InputStream input = storage.open(BucketType.PRIVATE, document.getFilePath())) {
             DocumentImageReader.Preview image = reader.read(document.getName(), document.getFileType(), input, source.getImageRef());
             ChunkHitVO latest = readable(spaceId, documentId, chunkId, parseVersion, user);
+
             if (!Objects.equals(source.getImageRef(), latest.getImageRef())) throw inaccessible();
+
             return image;
         } catch (IOException e) {
             throw new BusinessException("图片不可读取或超过预览限制");
@@ -62,12 +68,15 @@ public class DocumentImageService {
     /** 在读取前后校验成员资格、READY 状态与同一解析版本。 */
     private ChunkHitVO readable(Long spaceId, Long documentId, Long chunkId, Integer version, LoginUser user) {
         if (user == null || version == null || version < 0
-                || members.selectCount(new LambdaQueryWrapper<SpaceMember>()
-                        .eq(SpaceMember::getSpaceId, spaceId).eq(SpaceMember::getUserId, user.getUserId())) == 0) {
+                || lambdaQueryChain(members)
+                        .eq(SpaceMember::getSpaceId, spaceId).eq(SpaceMember::getUserId, user.getUserId()).count() == 0) {
             throw inaccessible();
         }
+
         ChunkHitVO source = chunks.findReadableChunk(spaceId, documentId, chunkId, version);
+
         if (source == null || !source.isImageSource()) throw inaccessible();
+
         return source;
     }
 

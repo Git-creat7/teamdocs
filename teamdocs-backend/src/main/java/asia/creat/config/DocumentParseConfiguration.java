@@ -22,6 +22,7 @@ public class DocumentParseConfiguration {
         executor.setRejectedExecutionHandler((runnable, pool) ->
                 log.warn("解析队列已满，留待下次扫描"));
         executor.initialize();
+
         return executor;
     }
 }

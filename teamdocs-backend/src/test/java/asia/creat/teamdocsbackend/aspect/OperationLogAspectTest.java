@@ -51,12 +51,15 @@ class OperationLogAspectTest {
     @Test
     void shouldUseReturnValueAsResourceIdWhenExplicitlyEnabled() throws Throwable {
         Method method = LoggedService.class.getMethod("upload", Long.class, LoginUser.class);
+
         prepareJoinPoint(method, new Object[]{1L, LOGIN_USER}, 88L);
 
         Object result = aspect.logOperation(joinPoint);
 
         assertEquals(88L, result);
+
         OperationLogRecord record = captureSavedRecord();
+
         assertEquals(88L, record.getResourceId());
         assertEquals(1L, record.getSpaceId());
         assertEquals(7L, record.getUserId());
@@ -65,6 +68,7 @@ class OperationLogAspectTest {
     @Test
     void shouldIgnoreReturnValueUnlessExplicitlyEnabled() throws Throwable {
         Method method = LoggedService.class.getMethod("withoutResultId", Long.class, LoginUser.class);
+
         prepareJoinPoint(method, new Object[]{1L, LOGIN_USER}, 99L);
 
         aspect.logOperation(joinPoint);
@@ -76,6 +80,7 @@ class OperationLogAspectTest {
     void shouldNotUseResourceIdWhenOperationFails() throws Throwable {
         Method method = LoggedService.class.getMethod("upload", Long.class, LoginUser.class);
         RuntimeException failure = new RuntimeException("upload failed");
+
         prepareJoinPoint(method, new Object[]{1L, LOGIN_USER}, null);
         when(joinPoint.proceed()).thenThrow(failure);
 
@@ -85,7 +90,9 @@ class OperationLogAspectTest {
         );
 
         assertSame(failure, thrown);
+
         OperationLogRecord record = captureSavedRecord();
+
         assertNull(record.getResourceId());
         assertEquals(0, record.getSuccess());
     }
@@ -100,7 +107,9 @@ class OperationLogAspectTest {
 
     private OperationLogRecord captureSavedRecord() {
         ArgumentCaptor<OperationLogRecord> captor = ArgumentCaptor.forClass(OperationLogRecord.class);
+
         verify(operationLogService).saveLog(captor.capture());
+
         return captor.getValue();
     }
 

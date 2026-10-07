@@ -38,7 +38,10 @@ jobs:
           REDIS_PASSWORD: ci-redis-password
           JWT_SECRET: ci-jwt-secret-with-at-least-32-bytes
           MINIO_SECRET_KEY: ci-minio-password
-        run: docker compose --env-file .env.example config --quiet
+        run: |
+          docker compose --env-file .env.example config --quiet
+          docker compose --env-file .env.example -f docker-compose.dev.yaml config --quiet
+          docker compose --env-file .env.example -f docker-compose.yaml -f docker-compose.semantic.yaml config --quiet
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
