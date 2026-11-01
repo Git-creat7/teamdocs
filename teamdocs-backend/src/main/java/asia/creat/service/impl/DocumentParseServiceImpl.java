@@ -204,13 +204,15 @@ public class DocumentParseServiceImpl implements DocumentParseService {
     private List<DocumentContent> chunk(ExtractedText extracted) {
         List<DocumentContent> chunks = new ArrayList<>();
         int index = 0;
+        TextChunker.HeadingTracker tracker = new TextChunker.HeadingTracker();
 
         for (ExtractedText.Segment segment : extracted.getSegments()) {
             List<DocumentContent> parts = TextChunker.chunk(
                     segment.text(),
                     segment.pageNumber(),
                     parseProperties.getChunkSize(),
-                    parseProperties.getChunkOverlap()
+                    parseProperties.getChunkOverlap(),
+                    tracker
             );
 
             for (DocumentContent part : parts) {

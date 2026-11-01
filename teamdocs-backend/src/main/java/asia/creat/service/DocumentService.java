@@ -6,13 +6,17 @@ import asia.creat.dto.PageQuery;
 import asia.creat.dto.RenameDocumentDTO;
 import asia.creat.entity.Document;
 import asia.creat.security.LoginUser;
+import asia.creat.vo.BatchUploadResultVO;
 import asia.creat.vo.DocumentDetailVO;
 import asia.creat.vo.DocumentPreviewVO;
 import asia.creat.vo.RestoreDocumentVO;
 import org.springframework.web.multipart.MultipartFile;
+import java.util.List;
 
 public interface DocumentService {
     Long upload(Long spaceId, Long folderId, MultipartFile file, LoginUser loginUser);
+
+    BatchUploadResultVO batchUpload(Long spaceId, Long folderId, List<MultipartFile> files, LoginUser loginUser);
 
     PageResult<Document> listByFolder(Long spaceId, Long folderId, PageQuery pageQuery, LoginUser loginUser);
 

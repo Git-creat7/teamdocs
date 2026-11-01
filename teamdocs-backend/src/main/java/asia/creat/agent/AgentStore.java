@@ -94,8 +94,8 @@ public class AgentStore {
                 .scopeFolderId(request.folderId())
                 .scopeDocumentIds(scopeIds == null ? null : json.write(scopeIds))
                 .modelName(properties.getModelName())
-                .maxModelCalls(Math.min(6, Math.max(1, properties.getMaxModelCalls())))
-                .maxToolCalls(Math.min(8, Math.max(1, properties.getMaxToolCalls())))
+                .maxModelCalls(Math.max(1, properties.getMaxModelCalls()))
+                .maxToolCalls(Math.max(1, properties.getMaxToolCalls()))
                 .maxOutputTokens(Math.max(0, properties.getMaxOutputTokens()))
                 .deadlineMs(System.currentTimeMillis() + Math.min(90, Math.max(1, properties.getRunTimeoutSeconds())) * 1000L)
                 .build();

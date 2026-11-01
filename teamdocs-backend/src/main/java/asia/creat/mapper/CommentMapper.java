@@ -10,4 +10,6 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface CommentMapper extends BaseMapper<Comment> {
     IPage<CommentVO> listByDocumentId(IPage<CommentVO> page, @Param("documentId") Long documentId);
+
+    IPage<CommentVO> listForAgent(IPage<CommentVO> page, @Param("documentId") Long documentId);
 }

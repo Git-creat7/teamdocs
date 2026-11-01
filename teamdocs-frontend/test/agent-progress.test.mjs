@@ -25,7 +25,8 @@ test('active labels follow the actual tool, not a fabricated sequence', () => {
   for (const [name, label] of [
     ['search_documents', '正在查找相关文档…'],
     ['search_document_chunks', '正在检索相关内容…'],
-    ['read_document_chunks', '正在阅读文档内容…']
+    ['read_document_chunks', '正在阅读文档内容…'],
+    ['read_document_comments', '正在读取文档评论…']
   ]) {
     const progress = getAgentProgress(run('RUNNING', [tool(name)]))
 

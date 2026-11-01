@@ -9,12 +9,20 @@ import java.util.List;
 
 public interface DocumentChunkQueryService {
 
-    List<ChunkHitVO> searchChunksInDocument(Long spaceId, Long documentId, String keyword, LoginUser loginUser);
+    List<ChunkHitVO> searchChunksInDocument(Long spaceId, Long documentId, String keyword, String semanticQuery, LoginUser loginUser);
+
+    List<ChunkHitVO> searchChunks(Long spaceId, String keyword, String semanticQuery, LoginUser loginUser);
+
+    default List<ChunkHitVO> searchChunksInDocument(Long spaceId, Long documentId, String keyword, LoginUser loginUser) {
+        return searchChunksInDocument(spaceId, documentId, keyword, keyword, loginUser);
+    }
 
     /**
      * 在当前空间检索 READY 正文。不替代原来的文档名搜索。
      */
-    List<ChunkHitVO> searchChunks(Long spaceId, String keyword, LoginUser loginUser);
+    default List<ChunkHitVO> searchChunks(Long spaceId, String keyword, LoginUser loginUser) {
+        return searchChunks(spaceId, keyword, keyword, loginUser);
+    }
 
     /**
      * 按切片顺序读取完整分块。只有当前 READY 版本可读，其他状态通过 parseStatus 说明原因。

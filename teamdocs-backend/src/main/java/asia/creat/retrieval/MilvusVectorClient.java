@@ -34,13 +34,63 @@ public class MilvusVectorClient {
         return properties.isEnabled();
     }
 
+    /** 返回默认基础集合名称并校验合法性。 */
+    public String defaultCollection() {
+        return validateCollectionName(properties.getCollection());
+    }
+
+    /**
+     * 生成指定文档与代次的蓝绿隔离集合名称，防止同一 chunk_id 原地覆盖旧代次向量。
+     * @param documentId 文档ID
+     * @param generation 任务代次
+     * @return 独立集合名称
+     */
+    public String collectionName(Long documentId, long generation) {
+        requirePositive(documentId);
+        if (generation < 1) {
+            throw failure("任务代次无效");
+        }
+        return validateCollectionName(defaultCollection() + "_d" + documentId + "_g" + generation);
+    }
+
     /** 只读核对现有集合，不创建集合或写入测试向量。 */
     public void checkHealth() {
-        validateSchema(success(post("collections/describe", Map.of())));
+        checkHealth(properties.getCollection());
+    }
+
+    /** 只读核对指定集合结构与模型签名。 */
+    public void checkHealth(String collection) {
+        validateSchema(collection, success(post(collection, "collections/describe", Map.of())), false);
+    }
+
+    /**
+     * 切换前对新集合执行完整校验：核对字段、维度、索引结构，并执行抽样查询验证可读性。
+     * @param collection 待切换的新集合名称
+     * @param spaceId 所属空间ID
+     * @param documentId 文档ID
+     * @param sampleVector 抽样查询向量
+     */
+    public void verifyCollection(String collection, Long spaceId, Long documentId, List<Float> sampleVector) {
+        requirePositive(spaceId);
+        requirePositive(documentId);
+        validateVector(sampleVector);
+
+        JsonNode data = success(post(collection, "collections/describe", Map.of()));
+        validateSchema(collection, data, true);
+
+        List<ChunkIndexHit> sampleHits = search(collection, spaceId, documentId, sampleVector, 1);
+        if (sampleHits == null || sampleHits.isEmpty()) {
+            throw failure("新集合抽样查询验证未命中");
+        }
     }
 
     /** 在指定空间和可选文档内召回候选；正文与权限仍由 MySQL 复核。 */
     public List<ChunkIndexHit> search(Long spaceId, Long documentId, List<Float> vector, int limit) {
+        return search(properties.getCollection(), spaceId, documentId, vector, limit);
+    }
+
+    /** 在指定集合、空间和可选文档内召回候选；正文与权限仍由 MySQL 复核。 */
+    public List<ChunkIndexHit> search(String collection, Long spaceId, Long documentId, List<Float> vector, int limit) {
         requirePositive(spaceId);
 
         if (documentId != null) requirePositive(documentId);
@@ -49,17 +99,22 @@ public class MilvusVectorClient {
 
         if (limit < 1 || limit > 20) throw failure("候选数量越界");
 
-        validateSchema(success(post("collections/describe", Map.of())));
+        validateSchema(collection, success(post(collection, "collections/describe", Map.of())), false);
 
         String filter = "space_id == " + spaceId;
 
         if (documentId != null) filter += " and document_id == " + documentId;
 
-        JsonNode data = success(post("entities/search", Map.of(
+        Map<String, Object> searchParamsInner = new LinkedHashMap<>();
+        if ("HNSW".equalsIgnoreCase(properties.getIndexType())) {
+            searchParamsInner.put("ef", properties.getHnswEf());
+        }
+
+        JsonNode data = success(post(collection, "entities/search", Map.of(
                 "data", List.of(vector), "annsField", "embedding", "filter", filter,
                 "limit", limit, "consistencyLevel", "Strong",
                 "outputFields", List.of("chunk_id", "document_id", "space_id", "parse_version"),
-                "searchParams", Map.of("metricType", "COSINE", "params", Map.of()))));
+                "searchParams", Map.of("metricType", "COSINE", "params", searchParamsInner))));
 
         if (!data.isArray() || data.size() > limit) throw failure("候选响应无效");
 
@@ -88,6 +143,11 @@ public class MilvusVectorClient {
 
     /** 批量写入最多 16 个分块的标识与向量，不向 Milvus 复制正文。 */
     public void upsert(List<ChunkHitVO> chunks, List<List<Float>> vectors) {
+        upsert(properties.getCollection(), chunks, vectors);
+    }
+
+    /** 向指定集合批量写入最多 16 个分块的标识与向量，不向 Milvus 复制正文。 */
+    public void upsert(String collection, List<ChunkHitVO> chunks, List<List<Float>> vectors) {
         if (chunks == null || chunks.isEmpty() || chunks.size() > 16
                 || vectors == null || chunks.size() != vectors.size()) {
             throw failure("写入批次无效");
@@ -115,31 +175,77 @@ public class MilvusVectorClient {
                     "embedding", vectors.get(i)));
         }
 
-        validateSchema(success(post("collections/describe", Map.of())));
+        validateSchema(collection, success(post(collection, "collections/describe", Map.of())), false);
 
-        JsonNode data = success(post("entities/upsert", Map.of("data", rows)));
+        JsonNode data = success(post(collection, "entities/upsert", Map.of("data", rows)));
 
         if (positiveLong(data.get("upsertCount")) != chunks.size()) throw failure("向量写入数量不一致");
     }
 
     /** 清理指定文档的向量；集合不存在时视为已经清理，不创建集合。 */
     public void deleteDocument(Long documentId) {
+        deleteDocument(properties.getCollection(), documentId);
+    }
+
+    /** 在指定集合内清理指定文档的向量；集合不存在时视为已经清理，不创建集合。 */
+    public void deleteDocument(String collection, Long documentId) {
         requirePositive(documentId);
 
-        JsonNode description = post("collections/describe", Map.of());
+        JsonNode description = post(collection, "collections/describe", Map.of());
 
         if (code(description) == 100) return;
 
-        validateSchema(success(description));
-        success(post("entities/delete", Map.of("filter", "document_id == " + documentId)));
+        validateSchema(collection, success(description), false);
+        success(post(collection, "entities/delete", Map.of("filter", "document_id == " + documentId)));
+    }
+
+    /** 清理指定文档中非目标版本的旧向量；集合不存在时视为已经清理，不创建集合。 */
+    public void deleteStaleChunks(Long documentId, Integer targetParseVersion) {
+        deleteStaleChunks(properties.getCollection(), documentId, targetParseVersion);
+    }
+
+    /** 在指定集合内清理指定文档中非目标版本的旧向量；集合不存在时视为已经清理，不创建集合。 */
+    public void deleteStaleChunks(String collection, Long documentId, Integer targetParseVersion) {
+        requirePositive(documentId);
+        if (targetParseVersion == null || targetParseVersion < 0) {
+            throw failure("目标解析版本无效");
+        }
+
+        JsonNode description = post(collection, "collections/describe", Map.of());
+
+        if (code(description) == 100) return;
+
+        validateSchema(collection, success(description), false);
+        String filter = "document_id == " + documentId + " and parse_version != " + targetParseVersion;
+        success(post(collection, "entities/delete", Map.of("filter", filter)));
+    }
+
+    /** 删除已退役的旧代次独立集合；集合不存在时视为幂等成功。 */
+    public synchronized void dropCollection(String collection) {
+        validateCollectionName(collection);
+
+        JsonNode description = post(collection, "collections/describe", Map.of());
+
+        if (code(description) == 100) {
+            return;
+        }
+
+        validateSchema(collection, success(description), false);
+        success(post(collection, "collections/drop", Map.of()));
     }
 
     /** 建立或核对专用集合及索引，拒绝修改不兼容的已有集合。 */
     public synchronized void ensureCollection() {
-        JsonNode description = post("collections/describe", Map.of());
+        ensureCollection(properties.getCollection());
+    }
+
+    /** 建立或核对指定名称的专用集合及索引，拒绝修改不兼容的已有集合。 */
+    public synchronized void ensureCollection(String collection) {
+        validateCollectionName(collection);
+        JsonNode description = post(collection, "collections/describe", Map.of());
 
         if (code(description) == 100) {
-            JsonNode created = post("collections/create", Map.of(
+            JsonNode created = post(collection, "collections/create", Map.of(
                     "description", signature(), "schema", schema(),
                     "params", Map.of("consistencyLevel", "Strong")));
 
@@ -149,12 +255,12 @@ public class MilvusVectorClient {
                 if (code(created) != 1100 || !message.contains("already exist")) success(created);
             }
 
-            description = post("collections/describe", Map.of());
+            description = post(collection, "collections/describe", Map.of());
         }
 
         JsonNode data = success(description);
 
-        validateSchema(data);
+        validateSchema(collection, data, false);
 
         JsonNode indexes = data.get("indexes");
 
@@ -174,12 +280,21 @@ public class MilvusVectorClient {
         }
 
         if (!indexed) {
-            success(post("indexes/create", Map.of("indexParams", List.of(Map.of(
-                    "fieldName", "embedding", "indexName", INDEX_NAME,
-                    "metricType", "COSINE", "indexType", "FLAT", "params", Map.of())))));
+            Map<String, Object> indexParams;
+            if ("HNSW".equalsIgnoreCase(properties.getIndexType())) {
+                indexParams = Map.of(
+                        "fieldName", "embedding", "indexName", INDEX_NAME,
+                        "metricType", "COSINE", "indexType", "HNSW",
+                        "params", Map.of("M", properties.getHnswM(), "efConstruction", properties.getHnswEfConstruction()));
+            } else {
+                indexParams = Map.of(
+                        "fieldName", "embedding", "indexName", INDEX_NAME,
+                        "metricType", "COSINE", "indexType", "FLAT", "params", Map.of());
+            }
+            success(post(collection, "indexes/create", Map.of("indexParams", List.of(indexParams))));
         }
 
-        success(post("collections/load", Map.of()));
+        success(post(collection, "collections/load", Map.of()));
     }
 
     /** 生成固定字段结构，关闭动态字段和自动主键。 */
@@ -203,8 +318,9 @@ public class MilvusVectorClient {
     }
 
     /** 核对模型签名、维度及字段类型，避免混用向量空间或误写其他集合。 */
-    private void validateSchema(JsonNode data) {
-        if (!data.isObject() || !properties.getCollection().equals(data.path("collectionName").asText())
+    private void validateSchema(String expectedCollection, JsonNode data, boolean requireIndex) {
+        String validCollection = validateCollectionName(expectedCollection);
+        if (!data.isObject() || !validCollection.equals(data.path("collectionName").asText())
                 || !signature().equals(data.path("description").asText())
                 || !isFalse(data.get("autoId")) || !isFalse(data.get("enableDynamicField"))) {
             throw failure("集合结构或模型签名不兼容");
@@ -249,6 +365,26 @@ public class MilvusVectorClient {
                 if (dimensionCount != 1) throw failure("集合向量维度不兼容");
             }
         }
+
+        if (requireIndex) {
+            JsonNode indexes = data.get("indexes");
+            if (indexes == null || !indexes.isArray()) {
+                throw failure("集合索引描述无效");
+            }
+            boolean indexed = false;
+            for (JsonNode index : indexes) {
+                if ("embedding".equals(index.path("fieldName").asText())) {
+                    if (!INDEX_NAME.equals(index.path("indexName").asText())
+                            || !"COSINE".equals(index.path("metricType").asText())) {
+                        throw failure("集合索引不兼容");
+                    }
+                    indexed = true;
+                }
+            }
+            if (!indexed) {
+                throw failure("集合缺少有效向量索引");
+            }
+        }
     }
 
     /** 为模型与维度生成稳定签名，变更后需使用新的专用集合。 */
@@ -282,24 +418,28 @@ public class MilvusVectorClient {
         if (norm == 0) throw failure("零向量不可检索");
     }
 
-    /** 发送固定 REST 操作，集合名不接受表达式或路径字符。 */
-    private JsonNode post(String operation, Map<String, ?> parameters) {
-        if (!enabled()) throw failure("向量索引未启用");
-
-        String collection = properties.getCollection();
-
+    /** 校验集合名称满足 Milvus 命名规范。 */
+    private String validateCollectionName(String collection) {
         if (collection == null || !collection.matches("[A-Za-z_][A-Za-z0-9_]{0,127}")) {
             throw failure("集合名称无效");
         }
+        return collection;
+    }
+
+    /** 发送固定 REST 操作，集合名不接受表达式或路径字符。 */
+    private JsonNode post(String collection, String operation, Map<String, ?> parameters) {
+        if (!enabled()) throw failure("向量索引未启用");
+
+        String validCollection = validateCollectionName(collection);
 
         signature();
 
         Map<String, Object> request = new LinkedHashMap<>();
-        request.put("collectionName", collection);
+        request.put("collectionName", validCollection);
         request.putAll(parameters);
 
         return http.post(properties.getUrl(), PREFIX + operation, properties.getToken(), request,
-                properties.getTimeoutSeconds());
+                properties.getConnectTimeoutMillis(), properties.getReadTimeoutMillis(), properties.getWriteTimeoutMillis());
     }
 
     /** 成功响应取 data，错误仅暴露数字状态码，不转发服务端原文。 */

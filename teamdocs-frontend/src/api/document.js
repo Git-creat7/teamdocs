@@ -34,6 +34,25 @@ export function uploadDocumentApi(spaceId, folderId, file) {
 }
 
 /**
+ * 批量上传文档
+ * @param {number|string} spaceId
+ * @param {number|string} folderId
+ * @param {File[]} files
+ */
+export function batchUploadDocumentApi(spaceId, folderId, files) {
+  const formData = new FormData()
+  files.forEach(file => {
+    formData.append('files', file)
+  })
+  formData.append('folderId', folderId)
+
+  return request.post(`/spaces/${spaceId}/documents/batch-upload`, formData, {
+    timeout: 300000
+  })
+}
+
+
+/**
  * 获取文档下载/预览预签名 URL 字符串
  * @param {number|string} spaceId
  * @param {number|string} documentId

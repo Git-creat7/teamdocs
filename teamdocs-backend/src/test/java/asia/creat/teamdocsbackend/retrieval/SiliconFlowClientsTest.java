@@ -2,6 +2,7 @@ package asia.creat.teamdocsbackend.retrieval;
 
 import asia.creat.config.EmbeddingProperties;
 import asia.creat.config.RerankProperties;
+import asia.creat.retrieval.RetrievalContext;
 import asia.creat.retrieval.RetrievalException;
 import asia.creat.retrieval.RetrievalHttp;
 import asia.creat.retrieval.SiliconFlowEmbeddingClient;
@@ -366,6 +367,30 @@ class SiliconFlowClientsTest {
     }
 
     /** @return 当前夹具的接口基础地址 */
+
+    /** HTTP 请求强制受 RetrievalContext 剩余时间约束。 */
+    @Test
+    void httpEnforcesBoundedConnectAndReadTimeoutFromRetrievalContext() {
+        responseGate = new CountDownLatch(1);
+        long start = System.currentTimeMillis();
+        try (var scope = RetrievalContext.open(System.currentTimeMillis() + 150, () -> { }, hit -> { })) {
+            assertThrows(RuntimeException.class, () -> embedding.embed(List.of("测试文本")));
+        }
+        long elapsed = System.currentTimeMillis() - start;
+        assertTrue(elapsed < 2000, "Should abort quickly within deadline: " + elapsed + "ms");
+    }
+
+    /** budgetMillis <= 0 时 RetrievalHttp 必须立即失败，绝不发起网络请求或传入 0 超时。 */
+    @Test
+    void httpAbortsImmediatelyWithoutCallingServerWhenBudgetIsZeroOrNegative() {
+        int before = requests.get();
+        try (var expired = RetrievalContext.open(System.currentTimeMillis() - 1, () -> { }, hit -> { })) {
+            assertThrows(IllegalStateException.class,
+                    () -> http.post(baseUrl(), "/test", "", Map.of("k", "v"), 1000, 1000, 1000));
+        }
+        assertEquals(before, requests.get());
+    }
+
     private String baseUrl() {
         return "http://127.0.0.1:" + server.getAddress().getPort() + "/v1";
     }

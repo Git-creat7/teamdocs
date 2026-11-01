@@ -8,6 +8,8 @@ import asia.creat.dto.RestoreDocumentDTO;
 import asia.creat.security.LoginUser;
 import asia.creat.service.DocumentParseService;
 import asia.creat.service.DocumentService;
+import asia.creat.vo.BatchUploadResultVO;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
@@ -29,6 +31,15 @@ public class DocumentController {
         documentService.upload(spaceId, folderId, file, loginUser);
 
         return Result.success();
+    }
+
+    @PostMapping("/batch-upload")
+    public Result batchUploadDocuments(@PathVariable Long spaceId,
+                                       @RequestParam(defaultValue = "0") Long folderId,
+                                       @RequestParam("files") List<MultipartFile> files,
+                                       @AuthenticationPrincipal LoginUser loginUser) {
+        BatchUploadResultVO result = documentService.batchUpload(spaceId, folderId, files, loginUser);
+        return Result.success(result);
     }
 
     @GetMapping("")

@@ -16,6 +16,12 @@ const actions = {
     running: '正在阅读文档内容…',
     finished: '已完成正文读取',
     empty: '未读取到可用正文'
+  },
+  read_document_comments: {
+    name: '评论读取',
+    running: '正在读取文档评论…',
+    finished: '已完成评论读取',
+    empty: '未读取到评论'
   }
 }
 

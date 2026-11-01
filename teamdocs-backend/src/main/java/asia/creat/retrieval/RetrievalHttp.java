@@ -37,8 +37,8 @@ public class RetrievalHttp {
                 .followRedirects(false)
                 .followSslRedirects(false)
                 .connectTimeout(3, TimeUnit.SECONDS)
-                .readTimeout(0, TimeUnit.SECONDS)
-                .writeTimeout(0, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .writeTimeout(5, TimeUnit.SECONDS)
                 .build();
     }
 
@@ -52,8 +52,27 @@ public class RetrievalHttp {
      * @return 已解析的 JSON 对象
      */
     public JsonNode post(String baseUrl, String path, String token, Object payload, int timeoutSeconds) {
+        if (timeoutSeconds < 1 || timeoutSeconds > 60) {
+            throw new RetrievalException("检索服务连接配置无效");
+        }
+        return post(baseUrl, path, token, payload, 2000L, timeoutSeconds * 1000L, 5000L);
+    }
+
+    /**
+     * 在剩余执行时间内发送有界请求，支持细粒度超时控制。
+     * @param baseUrl 服务基础地址
+     * @param path 接口路径
+     * @param token Bearer 凭据，可为空
+     * @param payload 请求内容
+     * @param connectTimeoutMs 连接超时毫秒
+     * @param readTimeoutMs 读取超时毫秒
+     * @param writeTimeoutMs 写入超时毫秒
+     * @return 已解析的 JSON 对象
+     */
+    public JsonNode post(String baseUrl, String path, String token, Object payload,
+                         long connectTimeoutMs, long readTimeoutMs, long writeTimeoutMs) {
         if (baseUrl == null || baseUrl.isBlank() || path == null || !path.startsWith("/")
-                || timeoutSeconds < 1 || timeoutSeconds > 60) {
+                || connectTimeoutMs < 1 || readTimeoutMs < 1 || writeTimeoutMs < 1) {
             throw new RetrievalException("检索服务连接配置无效");
         }
 
@@ -80,11 +99,23 @@ public class RetrievalHttp {
             throw new RetrievalException("检索请求配置或编码失败");
         }
 
-        // 检查取消与剩余预算；这些异常不能转换成普通的远端降级错误。
-        long timeoutMillis = RetrievalContext.timeoutMillis(timeoutSeconds * 1000L);
-        Call call = client.newCall(request);
-
-        call.timeout().timeout(timeoutMillis, TimeUnit.MILLISECONDS);
+        // 检查取消与剩余预算；budgetMillis <= 0 时必须立即失败，绝不向 OkHttp 传入 0（无超时）。
+        long budgetMillis = RetrievalContext.timeoutMillis(readTimeoutMs);
+        if (budgetMillis <= 0) {
+            throw new IllegalStateException("检索运行已超时");
+        }
+        long effectiveConnectMs = Math.min(connectTimeoutMs, budgetMillis);
+        long effectiveWriteMs = Math.min(writeTimeoutMs, budgetMillis);
+        if (effectiveConnectMs <= 0 || effectiveWriteMs <= 0) {
+            throw new IllegalStateException("检索运行已超时");
+        }
+        OkHttpClient requestClient = client.newBuilder()
+                .connectTimeout(effectiveConnectMs, TimeUnit.MILLISECONDS)
+                .readTimeout(budgetMillis, TimeUnit.MILLISECONDS)
+                .writeTimeout(effectiveWriteMs, TimeUnit.MILLISECONDS)
+                .callTimeout(budgetMillis, TimeUnit.MILLISECONDS)
+                .build();
+        Call call = requestClient.newCall(request);
 
         try (Response response = call.execute()) {
             if (!response.isSuccessful()) {
@@ -107,10 +138,11 @@ public class RetrievalHttp {
                 throw new RetrievalException("检索响应不是 JSON 对象");
             }
 
-            RetrievalContext.timeoutMillis(timeoutSeconds * 1000L);
+            RetrievalContext.check();
 
             return result;
         } catch (IOException e) {
+            RetrievalContext.check();
             throw new RetrievalException("检索服务请求失败或超时");
         }
     }

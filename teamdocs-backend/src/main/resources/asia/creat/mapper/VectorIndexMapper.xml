@@ -17,13 +17,47 @@
     </select>
 
     <insert id="enqueue">
-        INSERT INTO document_vector_task(document_id,generation,target_signature,state,attempts,next_attempt_ms) VALUES(#{documentId},1,#{signature},'PENDING',0,0)
-        ON DUPLICATE KEY UPDATE generation=generation+IF(target_signature&lt;&gt;VALUES(target_signature),1,0),
+        INSERT INTO document_vector_task(
+            document_id, generation, target_signature, target_parse_version, state, attempts, next_attempt_ms, lease_until_ms, claim_token, active_generation, active_parse_version, active_collection, stale_collection, active_chunk_count, cleanup_pending
+        ) VALUES (
+            #{documentId}, 1, #{signature}, (SELECT d.parse_version FROM document d WHERE d.id=#{documentId}), 'PENDING', 0, 0, 0, NULL, 0, NULL, NULL, NULL, 0, 0
+        )
+        ON DUPLICATE KEY UPDATE
+            generation=generation+IF(target_signature&lt;&gt;VALUES(target_signature),1,0),
+            target_parse_version=IF(target_signature&lt;&gt;VALUES(target_signature),VALUES(target_parse_version),target_parse_version),
             state=IF(target_signature&lt;&gt;VALUES(target_signature),'PENDING',state),
             attempts=IF(target_signature&lt;&gt;VALUES(target_signature),0,attempts),
             next_attempt_ms=IF(target_signature&lt;&gt;VALUES(target_signature),0,next_attempt_ms),
+            lease_until_ms=IF(target_signature&lt;&gt;VALUES(target_signature),0,lease_until_ms),
+            claim_token=IF(target_signature&lt;&gt;VALUES(target_signature),NULL,claim_token),
             error_code=IF(target_signature&lt;&gt;VALUES(target_signature),NULL,error_code),
             target_signature=VALUES(target_signature)
     </insert>
+
+    <update id="completeAndSwitchRow">
+        UPDATE document_vector_task
+        SET stale_collection = CASE
+                WHEN active_collection IS NOT NULL AND (#{activeCollection} IS NULL OR active_collection &lt;&gt; #{activeCollection})
+                THEN active_collection
+                ELSE stale_collection
+            END,
+            state = 'DONE',
+            active_generation = #{generation},
+            active_parse_version = #{targetParseVersion},
+            active_collection = #{activeCollection},
+            active_chunk_count = #{writtenCount},
+            cleanup_pending = 1,
+            claim_token = NULL,
+            lease_until_ms = 0,
+            error_code = NULL
+        WHERE document_id = #{documentId}
+          AND generation = #{generation}
+          AND state = 'PENDING'
+          AND claim_token = #{claimToken}
+          AND lease_until_ms &gt; #{nowMs}
+          AND active_generation &lt; #{generation}
+          AND ((#{targetParseVersion} IS NULL AND target_parse_version IS NULL)
+               OR target_parse_version = #{targetParseVersion})
+    </update>
 
 </mapper>

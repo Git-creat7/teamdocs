@@ -10,6 +10,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
@@ -49,6 +50,16 @@ public class VectorIndexWorker {
             for (Long id : mapper.deletedDocumentIds()) {
                 queue.enqueue(id);
             }
+
+            for (VectorIndexMapper.Task pending : mapper.pendingCleanupTasks()) {
+                try {
+                    cleanupOldVectors(pending.getDocumentId(), pending.getStaleCollection(),
+                            pending.getActiveCollection(), pending.getActiveParseVersion());
+                    mapper.clearCleanupPending(pending.getDocumentId(), pending.getActiveGeneration());
+                } catch (RuntimeException e) {
+                    log.warn("补扫清理旧向量失败: {}", e.getClass().getSimpleName());
+                }
+            }
         } catch (RuntimeException e) {
             log.warn("向量同步补扫失败，请核对初始化表: {}", e.getClass().getSimpleName());
         }
@@ -64,6 +75,7 @@ public class VectorIndexWorker {
         }
 
         VectorIndexMapper.Task task = null;
+        String claimToken = null;
 
         try {
             long now = System.currentTimeMillis();
@@ -71,22 +83,29 @@ public class VectorIndexWorker {
             mapper.expireAttempts(now);
             task = mapper.next(now);
 
-            if (task == null || !mapper.reserve(task.getDocumentId(), task.getGeneration(), now, now + TASK_TIMEOUT_MS)) {
+            if (task == null) {
+                return;
+            }
+
+            claimToken = UUID.randomUUID().toString();
+            long leaseUntil = now + TASK_TIMEOUT_MS;
+
+            if (!mapper.reserve(task.getDocumentId(), task.getGeneration(), claimToken, now, leaseUntil)) {
                 return;
             }
 
             VectorIndexMapper.Task currentTask = task;
+            String currentClaimToken = claimToken;
 
-            try (RetrievalContext ignored = RetrievalContext.open(now + TASK_TIMEOUT_MS,
-                    () -> verifyCurrent(currentTask), hit -> { })) {
-                sync(task);
-                verifyCurrent(task);
-                mapper.complete(task.getDocumentId(), task.getGeneration());
+            try (RetrievalContext ignored = RetrievalContext.open(leaseUntil,
+                    () -> verifyCurrent(currentTask, currentClaimToken), hit -> { })) {
+                sync(task, claimToken);
             }
         } catch (RuntimeException e) {
-            if (task != null) {
+            if (task != null && claimToken != null) {
                 try {
-                    mapper.fail(task.getDocumentId(), task.getGeneration(), System.currentTimeMillis() + 30_000);
+                    long failNow = System.currentTimeMillis();
+                    mapper.fail(task.getDocumentId(), task.getGeneration(), claimToken, failNow, failNow + 30_000);
                 } catch (RuntimeException ignored) {
                     log.warn("向量同步失败状态未能保存");
                 }
@@ -97,37 +116,161 @@ public class VectorIndexWorker {
     }
 
     /**
-     * 清除旧向量后按小批次发布当前正文，不持有跨 HTTP 的数据库事务。
+     * 使用独立蓝绿集合分批写入新代次向量，经数量、维度、索引与抽样查询验证后切换有效集合，再延迟清理旧集合。
      * @param task 已领取任务
+     * @param claimToken 领取凭证
      */
-    private void sync(VectorIndexMapper.Task task) {
+    private void sync(VectorIndexMapper.Task task, String claimToken) {
         List<ChunkHitVO> rows = chunks.listIndexableDocumentChunks(task.getDocumentId());
 
-        vectors.ensureCollection();
-        verifyCurrent(task);
-        vectors.deleteDocument(task.getDocumentId());
+        if (rows.isEmpty()) {
+            verifyCurrent(task, claimToken);
+            String oldCollection = task.getActiveCollection();
+            boolean switched = mapper.completeAndSwitch(task.getDocumentId(), task.getGeneration(), claimToken,
+                    System.currentTimeMillis(), task.getTargetParseVersion(), null, 0);
+            if (switched) {
+                try {
+                    cleanupOldVectors(task.getDocumentId(), oldCollection, null, null);
+                    mapper.clearCleanupPending(task.getDocumentId(), task.getGeneration());
+                } catch (RuntimeException e) {
+                    log.warn("删除文档向量清理延迟执行: {}", e.getClass().getSimpleName());
+                }
+            }
+            return;
+        }
 
-        for (int start = 0; start < rows.size(); start += 16) {
-            verifyCurrent(task);
+        String targetCollection = resolveTargetCollection(task.getDocumentId(), task.getGeneration());
+        Integer targetParseVersion = rows.get(0).getParseVersion();
+        Long spaceId = rows.get(0).getSpaceId();
+        boolean switched = false;
 
-            List<ChunkHitVO> batch = rows.subList(start, Math.min(rows.size(), start + 16));
-            List<List<Float>> encoded = embeddings.embed(batch.stream().map(ChunkHitVO::getExcerpt).toList());
+        try {
+            vectors.ensureCollection(targetCollection);
+            verifyCurrent(task, claimToken);
 
-            verifyCurrent(task);
-            vectors.upsert(batch, encoded);
+            int writtenCount = 0;
+            List<Float> sampleVector = null;
+
+            for (int start = 0; start < rows.size(); start += 16) {
+                verifyCurrent(task, claimToken);
+
+                List<ChunkHitVO> batch = rows.subList(start, Math.min(rows.size(), start + 16));
+                List<List<Float>> encoded = embeddings.embed(batch.stream().map(this::vectorText).toList());
+
+                if (sampleVector == null && encoded != null && !encoded.isEmpty()) {
+                    sampleVector = encoded.get(0);
+                }
+
+                verifyCurrent(task, claimToken);
+                vectors.upsert(targetCollection, batch, encoded);
+                writtenCount += batch.size();
+            }
+
+            if (writtenCount != rows.size() || sampleVector == null) {
+                throw new IllegalStateException("写入向量数量不完整");
+            }
+
+            verifyCurrent(task, claimToken);
+            vectors.verifyCollection(targetCollection, spaceId, task.getDocumentId(), sampleVector);
+            verifyCurrent(task, claimToken);
+
+            switched = mapper.completeAndSwitch(task.getDocumentId(), task.getGeneration(), claimToken,
+                    System.currentTimeMillis(), targetParseVersion, targetCollection, writtenCount);
+
+            if (!switched) {
+                dropQuietly(targetCollection);
+                return;
+            }
+        } catch (RuntimeException e) {
+            if (!switched) {
+                dropQuietly(targetCollection);
+            }
+            throw e;
+        }
+
+        try {
+            cleanupOldVectors(task.getDocumentId(), task.getActiveCollection(), targetCollection, targetParseVersion);
+            mapper.clearCleanupPending(task.getDocumentId(), task.getGeneration());
+        } catch (RuntimeException e) {
+            log.warn("向量旧集合清理延迟执行: {}", e.getClass().getSimpleName());
+        }
+    }
+
+    private String resolveTargetCollection(Long documentId, long generation) {
+        String name = vectors.collectionName(documentId, generation);
+        if (name != null && !name.isBlank()) {
+            return name;
+        }
+        return "teamdocs_chunks_d" + documentId + "_g" + generation;
+    }
+
+    private String defaultCollectionName() {
+        String name = vectors.defaultCollection();
+        return (name != null && !name.isBlank()) ? name : "teamdocs_chunks";
+    }
+
+    private void cleanupOldVectors(Long documentId, String staleCollection, String activeCollection, Integer activeParseVersion) {
+        String defaultCol = defaultCollectionName();
+        if (activeCollection == null) {
+            if (staleCollection != null && !staleCollection.isBlank() && !staleCollection.equals(defaultCol)) {
+                vectors.dropCollection(staleCollection);
+            } else {
+                vectors.deleteDocument(documentId);
+            }
+            return;
+        }
+
+        if (staleCollection != null && !staleCollection.isBlank() && !staleCollection.equals(activeCollection)) {
+            if (staleCollection.equals(defaultCol)) {
+                vectors.deleteDocument(staleCollection, documentId);
+            } else {
+                vectors.dropCollection(staleCollection);
+            }
+        } else if (activeParseVersion != null) {
+            vectors.deleteStaleChunks(documentId, activeParseVersion);
+        }
+    }
+
+    private void dropQuietly(String collection) {
+        if (collection == null || collection.isBlank() || collection.equals(defaultCollectionName())) {
+            return;
+        }
+        try {
+            vectors.dropCollection(collection);
+        } catch (RuntimeException ignored) {
         }
     }
 
     /**
-     * 阻止旧代次继续调用，状态变化时补登记新目标。
-     * @param task 当前任务
+     * 拼接文档名和章节路径以增强语义向量表示。
      */
-    private void verifyCurrent(VectorIndexMapper.Task task) {
-        VectorIndexMapper.Task current = mapper.task(task.getDocumentId());
+    private String vectorText(ChunkHitVO chunk) {
+        if (chunk.getDocumentName() == null && chunk.getHeading() == null) {
+            return chunk.getExcerpt() != null ? chunk.getExcerpt() : "";
+        }
+        StringBuilder sb = new StringBuilder();
+        if (chunk.getDocumentName() != null && !chunk.getDocumentName().isBlank()) {
+            sb.append("【文档: ").append(chunk.getDocumentName());
+            if (chunk.getHeading() != null && !chunk.getHeading().isBlank()) {
+                sb.append(" > ").append(chunk.getHeading());
+            }
+            sb.append("】\n");
+        } else if (chunk.getHeading() != null && !chunk.getHeading().isBlank()) {
+            sb.append("【章节: ").append(chunk.getHeading()).append("】\n");
+        }
+        sb.append(chunk.getExcerpt() != null ? chunk.getExcerpt() : "");
+        return sb.toString();
+    }
 
-        if (current == null || current.getGeneration() != task.getGeneration()
-                || !"PENDING".equals(current.getState())) {
-            throw new IllegalStateException("向量同步任务已被替换");
+    /**
+     * 阻止旧代次与过期租约继续调用，状态变化时补登记新目标。
+     * @param task 当前任务
+     * @param claimToken 领取凭证
+     */
+    private void verifyCurrent(VectorIndexMapper.Task task, String claimToken) {
+        long now = System.currentTimeMillis();
+        if (!mapper.verifyCurrent(task.getDocumentId(), task.getGeneration(), claimToken, now)) {
+            throw new IllegalStateException("向量同步任务已被替换或租约已过期");
         }
 
         String signature = queue.signature(mapper.snapshot(task.getDocumentId()));

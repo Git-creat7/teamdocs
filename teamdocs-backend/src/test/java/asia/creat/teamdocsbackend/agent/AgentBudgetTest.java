@@ -63,6 +63,8 @@ class AgentBudgetTest {
     void unknownModelsDoNotInheritTheStepWindowAndExplicitInputLimitWins() {
         var properties = new AgentProperties();
         assertEquals(16000, AgentBudget.inputLimit(properties, "other-model"));
+        assertEquals(32000, AgentBudget.inputLimit(properties, "qwen3.8-max"));
+        assertEquals(32000, AgentBudget.inputLimit(properties, "deepseek-reasoner"));
         properties.setMaxInputTokens(100000);
         assertEquals(100000, AgentBudget.inputLimit(properties, "other-model"));
         assertEquals(100000, AgentBudget.inputLimit(properties, "step-5-preview"));

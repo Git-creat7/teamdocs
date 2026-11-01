@@ -207,11 +207,12 @@ class DocumentParseServiceImplTest {
         verify(documentContentService, never()).publishIfParsing(any(), any(), any(), any());
     }
 
-    @Test
-    void readyChunksUseGlobalIndexAndPage() throws IOException {
+    @ParameterizedTest
+    @ValueSource(strings = {"pdf", "docx", "csv", "tsv", "doc", "xls", "xlsx", "ppt", "pptx"})
+    void supportedFormatsPublishChunksWithGlobalIndexAndPage(String extension) throws IOException {
         Document document = document(4L);
-        document.setName("report.pdf");
-        document.setFileType("application/pdf");
+        document.setName("report." + extension);
+        document.setFileType("application/octet-stream");
         when(documentMapper.update(isNull(), any())).thenReturn(1);
         when(documentMapper.selectById(9L)).thenReturn(document);
         when(fileStorageService.open(any(), any())).thenReturn(new ByteArrayInputStream(new byte[0]));

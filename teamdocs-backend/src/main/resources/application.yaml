@@ -7,9 +7,9 @@ spring:
     name: teamdocs-backend
   servlet:
     multipart:
-      # 容器上限需 ≥ 业务上限；头像业务限制 2MB，文档限制 100MB
+      # 容器上限需 ≥ 业务上限；头像限制 2MB，单文档限制 100MB，批量单次总大小限制 200MB
       max-file-size: 100MB
-      max-request-size: 105MB
+      max-request-size: 210MB
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
@@ -74,6 +74,8 @@ teamdocs:
     base-url: ${AGENT_BASE_URL:}
     api-key: ${AGENT_API_KEY:}
     model-name: ${AGENT_MODEL_NAME:}
+    # 文档评论工具默认关闭，开启后才向模型提供 read_document_comments
+    comments-enabled: ${AGENT_COMMENTS_ENABLED:false}
     timeout-seconds: ${AGENT_TIMEOUT_SECONDS:60}
     streaming: ${AGENT_STREAMING:true}
     max-input-tokens: ${AGENT_MAX_INPUT_TOKENS:0}
@@ -87,6 +89,7 @@ teamdocs:
             Authorization: "Bearer ${MCP_STEP_API_KEY:}"
   parse:
     enabled: ${PARSE_ENABLED:true}
+    summary-enabled: ${PARSE_SUMMARY_ENABLED:true}
     max-bytes: ${PARSE_MAX_BYTES:10485760}
     max-chars: ${PARSE_MAX_CHARS:200000}
     timeout-seconds: ${PARSE_TIMEOUT_SECONDS:120}
@@ -100,6 +103,7 @@ teamdocs:
     search-limit: 6
     read-limit: 20
     max-chars: 4000
+    expand-max-chars: ${RETRIEVAL_EXPAND_MAX_CHARS:200}
   elasticsearch:
     enabled: ${ES_ENABLED:false}
     url: ${ES_URL:http://localhost:9200}
@@ -130,3 +134,7 @@ teamdocs:
     token: ${MILVUS_TOKEN:}
     collection: ${MILVUS_COLLECTION:teamdocs_qwen3_8b_d1024_v1}
     timeout-seconds: ${MILVUS_TIMEOUT_SECONDS:3}
+    index-type: ${MILVUS_INDEX_TYPE:FLAT}
+    hnsw-m: ${MILVUS_HNSW_M:16}
+    hnsw-ef-construction: ${MILVUS_HNSW_EF_CONSTRUCTION:200}
+    hnsw-ef: ${MILVUS_HNSW_EF:64}

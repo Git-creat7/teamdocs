@@ -39,7 +39,11 @@ public class AgentProperties {
     private boolean streaming = true;
     /** 可显式覆盖；未配置时，填写有效 Key 即确认问答资料出站。 */
     private Boolean allowDocumentEgress;
+    /** 文档评论工具默认关闭，开启后才向模型提供 read_document_comments。 */
+    private boolean commentsEnabled;
+    /** 模型交互轮数建议，通过系统提示引导收尾，不按次数中断回答。 */
     private int maxModelCalls = 6;
+    /** 工具调用次数建议，实际调用仍计数并受总超时约束。 */
     private int maxToolCalls = 8;
     private int runTimeoutSeconds = 90;
     /** 可用输入容量覆盖值；0 按已知模型窗口扣除生成空间及估算余量。 */

@@ -21,6 +21,12 @@ import asia.creat.service.RecentDocumentService;
 import asia.creat.service.impl.DocumentServiceImpl;
 import asia.creat.vo.DocumentDetailVO;
 import asia.creat.vo.DocumentPreviewVO;
+import asia.creat.vo.BatchUploadResultVO;
+import org.springframework.web.multipart.MultipartFile;
+import java.util.List;
+import java.util.ArrayList;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -563,5 +569,115 @@ class DocumentServiceImplTest {
         document.setFolderId(folderId);
 
         return document;
+    }
+
+    @Test
+    void batchUploadShouldThrowWhenFilesEmptyOrNull() {
+        assertThrows(BusinessException.class,
+                () -> service.batchUpload(SPACE_ID, 0L, null, LOGIN_USER));
+        assertThrows(BusinessException.class,
+                () -> service.batchUpload(SPACE_ID, 0L, List.of(), LOGIN_USER));
+    }
+
+    @Test
+    void batchUploadShouldThrowWhenCountExceedsTen() {
+        List<MultipartFile> files = new ArrayList<>();
+        for (int i = 0; i < 11; i++) {
+            files.add(new MockMultipartFile("file", "test" + i + ".txt", "text/plain", "data".getBytes(StandardCharsets.UTF_8)));
+        }
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.batchUpload(SPACE_ID, 0L, files, LOGIN_USER));
+        assertTrue(ex.getMessage().contains("单次批量上传最多不能超过 10 个文件"));
+    }
+
+    @Test
+    void batchUploadShouldThrowWhenTotalSizeExceeds200MB() {
+        MockMultipartFile bigFile1 = new MockMultipartFile("file", "big1.bin", "application/octet-stream", new byte[0]) {
+            @Override
+            public long getSize() {
+                return 150L * 1024 * 1024;
+            }
+        };
+        MockMultipartFile bigFile2 = new MockMultipartFile("file", "big2.bin", "application/octet-stream", new byte[0]) {
+            @Override
+            public long getSize() {
+                return 60L * 1024 * 1024;
+            }
+        };
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.batchUpload(SPACE_ID, 0L, List.of(bigFile1, bigFile2), LOGIN_USER));
+        assertTrue(ex.getMessage().contains("200MB"));
+    }
+
+    @Test
+    void batchUploadShouldHandlePartialFailuresForEmptyAndOversizedFiles() {
+        prepareUpload(0L);
+
+        MockMultipartFile validFile = new MockMultipartFile("file", "valid.txt", "text/plain", "valid content".getBytes(StandardCharsets.UTF_8));
+        MockMultipartFile emptyFile = new MockMultipartFile("file", "empty.txt", "text/plain", new byte[0]);
+        MockMultipartFile oversizedFile = new MockMultipartFile("file", "oversized.bin", "application/octet-stream", new byte[]{1}) {
+            @Override
+            public boolean isEmpty() {
+                return false;
+            }
+            @Override
+            public long getSize() {
+                return 101L * 1024 * 1024;
+            }
+        };
+
+        when(documentMapper.insert(any(Document.class))).thenAnswer(invocation -> {
+            Document doc = invocation.getArgument(0);
+            doc.setId(101L);
+            return 1;
+        });
+
+        BatchUploadResultVO result = service.batchUpload(SPACE_ID, 0L, List.of(validFile, emptyFile, oversizedFile), LOGIN_USER);
+
+        assertEquals(3, result.getTotalCount());
+        assertEquals(1, result.getSuccessCount());
+        assertEquals(2, result.getFailCount());
+        assertEquals(3, result.getItems().size());
+
+        // Check valid file
+        BatchUploadResultVO.Item item0 = result.getItems().get(0);
+        assertEquals("valid.txt", item0.getFileName());
+        assertTrue(item0.isSuccess());
+        assertEquals(101L, item0.getDocumentId());
+
+        // Check empty file
+        BatchUploadResultVO.Item item1 = result.getItems().get(1);
+        assertEquals("empty.txt", item1.getFileName());
+        assertFalse(item1.isSuccess());
+        assertEquals("文件内容不能为空", item1.getErrorMessage());
+
+        // Check oversized file
+        BatchUploadResultVO.Item item2 = result.getItems().get(2);
+        assertEquals("oversized.bin", item2.getFileName());
+        assertFalse(item2.isSuccess());
+        assertEquals("单文件大小不能超过 100MB", item2.getErrorMessage());
+    }
+
+    @Test
+    void batchUploadShouldSucceedForAllValidFiles() {
+        prepareUpload(0L);
+
+        MockMultipartFile file1 = new MockMultipartFile("file", "f1.txt", "text/plain", "content 1".getBytes(StandardCharsets.UTF_8));
+        MockMultipartFile file2 = new MockMultipartFile("file", "f2.txt", "text/plain", "content 2".getBytes(StandardCharsets.UTF_8));
+
+        when(documentMapper.insert(any(Document.class))).thenAnswer(invocation -> {
+            Document doc = invocation.getArgument(0);
+            doc.setId(201L);
+            return 1;
+        });
+
+        BatchUploadResultVO result = service.batchUpload(SPACE_ID, 0L, List.of(file1, file2), LOGIN_USER);
+
+        assertEquals(2, result.getTotalCount());
+        assertEquals(2, result.getSuccessCount());
+        assertEquals(0, result.getFailCount());
+        assertEquals(2, result.getItems().size());
+        assertTrue(result.getItems().get(0).isSuccess());
+        assertTrue(result.getItems().get(1).isSuccess());
     }
 }

@@ -42,4 +42,24 @@ public interface DocumentMapper extends BaseMapper<Document> {
 
     // 需锁定包含回收站在内的记录，保留 SQL 绕过逻辑删除过滤。
     Document lockById(@Param("id") Long id);
+
+    int claimSummaryTask(@Param("documentId") Long documentId,
+                         @Param("parseVersion") Integer parseVersion,
+                         @Param("workerId") String workerId,
+                         @Param("leaseUntil") Long leaseUntil,
+                         @Param("nowMs") Long nowMs);
+
+    int completeSummary(@Param("documentId") Long documentId,
+                        @Param("parseVersion") Integer parseVersion,
+                        @Param("summary") String summary,
+                        @Param("keywords") String keywords,
+                        @Param("source") String source,
+                        @Param("state") String state,
+                        @Param("error") String error,
+                        @Param("workerId") String workerId);
+
+    List<Document> findPendingSummaryDocuments(@Param("limit") int limit,
+                                               @Param("nowMs") Long nowMs);
+
+    int resetTimeoutSummaryTasks(@Param("nowMs") Long nowMs);
 }

@@ -18,6 +18,7 @@ cp -n .env.example .env
 - `WEB_PORT`：网页端口，默认 `15173`。
 - `MINIO_PUBLIC_ENDPOINT`：浏览器可访问的 MinIO 文件 API 地址；`MINIO_CORS_ALLOWED_ORIGIN`：实际前端来源，不带 `/login` 等路径。
 - 启用问答时填写 `AGENT_BASE_URL`、`AGENT_API_KEY`、`AGENT_MODEL_NAME`，并确认允许问题及相关资料发送给模型。
+- 文档评论工具默认关闭；需要让助手读取评论时设置 `AGENT_COMMENTS_ENABLED=true`。
 - 需要保存私人模型配置时，用 `openssl rand -base64 32` 生成 `MODEL_CONFIG_ENCRYPTION_KEY`，妥善保存，不要随意更换。
 
 密码含 `$` 时，在 `.env` 中用单引号包住完整值。真实密码、Key 和 `.env` 不要提交到仓库。

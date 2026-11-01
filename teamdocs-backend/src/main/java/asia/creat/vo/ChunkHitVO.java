@@ -9,6 +9,7 @@ public class ChunkHitVO {
     private Long chunkId;
     private Long documentId;
     private Integer chunkIndex;
+    private String heading;
     private Integer parseVersion;
     private String documentName;
     private Integer pageNumber;

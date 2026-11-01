@@ -59,7 +59,7 @@ public class SiliconFlowRerankClient {
                 Map.of("model", properties.getModelName(), "query", query, "documents", input,
                         "top_n", topN, "return_documents", false,
                         "instruction", "Rank passages by how directly they provide evidence to answer the team document question."),
-                properties.getTimeoutSeconds());
+                properties.getConnectTimeoutMillis(), properties.getReadTimeoutMillis(), properties.getWriteTimeoutMillis());
         JsonNode results = response.get("results");
 
         if (results == null || !results.isArray() || results.size() != topN) {

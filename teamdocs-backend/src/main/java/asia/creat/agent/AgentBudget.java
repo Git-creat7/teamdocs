@@ -16,7 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 
-/** 限制上下文和模型调用次数，并记录实际 Token 用量。 */
+/** 检查上下文容量与运行状态，并记录模型调用和实际 Token 用量。 */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -33,10 +33,20 @@ public class AgentBudget {
         if (properties.getModelName() == null || properties.getModelName().isBlank()) throw new AgentFailure("AI_MODEL_NOT_CONFIGURED");
     }
 
-    /** Step 5 预留最大生成空间和 1% 估算余量；未知模型不默认拥有 1M 窗口。 */
+    /** Step 5 预留最大生成空间和 1% 估算余量；主流现代大模型默认 32K 窗口，未知模型保守 16K。 */
     public static int inputLimit(AgentProperties properties, String modelName) {
         if (properties.getMaxInputTokens() > 0) return properties.getMaxInputTokens();
-        if (!"step-5-preview".equalsIgnoreCase(modelName)) return 16000;
+        if (!"step-5-preview".equalsIgnoreCase(modelName)) {
+            if (modelName != null) {
+                String lower = modelName.toLowerCase();
+                if (lower.contains("qwen") || lower.contains("deepseek")
+                        || lower.contains("gpt-4") || lower.contains("claude")
+                        || lower.contains("kimi") || lower.contains("glm")) {
+                    return 32000;
+                }
+            }
+            return 16000;
+        }
 
         int output = properties.getMaxOutputTokens() > 0
                 ? Math.min(64000, properties.getMaxOutputTokens()) : 64000;
@@ -110,12 +120,6 @@ public class AgentBudget {
             log.warn("AgentBudget 上下文超出限制: runId={}, estimatedInput={}, maxInputTokens={}", run.getId(), input, run.getMaxInputTokens());
 
             throw new AgentFailure("CONTEXT_LIMIT");
-        }
-
-        if (run.getModelCalls() >= run.getMaxModelCalls()) {
-            log.warn("AgentBudget 模型调用次数已达上限: runId={}, currentCalls={}, maxCalls={}", run.getId(), run.getModelCalls(), run.getMaxModelCalls());
-
-            throw new AgentFailure("MODEL_CALL_LIMIT");
         }
 
         ModelCall call = ModelCall.builder()

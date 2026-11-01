@@ -24,6 +24,7 @@ import asia.creat.service.DocumentService;
 import asia.creat.service.DocumentIndexSync;
 import asia.creat.service.FileStorageService;
 import asia.creat.service.RecentDocumentService;
+import asia.creat.vo.BatchUploadResultVO;
 import asia.creat.vo.DocumentDetailVO;
 import asia.creat.vo.DocumentPreviewVO;
 import asia.creat.vo.FolderPathItemVO;
@@ -59,6 +60,10 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentContentService documentContentService;
     private final DocumentIndexSync documentIndexSync;
     private final PlatformTransactionManager transactionManager;
+
+    public static final int MAX_BATCH_UPLOAD_COUNT = 10;
+    public static final long MAX_SINGLE_UPLOAD_SIZE = 100 * 1024 * 1024L;
+    public static final long MAX_BATCH_TOTAL_SIZE = 200 * 1024 * 1024L;
 
     @Override
     @OperationLog(
@@ -131,6 +136,88 @@ public class DocumentServiceImpl implements DocumentService {
         log.debug("用户 {} 上传了文件 {} 到空间 {} 的文件夹 {}", loginUser.getUserId(), originalName, spaceId, folderId);
 
         return doc.getId();
+    }
+
+    @Override
+    @RequireSpaceRole
+    public BatchUploadResultVO batchUpload(@SpaceId Long spaceId, Long folderId, List<MultipartFile> files, LoginUser loginUser) {
+        if (files == null || files.isEmpty()) {
+            throw new BusinessException("请选择要上传的文件");
+        }
+        if (files.size() > MAX_BATCH_UPLOAD_COUNT) {
+            throw new BusinessException("单次批量上传最多不能超过 " + MAX_BATCH_UPLOAD_COUNT + " 个文件");
+        }
+
+        long totalSize = 0L;
+        for (MultipartFile file : files) {
+            if (file != null) {
+                totalSize += file.getSize();
+            }
+        }
+        if (totalSize > MAX_BATCH_TOTAL_SIZE) {
+            throw new BusinessException("单次批量上传总大小不能超过 200MB");
+        }
+
+        folderId = requireFolderInSpace(spaceId, folderId);
+
+        List<BatchUploadResultVO.Item> items = new ArrayList<>();
+        int successCount = 0;
+        int failCount = 0;
+
+        for (MultipartFile file : files) {
+            String originalName = (file != null && file.getOriginalFilename() != null)
+                    ? file.getOriginalFilename()
+                    : "未知文件";
+
+            if (file == null || file.isEmpty() || file.getSize() == 0) {
+                items.add(BatchUploadResultVO.Item.builder()
+                        .fileName(originalName)
+                        .documentId(null)
+                        .success(false)
+                        .errorMessage("文件内容不能为空")
+                        .build());
+                failCount++;
+                continue;
+            }
+
+            if (file.getSize() > MAX_SINGLE_UPLOAD_SIZE) {
+                items.add(BatchUploadResultVO.Item.builder()
+                        .fileName(originalName)
+                        .documentId(null)
+                        .success(false)
+                        .errorMessage("单文件大小不能超过 100MB")
+                        .build());
+                failCount++;
+                continue;
+            }
+
+            try {
+                Long docId = upload(spaceId, folderId, file, loginUser);
+                items.add(BatchUploadResultVO.Item.builder()
+                        .fileName(originalName)
+                        .documentId(docId)
+                        .success(true)
+                        .errorMessage(null)
+                        .build());
+                successCount++;
+            } catch (Exception e) {
+                log.warn("批量上传单个文件失败: fileName={}, error={}", originalName, e.getMessage());
+                items.add(BatchUploadResultVO.Item.builder()
+                        .fileName(originalName)
+                        .documentId(null)
+                        .success(false)
+                        .errorMessage(e instanceof BusinessException ? e.getMessage() : "上传失败")
+                        .build());
+                failCount++;
+            }
+        }
+
+        return BatchUploadResultVO.builder()
+                .totalCount(files.size())
+                .successCount(successCount)
+                .failCount(failCount)
+                .items(items)
+                .build();
     }
 
     @Override

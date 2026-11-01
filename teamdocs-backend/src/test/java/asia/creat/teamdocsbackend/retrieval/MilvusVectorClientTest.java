@@ -361,8 +361,102 @@ class MilvusVectorClientTest {
         assertEquals(1, requests.size());
     }
 
+    /** deleteStaleChunks 清理指定文档中非目标解析版本的旧向量。 */
+    @Test
+    void deleteStaleChunksDeletesOnlyNonTargetParseVersions() {
+        enqueue(description(true));
+        enqueue(response(Map.of()));
+        client.deleteStaleChunks(10L, 2);
+
+        assertEquals(2, requests.size());
+        assertEquals("/v2/vectordb/collections/describe", requests.get(0).path());
+        Request delete = requests.get(1);
+        assertEquals("/v2/vectordb/entities/delete", delete.path());
+        assertEquals("document_id == 10 and parse_version != 2", delete.body().path("filter").asText());
+    }
+
+    /** 配置为 HNSW 索引类型时，创建 HNSW 索引参数。 */
+    @Test
+    void createUsesHnswIndexWhenConfigured() {
+        properties.setIndexType("HNSW");
+        properties.setHnswM(32);
+        properties.setHnswEfConstruction(256);
+
+        enqueue(json.valueToTree(Map.of("code", 100)));
+        enqueue(response(Map.of()));
+        enqueue(description(false));
+        enqueue(response(Map.of()));
+        enqueue(response(Map.of()));
+
+        client.ensureCollection();
+
+        assertEquals(5, requests.size());
+        JsonNode index = requests.get(3).body().path("indexParams").get(0);
+        assertEquals("/v2/vectordb/indexes/create", requests.get(3).path());
+        assertEquals("HNSW", index.path("indexType").asText());
+        assertEquals("COSINE", index.path("metricType").asText());
+        assertEquals(32, index.path("params").path("M").asInt());
+        assertEquals(256, index.path("params").path("efConstruction").asInt());
+    }
+
+    /** 配置为 HNSW 时，检索请求包含 ef 搜索参数。 */
+    @Test
+    void searchPassesEfParamWhenHnswIsConfigured() {
+        properties.setIndexType("HNSW");
+        properties.setHnswEf(128);
+
+        enqueue(description(true));
+        enqueue(response(List.of(candidate())));
+
+        var hits = client.search(1L, 2L, vector(), 5);
+        assertEquals(1, hits.size());
+
+        Request search = requests.get(1);
+        assertEquals("/v2/vectordb/entities/search", search.path());
+        assertEquals(128, search.body().path("searchParams").path("params").path("ef").asInt());
+    }
+
+    /** 蓝绿隔离集合命名、切换前抽样验证（含索引检查）及旧集合 drop 清理。 */
+    @Test
+    void blueGreenCollectionIsolationVerifyAndDropCollection() {
+        String newCol = client.collectionName(2L, 2L);
+        assertEquals("teamdocs_qwen3_8b_d1024_v1_d2_g2", newCol);
+
+        // verifyCollection: 1. describe(newCol), 2. describe(newCol) inside search, 3. search(newCol)
+        enqueue(descriptionFor(newCol, true));
+        enqueue(descriptionFor(newCol, true));
+        enqueue(response(List.of(candidate())));
+
+        client.verifyCollection(newCol, 1L, 2L, vector());
+
+        assertEquals(3, requests.size());
+        assertEquals(newCol, requests.get(0).body().path("collectionName").asText());
+        assertEquals(newCol, requests.get(2).body().path("collectionName").asText());
+
+        // 若抽样查询为空，verifyCollection 必须拒绝切换
+        enqueue(descriptionFor(newCol, true));
+        enqueue(descriptionFor(newCol, true));
+        enqueue(response(List.of()));
+        assertThrows(RetrievalException.class, () -> client.verifyCollection(newCol, 1L, 2L, vector()));
+
+        // dropCollection: 核对结构后删除旧集合，集合不存在时幂等返回
+        String oldCol = client.collectionName(2L, 1L);
+        enqueue(descriptionFor(oldCol, true));
+        enqueue(response(Map.of()));
+        client.dropCollection(oldCol);
+        assertEquals("/v2/vectordb/collections/drop", requests.get(requests.size() - 1).path());
+        assertEquals(oldCol, requests.get(requests.size() - 1).body().path("collectionName").asText());
+
+        enqueue(json.valueToTree(Map.of("code", 100)));
+        client.dropCollection(oldCol);
+    }
+
     /** 按官方描述响应格式构造集合，维度位于 params 键值对数组。 */
     private ObjectNode description(boolean indexed) {
+        return descriptionFor(properties.getCollection(), indexed);
+    }
+
+    private ObjectNode descriptionFor(String collectionName, boolean indexed) {
         List<Map<String, Object>> fields = new ArrayList<>();
 
         for (String name : List.of("chunk_id", "document_id", "space_id", "parse_version", "embedding")) {
@@ -373,7 +467,7 @@ class MilvusVectorClientTest {
                     "params", "embedding".equals(name) ? List.of(Map.of("key", "dim", "value", "2")) : List.of()));
         }
 
-        return response(Map.of("collectionName", properties.getCollection(),
+        return response(Map.of("collectionName", collectionName,
                 "description", "teamdocs-vector-v1|model=" + embedding.getModelName() + "|dimensions=2",
                 "autoId", false, "enableDynamicField", false, "fields", fields,
                 "indexes", indexed ? List.of(Map.of("indexName", "embedding_cosine", "fieldName", "embedding", "metricType", "COSINE")) : List.of()));

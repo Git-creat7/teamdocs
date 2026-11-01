@@ -14,6 +14,14 @@ public class RerankProperties {
     private String apiKey = "";
     private String modelName = "";
     private int timeoutSeconds = 10;
+    private int connectTimeoutMillis = 2000;
+    private int readTimeoutMillis = 10000;
+    private int writeTimeoutMillis = 5000;
+
+    public void setTimeoutSeconds(int timeoutSeconds) {
+        this.timeoutSeconds = timeoutSeconds;
+        this.readTimeoutMillis = timeoutSeconds * 1000;
+    }
 
     /** 根据显式开关或有效 Key 判断是否启用。 */
     public boolean isEnabled() {

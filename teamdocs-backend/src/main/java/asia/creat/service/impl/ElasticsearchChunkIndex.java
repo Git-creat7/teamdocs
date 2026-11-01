@@ -2,6 +2,7 @@ package asia.creat.service.impl;
 
 import asia.creat.config.ElasticsearchProperties;
 import asia.creat.mapper.DocumentContentMapper;
+import asia.creat.retrieval.RetrievalContext;
 import asia.creat.service.ChunkIndex;
 import asia.creat.vo.ChunkHitVO;
 import asia.creat.vo.ChunkIndexHit;
@@ -43,9 +44,15 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
 
     @PostConstruct
     public void start() {
+        int connectTimeout = Math.max(1, properties.getConnectTimeoutMillis());
+        int connectionRequestTimeout = Math.max(1, properties.getConnectionRequestTimeoutMillis());
+        int socketTimeout = Math.max(1, properties.getSocketTimeoutMillis());
+
         RestClient rest = RestClient.builder(HttpHost.create(properties.getUrl()))
-                .setRequestConfigCallback(config -> config.setConnectTimeout(1000)
-                        .setConnectionRequestTimeout(1000).setSocketTimeout(2000))
+                .setRequestConfigCallback(config -> config
+                        .setConnectTimeout(connectTimeout)
+                        .setConnectionRequestTimeout(connectionRequestTimeout)
+                        .setSocketTimeout(socketTimeout))
                 .build();
 
         transport = new RestClientTransport(rest, new JacksonJsonpMapper());
@@ -71,9 +78,14 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
 
     @Override
     public List<ChunkIndexHit> searchCandidates(Long spaceId, Long documentId, String keyword, int limit) {
+        long budgetMs = RetrievalContext.timeoutMillis(Math.max(1, properties.getSocketTimeoutMillis()));
+        if (budgetMs <= 0) {
+            throw new IllegalStateException("检索运行已超时");
+        }
         try {
             var response = client.search(request -> request.index(properties.getIndex())
                             .size(Math.min(20, Math.max(1, limit)))
+                            .timeout(budgetMs + "ms")
                             .query(query -> query.bool(bool -> {
                                 bool.must(must -> must.match(match -> match.field("content").query(keyword)))
                                         .filter(filter -> filter.term(term -> term.field("space_id").value(spaceId)));
@@ -88,6 +100,7 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
                                     .preTags("<mark>").postTags("</mark>")
                                     .fields("content", field -> field.fragmentSize(160).numberOfFragments(1))),
                     IndexedChunk.class);
+            RetrievalContext.check();
             List<ChunkIndexHit> result = new ArrayList<>();
 
             for (var hit : response.hits().hits()) {
@@ -106,6 +119,7 @@ public class ElasticsearchChunkIndex implements ChunkIndex {
 
             return result;
         } catch (IOException | ElasticsearchException e) {
+            RetrievalContext.check();
             throw new IllegalStateException("Elasticsearch 检索失败", e);
         }
     }

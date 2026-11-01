@@ -57,7 +57,7 @@ public class SiliconFlowEmbeddingClient {
         JsonNode response = http.post(properties.getBaseUrl(), "/embeddings", properties.getApiKey(),
                 Map.of("model", properties.getModelName(), "input", input,
                         "dimensions", properties.getDimensions(), "encoding_format", "float"),
-                properties.getTimeoutSeconds());
+                properties.getConnectTimeoutMillis(), properties.getReadTimeoutMillis(), properties.getWriteTimeoutMillis());
         JsonNode data = response.get("data");
 
         if (data == null || !data.isArray() || data.size() != input.size()) {

@@ -196,7 +196,7 @@
             <version>1.0.0-beta1</version>
         </dependency>
 
-        <!-- 只接 PDF 与 DOCX 所需解析器，不引入 tika-parsers -->
+        <!-- 只接 PDF 与 Office 所需解析器，不引入 tika-parsers -->
         <dependency>
             <groupId>org.apache.tika</groupId>
             <artifactId>tika-core</artifactId>

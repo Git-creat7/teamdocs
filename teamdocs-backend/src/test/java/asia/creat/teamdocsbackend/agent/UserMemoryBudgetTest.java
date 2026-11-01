@@ -4,11 +4,14 @@ import asia.creat.agent.*;
 import asia.creat.agent.AgentData.*;
 import asia.creat.agent.AgentBudget.InputEstimate;
 import asia.creat.agent.AgentRepository;
+import asia.creat.config.AgentProperties;
 import asia.creat.entity.Document;
 import asia.creat.entity.Space;
 import asia.creat.entity.ParseStatus;
 import asia.creat.mapper.SpaceMapper;
 import asia.creat.mapper.DocumentMapper;
+import asia.creat.service.DocumentChunkQueryService;
+import asia.creat.service.DocumentService;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -62,10 +65,76 @@ class UserMemoryBudgetTest {
         assertFalse(context.contains("空间名称: 限定文档范围"));
         assertTrue(context.contains("执行约束，不是空间属性"));
         assertTrue(context.contains("选中文档"));
+        assertEquals(1, state.dependencies().size());
+        assertEquals(10L, state.dependencies().get(0).documentId());
+
         ReflectionTestUtils.setField(state, "scopeIds", List.of());
         String empty = ReflectionTestUtils.invokeMethod(contextWorker, "buildSpaceContext", 1L, state);
         assertTrue(empty.contains("本次选定范围内没有文档"));
         assertFalse(empty.contains("当前空间暂未上传"));
+    }
+
+    @Test
+    void nonScopedContextDoesNotPreRegisterCatalogDependenciesAndShowsTotalCount() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), Document.class);
+        var spaces = mock(SpaceMapper.class);
+        var documents = mock(DocumentMapper.class);
+        Space space = new Space();
+        space.setName("研发资料库");
+        space.setDescription("团队技术资料");
+        when(spaces.selectById(1L)).thenReturn(space);
+
+        var contextWorker = new AgentWorker(mapper, null, tools, null, new AgentJson(new ObjectMapper()),
+                null, null, null, null, spaces, documents, false, null, null, null, null, null);
+
+        var docMeta1 = new AgentWorker.CachedDocMeta(101L, "文档1", 1, "READY", java.time.LocalDateTime.now());
+        var docMeta2 = new AgentWorker.CachedDocMeta(102L, "文档2", 1, "READY", java.time.LocalDateTime.now());
+        var meta = new AgentWorker.CachedSpaceMeta(1L, "研发资料库", "团队技术资料", List.of(docMeta1, docMeta2), 20L);
+        var cache = (com.github.benmanes.caffeine.cache.Cache<Long, Object>) ReflectionTestUtils.getField(contextWorker, "spaceMetaCache");
+        cache.put(1L, meta);
+
+        var state = new AgentTools.State();
+        assertNull(ReflectionTestUtils.getField(state, "scopeIds"));
+        String context = ReflectionTestUtils.invokeMethod(contextWorker, "buildSpaceContext", 1L, state);
+
+        assertTrue(context.contains("- 空间就绪文档总数: 20 篇"));
+        assertTrue(context.contains("仅展示前 15 篇，其余请通过工具检索"));
+        assertTrue(context.contains("文档1"));
+        assertTrue(context.contains("文档2"));
+        // 关键验证：非限定范围时，目录展示的文档不能预先注册为回答依赖
+        assertTrue(state.dependencies().isEmpty());
+    }
+
+    @Test
+    void singleDocumentSearchChunksWithZeroHitsStillRecordsDependency() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), Document.class);
+        var docService = mock(DocumentService.class);
+        var chunkService = mock(DocumentChunkQueryService.class);
+        var docMapper = mock(DocumentMapper.class);
+        var json = new AgentJson(new ObjectMapper());
+        var agentTools = new AgentTools(docService, chunkService, docMapper, null, new AgentProperties(), json, null);
+
+        Document doc = Document.builder().id(99L).spaceId(1L).name("规范手册")
+                .parseVersion(2).parseStatus(ParseStatus.READY).updatedAt(java.time.LocalDateTime.now()).build();
+        when(docMapper.selectById(99L)).thenReturn(doc);
+        when(chunkService.searchChunksInDocument(eq(1L), eq(99L), anyString(), any())).thenReturn(List.of());
+
+        var state = new AgentTools.State();
+        var request = ToolExecutionRequest.builder()
+                .id("call-1")
+                .name("search_document_chunks")
+                .arguments("{\"keyword\":\"回滚\",\"documentId\":99}")
+                .build();
+
+        var result = agentTools.execute(1L, new LoginUser(1L, "test"), request, state);
+        assertNotNull(result);
+        assertEquals(0, result.count());
+
+        // 关键验证：即使检索命中为 0，指定 documentId 时也必须记录该文档的依赖
+        assertEquals(1, state.dependencies().size());
+        assertEquals(99L, state.dependencies().get(0).documentId());
+        assertEquals(2, state.dependencies().get(0).parseVersion());
+        assertEquals("规范手册", state.dependencies().get(0).documentName());
     }
 
     @Test

@@ -67,3 +67,10 @@ pnpm-debug.log*
 .env.*
 !.env.example
 .gstack/
+
+*.log.*
+gc.log*
+*.hprof
+*.7z
+*.zip
+=

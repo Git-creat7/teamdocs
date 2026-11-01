@@ -168,6 +168,7 @@ services:
       ES_URL: http://elasticsearch:9200
       ES_INDEX: ${ES_INDEX:-teamdocs-chunks}
       PARSE_ENABLED: ${PARSE_ENABLED:-true}
+      PARSE_SUMMARY_ENABLED: ${PARSE_SUMMARY_ENABLED:-true}
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
     healthcheck:

@@ -6,6 +6,8 @@ CREATE TABLE document_content (
     document_id BIGINT     NOT NULL COMMENT '关联文档ID',
     space_id    BIGINT     NOT NULL COMMENT '所属空间ID',
     chunk_index INT        NOT NULL COMMENT '分块序号，从0开始递增',
+    parse_version INT      DEFAULT NULL COMMENT '文档解析版本号',
+    heading     VARCHAR(255) DEFAULT NULL COMMENT '所属章节标题或面包屑路径',
     content     MEDIUMTEXT NOT NULL COMMENT '正文分块文本内容',
     token_count INT        NOT NULL DEFAULT 0 COMMENT '粗估 token，不代表模型实际用量',
     page_number INT        DEFAULT NULL COMMENT 'PDF 页码，从 1 开始',

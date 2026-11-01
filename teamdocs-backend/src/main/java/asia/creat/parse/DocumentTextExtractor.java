@@ -34,6 +34,9 @@ import org.apache.tika.exception.WriteLimitReachedException;
 import org.apache.tika.io.TikaInputStream;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.ParseContext;
+import org.apache.tika.parser.Parser;
+import org.apache.tika.parser.microsoft.OfficeParser;
+import org.apache.tika.parser.microsoft.OfficeParserConfig;
 import org.apache.tika.parser.microsoft.ooxml.OOXMLParser;
 import org.apache.tika.sax.BodyContentHandler;
 import org.springframework.beans.factory.ObjectProvider;
@@ -111,14 +114,14 @@ public class DocumentTextExtractor {
                 return readPdf(stream);
             }
 
-            if (!actualType.equals("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            if (detect(null, actualType) != kind
                     && !actualType.equals("application/x-tika-ooxml-protected")) {
-                throw new IOException("文件内容与 DOCX 类型不符");
+                throw new IOException("文件内容与 " + kind + " 类型不符");
             }
 
             if (actualType.equals("application/x-tika-ooxml-protected")) return ExtractedText.skipped("文件已加密");
 
-            return visionEnabled() ? readDocxWithImages(source) : readDocx(stream);
+            return kind == Kind.DOCX && visionEnabled() ? readDocxWithImages(source) : readOffice(stream, kind);
         }
     }
 
@@ -130,24 +133,37 @@ public class DocumentTextExtractor {
         String ext = extension(fileName);
 
         switch (ext) {
-            case "txt", "md", "markdown", "json", "jsonl" -> { return Kind.TEXT; }
+            case "txt", "md", "markdown", "json", "jsonl", "csv", "tsv" -> { return Kind.TEXT; }
 
             case "pdf" -> { return Kind.PDF; }
 
-            case "docx" -> { return Kind.DOCX; }
+            case "doc", "docx" -> { return ext.equals("doc") ? Kind.DOC : Kind.DOCX; }
+
+            case "xls", "xlsx" -> { return ext.equals("xls") ? Kind.XLS : Kind.XLSX; }
+
+            case "ppt", "pptx" -> { return ext.equals("ppt") ? Kind.PPT : Kind.PPTX; }
 
             case "png", "jpg", "jpeg", "webp" -> { return Kind.IMAGE; }
         }
 
-        String type = contentType == null ? "" : contentType.toLowerCase(Locale.ROOT);
+        String type = contentType == null ? "" : contentType.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
 
-        if (type.startsWith("text/plain") || type.startsWith("text/markdown")
-                || type.split(";", 2)[0].trim().equals("application/json")
-                || type.split(";", 2)[0].trim().equals("application/x-ndjson")) return Kind.TEXT;
+        if (List.of("text/plain", "text/markdown", "text/csv", "text/tab-separated-values",
+                "application/json", "application/x-ndjson").contains(type)) return Kind.TEXT;
 
         if ("application/pdf".equals(type)) return Kind.PDF;
 
+        if ("application/msword".equals(type)) return Kind.DOC;
+
+        if ("application/vnd.ms-excel".equals(type)) return Kind.XLS;
+
+        if ("application/vnd.ms-powerpoint".equals(type)) return Kind.PPT;
+
         if ("application/vnd.openxmlformats-officedocument.wordprocessingml.document".equals(type)) return Kind.DOCX;
+
+        if ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".equals(type)) return Kind.XLSX;
+
+        if ("application/vnd.openxmlformats-officedocument.presentationml.presentation".equals(type)) return Kind.PPTX;
 
         if (List.of("image/png", "image/jpeg", "image/webp").contains(type)) return Kind.IMAGE;
 
@@ -200,6 +216,10 @@ public class DocumentTextExtractor {
         }
     }
 
+    private static final java.util.regex.Pattern PDF_PAGE_NUMBER = java.util.regex.Pattern.compile(
+            "^(?i)(?:page\\s+\\d+(?:\\s+of\\s+\\d+)?|第\\s*\\d+\\s*页(?:\\s*/\\s*共\\s*\\d+\\s*页)?|\\d+\\s*/\\s*\\d+|[-–—]\\s*\\d+\\s*[-–—]|\\d{1,4})$"
+    );
+
     private ExtractedText readPdf(InputStream input) throws IOException {
         try (PDDocument document = PDDocument.load(input)) {
             if (document.isEncrypted()) return ExtractedText.skipped("文件已加密");
@@ -207,12 +227,19 @@ public class DocumentTextExtractor {
             PDFTextStripper stripper = new PDFTextStripper();
             List<ExtractedText.Segment> segments = new ArrayList<>();
             long totalChars = 0;
+            int numPages = document.getNumberOfPages();
+            List<String> rawPageTexts = new ArrayList<>(numPages);
 
-            for (int page = 1; page <= document.getNumberOfPages(); page++) {
+            for (int page = 1; page <= numPages; page++) {
                 stripper.setStartPage(page);
                 stripper.setEndPage(page);
+                rawPageTexts.add(stripper.getText(document));
+            }
 
-                String text = TextChunker.normalize(stripper.getText(document));
+            List<String> cleanedPageTexts = cleanPdfPages(rawPageTexts);
+
+            for (int page = 1; page <= numPages; page++) {
+                String text = TextChunker.normalize(cleanedPageTexts.get(page - 1));
 
                 totalChars += text.length();
 
@@ -242,11 +269,128 @@ public class DocumentTextExtractor {
         }
     }
 
-    private ExtractedText readDocx(InputStream input) throws IOException {
+    static List<String> cleanPdfPages(List<String> rawPages) {
+        if (rawPages == null || rawPages.size() < 3) {
+            return rawPages != null ? rawPages : List.of();
+        }
+
+        int numPages = rawPages.size();
+        int threshold = (int) Math.ceil(numPages * 0.7);
+
+        // 统计首行（页眉候选）
+        java.util.Map<String, Integer> topFreq = new java.util.HashMap<>();
+        for (String pageText : rawPages) {
+            String firstLine = findFirstNonBlankLine(pageText);
+            if (firstLine != null && isCleanCandidate(firstLine)) {
+                topFreq.merge(firstLine, 1, Integer::sum);
+            }
+        }
+
+        String commonHeader = null;
+        for (var entry : topFreq.entrySet()) {
+            if (entry.getValue() >= threshold) {
+                commonHeader = entry.getKey();
+                break;
+            }
+        }
+
+        // 统计尾行（页脚/页码候选）
+        java.util.Map<String, Integer> bottomFreq = new java.util.HashMap<>();
+        for (String pageText : rawPages) {
+            String lastLine = findLastNonBlankLine(pageText);
+            if (lastLine != null && isCleanCandidate(lastLine)) {
+                bottomFreq.merge(lastLine, 1, Integer::sum);
+            }
+        }
+
+        String commonFooter = null;
+        for (var entry : bottomFreq.entrySet()) {
+            if (entry.getValue() >= threshold) {
+                commonFooter = entry.getKey();
+                break;
+            }
+        }
+
+        List<String> cleaned = new ArrayList<>(numPages);
+        for (String pageText : rawPages) {
+            cleaned.add(cleanSinglePdfPage(pageText, commonHeader, commonFooter));
+        }
+
+        return cleaned;
+    }
+
+    private static boolean isCleanCandidate(String line) {
+        String trimmed = line.trim();
+        if (trimmed.isEmpty()) return false;
+        return !trimmed.startsWith("#") && !trimmed.startsWith("|") && !trimmed.startsWith(">");
+    }
+
+    private static String findFirstNonBlankLine(String text) {
+        if (text == null) return null;
+        String[] lines = text.split("\r?\n");
+        for (int i = 0; i < Math.min(3, lines.length); i++) {
+            String t = lines[i].trim();
+            if (!t.isEmpty()) return t;
+        }
+        return null;
+    }
+
+    private static String findLastNonBlankLine(String text) {
+        if (text == null) return null;
+        String[] lines = text.split("\r?\n");
+        for (int i = lines.length - 1; i >= Math.max(0, lines.length - 3); i--) {
+            String t = lines[i].trim();
+            if (!t.isEmpty()) return t;
+        }
+        return null;
+    }
+
+    private static String cleanSinglePdfPage(String text, String commonHeader, String commonFooter) {
+        if (text == null || text.isEmpty()) return text;
+        String[] lines = text.split("\r?\n");
+        int start = 0;
+        int end = lines.length;
+
+        while (start < end && lines[start].trim().isEmpty()) {
+            start++;
+        }
+        if (start < end && commonHeader != null && lines[start].trim().equals(commonHeader)) {
+            start++;
+        }
+
+        while (end > start && lines[end - 1].trim().isEmpty()) {
+            end--;
+        }
+        if (end > start) {
+            String last = lines[end - 1].trim();
+            if ((commonFooter != null && last.equals(commonFooter)) || PDF_PAGE_NUMBER.matcher(last).matches()) {
+                end--;
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < end; i++) {
+            sb.append(lines[i]).append("\n");
+        }
+        return sb.toString();
+    }
+
+    /** 新旧 Office 复用有界正文提取，不执行宏或重新计算公式。 */
+    private ExtractedText readOffice(InputStream input, Kind kind) throws IOException {
         try {
             BodyContentHandler handler = new BodyContentHandler(properties.getMaxChars());
 
-            new OOXMLParser().parse(input, handler, new Metadata(), new ParseContext());
+            Parser parser = switch (kind) {
+                case DOC, XLS, PPT -> new OfficeParser();
+                default -> new OOXMLParser();
+            };
+
+            ParseContext context = new ParseContext();
+            OfficeParserConfig officeParserConfig = new OfficeParserConfig();
+            officeParserConfig.setIncludeHeadersAndFooters(false);
+            context.set(OfficeParserConfig.class, officeParserConfig);
+
+            parser.parse(input, handler, new Metadata(), context);
 
             String text = TextChunker.normalize(handler.toString());
 
@@ -268,14 +412,14 @@ public class DocumentTextExtractor {
                 throw ioException;
             }
 
-            throw new IOException("DOCX 解析失败", e);
+            throw new IOException(kind + " 解析失败", e);
         }
     }
 
     /** 保留 Tika 正文，并按文档位置收集图片。 */
     private ExtractedText readDocxWithImages(byte[] source) throws IOException {
         try (var pack = DocumentImageReader.openDocx(source); XWPFDocument document = new XWPFDocument(pack)) {
-            ExtractedText text = readDocx(new ByteArrayInputStream(source));
+            ExtractedText text = readOffice(new ByteArrayInputStream(source), Kind.DOCX);
 
             if (text.isSkipped() && !"没有可提取文本".equals(text.getReason())) return text;
 
@@ -433,5 +577,5 @@ public class DocumentTextExtractor {
         return fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 
-    enum Kind { TEXT, PDF, DOCX, IMAGE, UNSUPPORTED }
+    enum Kind { TEXT, PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, IMAGE, UNSUPPORTED }
 }

@@ -22,6 +22,8 @@ public class DocumentContent {
     private Long documentId;
     private Long spaceId;
     private Integer chunkIndex;
+    private Integer parseVersion;
+    private String heading;
     private String content;
     private Integer tokenCount;
     // PDF 从 1 开始；TXT/MD/DOCX 为空。偏移相对该段提取文本，不是原文件字节

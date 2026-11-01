@@ -40,6 +40,7 @@
         <input
           ref="fileInputRef"
           type="file"
+          multiple
           style="display: none"
           @change="handleFileSelected"
         />
@@ -1425,8 +1426,11 @@ function triggerUpload() {
   }
 }
 
-// 与后端 multipart 单文件上限 (100MB) 对齐的前端预检
-const MAX_UPLOAD_SIZE = 100 * 1024 * 1024
+// 与后端批量上传限制对齐的前端预检与常量配置
+const MAX_BATCH_COUNT = 10
+const MAX_SINGLE_UPLOAD_SIZE = 100 * 1024 * 1024 // 100MB
+const MAX_BATCH_TOTAL_SIZE = 200 * 1024 * 1024 // 200MB
+const UPLOAD_CONCURRENCY = 3
 
 // ===== 拖拽上传：整个工作台可接收文件，上传到当前文件夹 =====
 const dragActive = ref(false)
@@ -1461,68 +1465,88 @@ function onDrop(event) {
 }
 
 async function uploadFiles(files) {
-  const oversized = files.filter((f) => f.size > MAX_UPLOAD_SIZE)
-  const valid = files.filter((f) => f.size <= MAX_UPLOAD_SIZE)
+  if (!files || files.length === 0) return
 
-  if (oversized.length > 0) {
-    ElMessage.error(`${oversized.length} 个文件超过 100MB 上限，已跳过`)
+  // 1. 批量数量限制
+  if (files.length > MAX_BATCH_COUNT) {
+    ElMessage.error(`单次批量上传最多不能超过 ${MAX_BATCH_COUNT} 个文件`)
+    return
   }
 
-  if (valid.length === 0) return
+  // 2. 总大小限制 (200MB)
+  const totalSize = files.reduce((acc, f) => acc + (f.size || 0), 0)
+  if (totalSize > MAX_BATCH_TOTAL_SIZE) {
+    ElMessage.error('单次批量上传总大小不能超过 200MB')
+    return
+  }
+
+  // 3. 过滤 0B 空文件与超过 100MB 单文件
+  const emptyFiles = files.filter((f) => !f.size || f.size === 0)
+  const oversizedFiles = files.filter((f) => f.size > MAX_SINGLE_UPLOAD_SIZE)
+  const validFiles = files.filter((f) => f.size > 0 && f.size <= MAX_SINGLE_UPLOAD_SIZE)
+
+  if (emptyFiles.length > 0) {
+    ElMessage.warning(`${emptyFiles.length} 个文件内容为空 (0B)，已自动跳过`)
+  }
+  if (oversizedFiles.length > 0) {
+    ElMessage.warning(`${oversizedFiles.length} 个文件超过 100MB 上限，已自动跳过`)
+  }
+
+  if (validFiles.length === 0) return
 
   uploading.value = true
-
   let okCount = 0
+  let failCount = emptyFiles.length + oversizedFiles.length
+  const failedNames = [
+    ...emptyFiles.map((f) => `${f.name}(空文件)`),
+    ...oversizedFiles.map((f) => `${f.name}(超100MB)`)
+  ]
 
   try {
-    for (const file of valid) {
-      try {
-        await uploadDocumentApi(spaceId.value, currentFolderId.value, file)
-        okCount += 1
-      } catch (err) {
-        // 拦截器已提示单个文件失败
+    // 4. 有界并发队列 (并发度 = 3)，单个文件失败隔离
+    let currentIndex = 0
+    async function worker() {
+      while (currentIndex < validFiles.length) {
+        const index = currentIndex++
+        const file = validFiles[index]
+        try {
+          await uploadDocumentApi(spaceId.value, currentFolderId.value, file)
+          okCount += 1
+        } catch (err) {
+          failCount += 1
+          failedNames.push(`${file.name}(${err?.message || '上传失败'})`)
+        }
       }
     }
+
+    const workerCount = Math.min(UPLOAD_CONCURRENCY, validFiles.length)
+    const workers = Array.from({ length: workerCount }, () => worker())
+    await Promise.all(workers)
   } finally {
     uploading.value = false
   }
 
-  if (okCount > 0) {
-    ElMessage.success(`上传成功 ${okCount} 个文档`)
+  // 5. 汇总提示与视图刷新
+  if (failCount === 0) {
+    ElMessage.success(`成功上传 ${okCount} 个文档`)
+  } else if (okCount === 0) {
+    ElMessage.error(`上传失败：${failedNames.join('、')}`)
+  } else {
+    ElMessage.warning(`上传完成：成功 ${okCount} 个，失败 ${failCount} 个 (${failedNames.join('、')})`)
+  }
 
-    if (viewMode.value === 'folder') {
-      await loadCurrentFolderContent()
-    }
+  if (okCount > 0 && viewMode.value === 'folder') {
+    await loadCurrentFolderContent()
   }
 }
 
 async function handleFileSelected(event) {
-  const file = event.target.files?.[0]
-
-  if (!file) return
-
-  if (file.size > MAX_UPLOAD_SIZE) {
-    ElMessage.error('文件大小不能超过 100MB')
-
-    if (event?.target) event.target.value = ''
-
-    return
-  }
-
-  uploading.value = true
-
+  const files = Array.from(event.target.files || [])
   try {
-    await uploadDocumentApi(spaceId.value, currentFolderId.value, file)
-    ElMessage.success('文档上传成功')
-
-    if (viewMode.value === 'folder') {
-      await loadCurrentFolderContent()
+    if (files.length > 0) {
+      await uploadFiles(files)
     }
-  } catch (err) {
-    // 拦截器处理
   } finally {
-    uploading.value = false
-
     if (event?.target) {
       event.target.value = ''
     }

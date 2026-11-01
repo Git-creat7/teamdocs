@@ -36,6 +36,15 @@ public class Document {
     private LocalDateTime parsedAt;
     private Integer parseVersion;
     private LocalDateTime parseStartedAt;
+    private String summary;
+    private String summarySource;
+    private String summaryState;
+    private String summaryError;
+    private String summaryWorkerId;
+    private Long summaryLeaseUntil;
+    private Integer summaryVersion;
+    private LocalDateTime summaryUpdatedAt;
+    private String keywords;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

@@ -17,6 +17,7 @@ import asia.creat.vo.ChunkCitationVO;
 import asia.creat.vo.ChunkHitVO;
 import asia.creat.vo.ChunkReadVO;
 import asia.creat.retrieval.HybridChunkSearch;
+import asia.creat.retrieval.RetrievalContext;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,9 +44,9 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
 
     @Override
     @RequireSpaceRole
-    public List<ChunkHitVO> searchChunks(@SpaceId Long spaceId, String keyword, LoginUser loginUser) {
+    public List<ChunkHitVO> searchChunks(@SpaceId Long spaceId, String keyword, String semanticQuery, LoginUser loginUser) {
         if (hybrid.isPresent() && hybrid.get().enabled()) {
-            return fitExcerpts(hybrid.get().search(spaceId, null, keyword, loginUser, retrievalProperties.getSearchLimit()));
+            return fitExcerpts(hybrid.get().search(spaceId, null, keyword, semanticQuery, loginUser, retrievalProperties.getSearchLimit()));
         }
 
         return search(spaceId, null, keyword);
@@ -53,12 +54,24 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
 
     @Override
     @RequireSpaceRole
-    public List<ChunkHitVO> searchChunksInDocument(@SpaceId Long spaceId, Long documentId, String keyword, LoginUser loginUser) {
+    public List<ChunkHitVO> searchChunks(@SpaceId Long spaceId, String keyword, LoginUser loginUser) {
+        return searchChunks(spaceId, keyword, keyword, loginUser);
+    }
+
+    @Override
+    @RequireSpaceRole
+    public List<ChunkHitVO> searchChunksInDocument(@SpaceId Long spaceId, Long documentId, String keyword, String semanticQuery, LoginUser loginUser) {
         if (hybrid.isPresent() && hybrid.get().enabled()) {
-            return fitExcerpts(hybrid.get().search(spaceId, documentId, keyword, loginUser, retrievalProperties.getSearchLimit()));
+            return fitExcerpts(hybrid.get().search(spaceId, documentId, keyword, semanticQuery, loginUser, retrievalProperties.getSearchLimit()));
         }
 
         return search(spaceId, documentId, keyword);
+    }
+
+    @Override
+    @RequireSpaceRole
+    public List<ChunkHitVO> searchChunksInDocument(@SpaceId Long spaceId, Long documentId, String keyword, LoginUser loginUser) {
+        return searchChunksInDocument(spaceId, documentId, keyword, keyword, loginUser);
     }
 
     private List<ChunkHitVO> search(Long spaceId, Long documentId, String keyword) {
@@ -68,15 +81,17 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
 
         if (chunkIndex.enabled()) {
             try {
+                RetrievalContext.check();
                 for (ChunkIndexHit candidate : chunkIndex.searchCandidates(spaceId, documentId, query.replace("\"", ""), limit)) {
+                    RetrievalContext.check();
                     if (documentId != null && !documentId.equals(candidate.getDocumentId())) continue;
 
                     if (candidate.getChunkId() == null || candidate.getDocumentId() == null || candidate.getParseVersion() == null) {
                         continue;
                     }
 
-                    ChunkHitVO current = documentContentMapper.findReadableChunk(spaceId, candidate.getDocumentId(),
-                            candidate.getChunkId(), candidate.getParseVersion());
+                    ChunkHitVO current = RetrievalContext.executeJdbc(() -> documentContentMapper.findReadableChunk(
+                            spaceId, candidate.getDocumentId(), candidate.getChunkId(), candidate.getParseVersion()));
 
                     if (current != null) {
                         current.setHighlight(candidate.getHighlight());
@@ -88,14 +103,19 @@ public class DocumentChunkQueryServiceImpl implements DocumentChunkQueryService 
                     }
                 }
             } catch (RuntimeException e) {
+                RetrievalContext.check();
+                if (e instanceof BusinessException) {
+                    throw e;
+                }
                 log.warn("Elasticsearch 召回失败，退回 MySQL: {}", e.getClass().getSimpleName());
             }
         }
 
         // 不止空结果才降级：部分分块尚未索引时，也从 MySQL 补足，且不返回重复块。
         if (hits.size() < limit) {
-            List<ChunkHitVO> fallback = documentId == null ? documentContentMapper.searchChunks(spaceId, query, limit)
-                    : documentContentMapper.searchChunksInDocument(spaceId, documentId, query, limit);
+            List<ChunkHitVO> fallback = RetrievalContext.executeJdbc(() -> documentId == null
+                    ? documentContentMapper.searchChunks(spaceId, query, limit)
+                    : documentContentMapper.searchChunksInDocument(spaceId, documentId, query, limit));
 
             for (ChunkHitVO row : fallback) {
                 hits.putIfAbsent(row.getChunkId(), row);

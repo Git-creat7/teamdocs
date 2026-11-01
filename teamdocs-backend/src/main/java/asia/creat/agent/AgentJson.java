@@ -15,6 +15,10 @@ import java.util.Set;
 public class AgentJson {
     private final ObjectMapper mapper;
 
+    public ObjectMapper mapper() {
+        return mapper;
+    }
+
     public String write(Object value) {
         try { return mapper.writeValueAsString(value); }
         catch (Exception e) { throw new AgentFailure("SERIALIZATION_FAILED"); }

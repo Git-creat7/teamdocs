@@ -3,7 +3,9 @@ package asia.creat.teamdocsbackend.retrieval;
 import asia.creat.retrieval.RetrievalContext;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -46,5 +48,35 @@ class RetrievalContextTest {
 
         assertEquals(1, outer.get());
         assertEquals(1, inner.get());
+    }
+
+    /** wrap 传播上下文约束并响应取消标志。 */
+    @Test
+    void wrapPropagatesContextAndCancelsWhenFlagIsSet() {
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        try (var scope = RetrievalContext.open(System.currentTimeMillis() + 5000, () -> { }, hit -> { })) {
+            Supplier<String> task = RetrievalContext.wrap(() -> "ok", cancelled::get);
+            assertEquals("ok", task.get());
+
+            cancelled.set(true);
+            assertThrows(IllegalStateException.class, task::get);
+        }
+    }
+
+    /** checkpoint 内部若直接或间接调用 check/timeoutMillis，不应发生递归死循环。 */
+    @Test
+    void checkProtectsAgainstReentrantCheckpointCalls() {
+        AtomicInteger runs = new AtomicInteger();
+        try (var scope = RetrievalContext.open(System.currentTimeMillis() + 5000, () -> {
+            runs.incrementAndGet();
+            RetrievalContext.check();
+            RetrievalContext.timeoutMillis(1000);
+        }, hit -> { })) {
+            RetrievalContext.check();
+            assertEquals(1, runs.get());
+
+            RetrievalContext.timeoutMillis(1000);
+            assertEquals(2, runs.get());
+        }
     }
 }

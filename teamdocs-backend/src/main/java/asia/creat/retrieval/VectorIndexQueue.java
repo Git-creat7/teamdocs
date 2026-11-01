@@ -42,7 +42,7 @@ public class VectorIndexQueue {
             return "deleted";
         }
 
-        String target = "v1|" + properties.getModelName() + "|" + properties.getDimensions() + "|"
+        String target = "v2|" + properties.getModelName() + "|" + properties.getDimensions() + "|"
                 + milvus.getUrl() + "|" + milvus.getCollection() + "|"
                 + snapshot.getParseVersion() + "|" + snapshot.isReady();
 

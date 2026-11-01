@@ -154,11 +154,68 @@
                parsed_at,
                parse_version,
                parse_started_at,
+               summary,
+               summary_source,
+               summary_state,
+               summary_error,
+               summary_worker_id,
+               summary_lease_until,
+               summary_version,
+               summary_updated_at,
+               keywords,
                created_at,
                updated_at
         FROM document
         WHERE id = #{id}
         FOR UPDATE
     </select>
+
+    <update id="claimSummaryTask">
+        UPDATE document
+        SET summary_state = 'RUNNING',
+            summary_worker_id = #{workerId},
+            summary_lease_until = #{leaseUntil}
+        WHERE id = #{documentId}
+          AND parse_version = #{parseVersion}
+          AND deleted = 0
+          AND (summary_state = 'PENDING' OR (summary_state = 'RUNNING' AND summary_lease_until &lt; #{nowMs}))
+    </update>
+
+    <update id="completeSummary">
+        UPDATE document
+        SET summary = #{summary},
+            keywords = #{keywords},
+            summary_source = #{source},
+            summary_state = #{state},
+            summary_error = #{error},
+            summary_worker_id = NULL,
+            summary_lease_until = NULL,
+            summary_updated_at = NOW()
+        WHERE id = #{documentId}
+          AND parse_version = #{parseVersion}
+          AND summary_worker_id = #{workerId}
+    </update>
+
+    <select id="findPendingSummaryDocuments" resultType="asia.creat.entity.Document">
+        SELECT id,
+               space_id,
+               parse_version
+        FROM document
+        WHERE deleted = 0
+          AND parse_status = 'READY'
+          AND (summary_state = 'PENDING' OR (summary_state = 'RUNNING' AND summary_lease_until &lt; #{nowMs}))
+        ORDER BY id ASC
+        LIMIT #{limit}
+    </select>
+
+    <update id="resetTimeoutSummaryTasks">
+        UPDATE document
+        SET summary_state = 'PENDING',
+            summary_worker_id = NULL,
+            summary_lease_until = NULL
+        WHERE deleted = 0
+          AND summary_state = 'RUNNING'
+          AND summary_lease_until &lt; #{nowMs}
+    </update>
 
 </mapper>

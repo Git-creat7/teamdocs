@@ -14,4 +14,6 @@ public class RetrievalProperties {
     private int maxChars = 4000;
     /** 可显式关闭；未配置可用客户端时仍走原关键词路径。 */
     private boolean hybridEnabled = true;
+    /** Small-to-Big 上下文扩展字符上限，默认 200，0 表示不扩展 */
+    private int expandMaxChars = 200;
 }

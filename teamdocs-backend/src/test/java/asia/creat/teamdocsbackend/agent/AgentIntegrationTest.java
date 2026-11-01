@@ -684,17 +684,18 @@ class AgentIntegrationTest {
     }
 
     @Test
-    void zeroToolRepliesStillRejectFabricatedCitations() throws Exception {
+    void zeroToolRepliesStripFabricatedCitationsAndSucceed() throws Exception {
         model.reset((messages, specs) -> answer("未经读取的资料结论。[C99]", "C99"));
 
         long id = service.submit(1L, session(), new NewRun("invented-direct-source", "hi"), USER);
 
         RunView run = waitRun(id);
 
-        assertEquals("ANSWER_UNVERIFIABLE", run.errorCode());
+        assertEquals("SUCCEEDED", run.status(), run.errorCode());
         assertEquals(2, run.modelCalls());
         assertEquals(0, run.toolCalls());
-        assertNull(run.answer());
+        assertEquals("未经读取的资料结论。", run.answer().text());
+        assertTrue(run.answer().citations().isEmpty());
     }
 
     /** JSON 正文中的代码块保持原样，首轮即可完成。 */
@@ -783,28 +784,27 @@ class AgentIntegrationTest {
     }
 
     @Test
-    void retrievedEvidenceStillRequiresCitations() throws Exception {
+    void retrievedEvidenceAllowsUncitedAnswerAfterOneRepairAttempt() throws Exception {
         model.reset(
                 (messages, specs) ->
                         model.calls.get() == 1
                                 ? tool("read_document_chunks", "{\"documentId\":10}")
-                                : answer("上线前先备份数据库。"));
+                                : answer("我是学Java的，目前空间暂无Java相关资料。"));
 
         RunView run = waitRun(submit("missing-source-markers"));
 
-        assertEquals("ANSWER_UNVERIFIABLE", run.errorCode());
+        assertEquals("SUCCEEDED", run.status(), run.errorCode());
         assertEquals(3, run.modelCalls());
         assertEquals(1, run.toolCalls());
-        assertNull(run.answer());
+        assertEquals("我是学Java的，目前空间暂无Java相关资料。", run.answer().text());
+        assertTrue(run.answer().citations().isEmpty());
     }
 
     @Test
     void missingCitationsCanBeRepairedUsingAlreadyReadEvidence() throws Exception {
         model.reset((messages, specs) -> switch (model.calls.get()) {
             case 1 -> tool("read_document_chunks", "{\"documentId\":10}");
-
             case 2 -> answer("上线前先备份数据库。");
-
             default -> answer("上线前先备份数据库。[C1]", "C1");
         });
 
@@ -816,10 +816,6 @@ class AgentIntegrationTest {
         assertFalse(run.answer().masked());
         assertEquals("C1", run.answer().citations().get(0).id());
         assertEquals(10L, run.answer().citations().get(0).documentId());
-
-        String repairPrompt = ChatMessageSerializer.messagesToJson(model.received.get(2));
-
-        assertTrue(repairPrompt.contains("本轮已读取内部正文时"));
     }
 
     @Test
@@ -837,27 +833,25 @@ class AgentIntegrationTest {
     }
 
     @Test
-    void invalidReferenceGetsAtMostOneBudgetedRepair() throws Exception {
-        model.reset(
-                (messages, specs) ->
-                        switch (model.calls.get()) {
-                            case 1 -> tool("read_document_chunks", "{\"documentId\":10}");
-
-                            case 2 -> answer("错误引用[C999]", "C999");
-
-                            default -> answer("先备份[C1]", "C1");
-                        });
-
-        RunView repaired = waitRun(submit("repair"));
-
-        assertEquals("SUCCEEDED", repaired.status());
-        assertEquals(3, repaired.modelCalls());
-
+    void invalidReferenceIsStrippedAfterOneRepairAndBlankAnswerFails() throws Exception {
         model.reset(
                 (messages, specs) ->
                         model.calls.get() == 1
                                 ? tool("read_document_chunks", "{\"documentId\":10}")
                                 : answer("错误引用[C999]", "C999"));
+
+        RunView stripped = waitRun(submit("repair"));
+
+        assertEquals("SUCCEEDED", stripped.status(), stripped.errorCode());
+        assertEquals(3, stripped.modelCalls());
+        assertEquals("错误引用", stripped.answer().text());
+        assertTrue(stripped.answer().citations().isEmpty());
+
+        model.reset(
+                (messages, specs) ->
+                        model.calls.get() == 1
+                                ? tool("read_document_chunks", "{\"documentId\":10}")
+                                : response(AiMessage.from("{\"answer\":\"\",\"citations\":[]}")));
 
         RunView failed = waitRun(submit("bad-reference"));
 
@@ -867,36 +861,28 @@ class AgentIntegrationTest {
     }
 
     @Test
-    void modelToolAndContextBudgetsStopFurtherWork() throws Exception {
+    void modelAndToolCountsGuideButContextCapacityStopsWork() throws Exception {
         properties.setMaxModelCalls(1);
 
         RunView modelLimit = waitRun(submit("model-limit"));
 
-        assertEquals("MODEL_CALL_LIMIT", modelLimit.errorCode());
-        assertEquals(1, model.calls.get());
+        assertEquals("SUCCEEDED", modelLimit.status(), modelLimit.errorCode());
+        assertEquals(2, model.calls.get());
         assertNotNull(modelLimit.answer());
 
         properties.setMaxModelCalls(6);
         properties.setMaxToolCalls(1);
 
-        model.reset(
-                (messages, specs) ->
-                        response(
-                                AiMessage.from(
-                                        List.of(
-                                                request(
-                                                        "a",
-                                                        "read_document_chunks",
-                                                        "{\"documentId\":10}"),
-                                                request(
-                                                        "b",
-                                                        "read_document_chunks",
-                                                        "{\"documentId\":15}")))));
+        model.reset((messages, specs) -> model.calls.get() == 1
+                ? response(AiMessage.from(List.of(
+                        request("a", "read_document_chunks", "{\"documentId\":10}"),
+                        request("b", "read_document_chunks", "{\"documentId\":15}"))))
+                : answer("基于已有资料完成回答[C1]", "C1"));
 
         RunView toolLimit = waitRun(submit("tool-limit"));
 
-        assertEquals("TOOL_CALL_LIMIT", toolLimit.errorCode());
-        assertEquals(1, toolLimit.toolCalls());
+        assertEquals("SUCCEEDED", toolLimit.status(), toolLimit.errorCode());
+        assertEquals(2, toolLimit.toolCalls());
 
         properties.setMaxInputTokens(100);
         model.reset(
@@ -974,18 +960,19 @@ class AgentIntegrationTest {
     }
 
     @Test
-    void modelCallLedgerStopsAtConfiguredAttemptLimit() throws Exception {
+    void modelCallLedgerRecordsCallsBeyondSuggestedCount() throws Exception {
         properties.setMaxModelCalls(2);
-        model.reset((messages, specs) -> tool("read_document_chunks", "{\"documentId\":10}"));
+        model.reset((messages, specs) -> model.calls.get() <= 2
+                ? tool("read_document_chunks", "{\"documentId\":10}")
+                : answer("基于已有资料完成回答[C1]", "C1"));
 
         RunView run = waitRun(submit("attempt-limit"));
 
-        assertEquals("MODEL_CALL_LIMIT", run.errorCode());
-        assertEquals(2, run.modelCalls());
-        assertEquals(2, model.calls.get());
-        assertEquals(2, mapper.modelCalls(run.id()).size());
-        assertEquals("FAILED", run.status());
-        assertTrue(run.answer().text().contains("未生成完整回答"));
+        assertEquals("SUCCEEDED", run.status(), run.errorCode());
+        assertEquals(3, run.modelCalls());
+        assertEquals(3, model.calls.get());
+        assertEquals(3, mapper.modelCalls(run.id()).size());
+        assertTrue(run.answer().text().contains("完成回答"));
         assertFalse(run.answer().citations().isEmpty());
     }
 
@@ -1171,24 +1158,13 @@ class AgentIntegrationTest {
         ExecutorService callers = Executors.newFixedThreadPool(2);
 
         try {
-            Callable<Boolean> begin =
-                    () -> {
-                        try {
-                            budget.startCall(run, 1000);
-
-                            return true;
-                        } catch (AgentFailure e) {
-                            assertEquals("MODEL_CALL_LIMIT", e.code());
-
-                            return false;
-                        }
-                    };
+            Callable<ModelCall> begin = () -> budget.startCall(run, 1000);
             var first = callers.submit(begin);
             var second = callers.submit(begin);
 
-            assertNotEquals(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS));
-            assertEquals(1, mapper.modelCalls(run.getId()).size());
-            assertEquals(1, mapper.run(run.getId()).getModelCalls());
+            assertNotEquals(first.get(10, TimeUnit.SECONDS).getSequence(), second.get(10, TimeUnit.SECONDS).getSequence());
+            assertEquals(2, mapper.modelCalls(run.getId()).size());
+            assertEquals(2, mapper.run(run.getId()).getModelCalls());
         } finally {
             callers.shutdownNow();
             mapper.endActive(run.getId(), "FAILED", "TEST_COMPLETE");

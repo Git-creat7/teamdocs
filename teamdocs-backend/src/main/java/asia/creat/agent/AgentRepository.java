@@ -135,13 +135,13 @@ public class AgentRepository extends ServiceImpl<AgentMapper, Run> {
     public boolean nextTool(Long id, long nowMs) {
         return lambdaUpdate().eq(Run::getId, id)
                 .eq(Run::getStatus, "RUNNING").gt(Run::getDeadlineMs, nowMs)
-                .ltSql(Run::getToolCalls, "max_tool_calls").setIncrBy(Run::getToolCalls, 1).update();
+                .setIncrBy(Run::getToolCalls, 1).update();
     }
 
     public boolean nextModel(Long id, long nowMs) {
         return lambdaUpdate().eq(Run::getId, id)
                 .eq(Run::getStatus, "RUNNING").gt(Run::getDeadlineMs, nowMs)
-                .ltSql(Run::getModelCalls, "max_model_calls").setIncrBy(Run::getModelCalls, 1).update();
+                .setIncrBy(Run::getModelCalls, 1).update();
     }
 
     public boolean finish(Long id, String status, String error, long nowMs) {

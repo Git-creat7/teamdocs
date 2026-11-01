@@ -31,4 +31,9 @@ public interface DocumentContentMapper extends BaseMapper<DocumentContent> {
                                  @Param("documentId") Long documentId,
                                  @Param("chunkId") Long chunkId,
                                  @Param("parseVersion") Integer parseVersion);
+
+    ChunkHitVO findReadableChunkByIndex(@Param("spaceId") Long spaceId,
+                                        @Param("documentId") Long documentId,
+                                        @Param("chunkIndex") Integer chunkIndex,
+                                        @Param("parseVersion") Integer parseVersion);
 }
