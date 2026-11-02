@@ -18,7 +18,9 @@ cp -n .env.example .env
 - `WEB_PORT`：网页端口，默认 `15173`。
 - `MINIO_PUBLIC_ENDPOINT`：浏览器可访问的 MinIO 文件 API 地址；`MINIO_CORS_ALLOWED_ORIGIN`：实际前端来源，不带 `/login` 等路径。
 - 启用问答时填写 `AGENT_BASE_URL`、`AGENT_API_KEY`、`AGENT_MODEL_NAME`，并确认允许问题及相关资料发送给模型。
+- `PARSE_SUMMARY_ENABLED`：默认 `true`，在启用问答且允许资料出站时为解析完成的文档异步生成模型摘要与关键词；设为 `false` 则仅保留本地规则摘要。
 - 文档评论工具默认关闭；需要让助手读取评论时设置 `AGENT_COMMENTS_ENABLED=true`。
+- `AGENT_MAX_INPUT_TOKENS`：默认 `0`（自动按模型家族分配输入预算，如主流 Qwen/DeepSeek/GPT-4/Claude 默认 32000，未知模型回退 16000）；如需自定义可填写正整数。
 - 需要保存私人模型配置时，用 `openssl rand -base64 32` 生成 `MODEL_CONFIG_ENCRYPTION_KEY`，妥善保存，不要随意更换。
 
 密码含 `$` 时，在 `.env` 中用单引号包住完整值。真实密码、Key 和 `.env` 不要提交到仓库。
@@ -98,6 +100,11 @@ docker compose logs --tail=100 backend
 启用了 Milvus 时，更新和查看状态也使用相同的两个 `-f` 文件。只改配置不必重建镜像，但需要 `up -d` 重新创建受影响的容器；单纯 `restart` 不会加载新的环境变量。
 
 镜像名称不对时用 `docker compose config --images` 检查；后端 unhealthy 先看日志。`Access denied`、`WRONGPASS` 优先核对实际连接目标与凭据，TLS 错误先核对证书和访问路径，不关闭证书校验。不要使用 `down -v` 或 `--remove-orphans` 来处理启动故障。
+
+## 问答输出与上下文预算
+
+- 普通问答不主动向模型请求传固定 `max_tokens`，仅在连通性探测和记忆抽取等小任务中显式指定小预算，避免截断长回答或工具调用 JSON；若模型返回 `FinishReason.LENGTH`，后端会按截断错误终止而非拼装残缺结果。
+- 输入上下文预算由 `AGENT_MAX_INPUT_TOKENS` 控制（`0` 为自动识别模型窗口并预留生成余量）。多轮对话超限时按整轮裁剪最旧历史，单轮工具返回（如外部 MCP 搜索）首先执行结构化压缩，仍超限时对工具输出降级截断。
 
 ## MinIO 镜像来源
 
