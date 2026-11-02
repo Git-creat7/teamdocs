@@ -18,6 +18,7 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -38,6 +39,7 @@ public class DocumentSummaryServiceImpl implements DocumentSummaryService {
     private final ObjectProvider<AgentProperties> agentPropertiesProvider;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Autowired
     public DocumentSummaryServiceImpl(
             DocumentMapper documentMapper,
             DocumentContentMapper documentContentMapper,
